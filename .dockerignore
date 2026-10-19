@@ -1,0 +1,10 @@
+.git
+**/node_modules
+_output
+_temp
+_tests
+_artifacts
+**/bin
+**/obj
+docker/secrets.env
+docker/*.local.*

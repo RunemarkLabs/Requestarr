@@ -1,0 +1,180 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using NLog;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Authentication;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Lifecycle;
+using NzbDrone.Core.Messaging.Events;
+
+namespace Requestarr.Core.Provisioning
+{
+    public interface IProvisioningService
+    {
+        ProvisioningResult LastResult { get; }
+        ProvisioningResult Apply();
+    }
+
+    // Applies the provisioning file on every start. Keys present in the file win over values
+    // changed in the UI; keys left out of the file are not touched.
+    public class ProvisioningService : IProvisioningService, IHandle<ApplicationStartedEvent>
+    {
+        private readonly IProvisioningLoader _loader;
+        private readonly IConfigFileProvider _configFileProvider;
+        private readonly IUserService _userService;
+        private readonly IEventAggregator _eventAggregator;
+        private readonly Logger _logger;
+
+        public ProvisioningService(IProvisioningLoader loader,
+                                   IConfigFileProvider configFileProvider,
+                                   IUserService userService,
+                                   IEventAggregator eventAggregator,
+                                   Logger logger)
+        {
+            _loader = loader;
+            _configFileProvider = configFileProvider;
+            _userService = userService;
+            _eventAggregator = eventAggregator;
+            _logger = logger;
+        }
+
+        public ProvisioningResult LastResult { get; private set; } = ProvisioningResult.NotRun();
+
+        public void Handle(ApplicationStartedEvent message)
+        {
+            Apply();
+        }
+
+        public ProvisioningResult Apply()
+        {
+            string path = null;
+
+            try
+            {
+                path = _loader.ResolvePath();
+
+                if (path == null)
+                {
+                    _logger.Debug("No provisioning file found, skipping provisioning");
+                    LastResult = ProvisioningResult.NoFile();
+                }
+                else
+                {
+                    var document = _loader.Load(path);
+                    LastResult = Apply(path, document);
+
+                    _logger.Info("Provisioning applied from {0}: {1}", path, string.Join("; ", LastResult.Applied));
+
+                    foreach (var deferred in LastResult.Deferred)
+                    {
+                        _logger.Info("Provisioning section recognised, applied in a later release: {0}", deferred);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Provisioning failed");
+                LastResult = ProvisioningResult.Failed(path, ex.Message);
+            }
+
+            _eventAggregator.PublishEvent(new ProvisioningCompletedEvent(LastResult));
+
+            return LastResult;
+        }
+
+        private ProvisioningResult Apply(string path, ProvisioningDocument document)
+        {
+            var applied = new List<string>();
+            var deferred = new List<string>();
+            var config = new Dictionary<string, object>(StringComparer.InvariantCultureIgnoreCase);
+
+            var general = document.General;
+
+            if (general != null)
+            {
+                AddIfSet(config, "InstanceName", general.InstanceName);
+                AddIfSet(config, "LogLevel", general.LogLevel?.ToLowerInvariant());
+                AddIfSet(config, "UrlBase", general.UrlBase);
+                AddIfSet(config, "Theme", general.Theme);
+
+                if (general.AnalyticsEnabled.HasValue)
+                {
+                    config["AnalyticsEnabled"] = general.AnalyticsEnabled.Value;
+                }
+
+                if (general.LaunchBrowser.HasValue)
+                {
+                    config["LaunchBrowser"] = general.LaunchBrowser.Value;
+                }
+            }
+
+            var auth = document.Auth;
+
+            if (auth != null)
+            {
+                if (auth.Method.IsNotNullOrWhiteSpace())
+                {
+                    config["AuthenticationMethod"] = Enum.Parse<AuthenticationType>(auth.Method, true);
+                }
+
+                if (auth.Required.IsNotNullOrWhiteSpace())
+                {
+                    config["AuthenticationRequired"] = Enum.Parse<AuthenticationRequiredType>(auth.Required, true);
+                }
+            }
+
+            if (config.Any())
+            {
+                _configFileProvider.SaveConfigDictionary(config);
+                applied.Add("settings: " + string.Join(", ", config.Keys.OrderBy(k => k)));
+            }
+
+            if (auth != null && auth.Username.IsNotNullOrWhiteSpace())
+            {
+                _userService.Upsert(auth.Username, auth.Password);
+                applied.Add("web login user");
+            }
+
+            if (auth != null && auth.ApiKey.IsNotNullOrWhiteSpace())
+            {
+                _configFileProvider.SetApiKey(auth.ApiKey);
+                applied.Add("API key");
+            }
+
+            if (document.Discord != null)
+            {
+                deferred.Add("discord");
+            }
+
+            if (document.Backends != null)
+            {
+                var counts = new (string Type, int Count)[]
+                    {
+                        ("sonarr", document.Backends.Sonarr.Count),
+                        ("radarr", document.Backends.Radarr.Count),
+                        ("lidarr", document.Backends.Lidarr.Count)
+                    }
+                    .Where(c => c.Count > 0)
+                    .Select(c => $"{c.Type} x{c.Count}");
+
+                deferred.Add("backends (" + string.Join(", ", counts) + ")");
+            }
+
+            if (document.MediaServers != null)
+            {
+                deferred.Add("mediaServers");
+            }
+
+            return ProvisioningResult.Succeeded(path, applied, deferred);
+        }
+
+        private static void AddIfSet(Dictionary<string, object> config, string key, string value)
+        {
+            if (value != null)
+            {
+                config[key] = value;
+            }
+        }
+    }
+}

@@ -1,0 +1,40 @@
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Serializer;
+using Requestarr.Http.Extensions;
+
+namespace Requestarr.Http.Middleware
+{
+    public class StartingUpMiddleware
+    {
+        private const string MESSAGE = "Requestarr is starting up, please try again later";
+        private readonly RequestDelegate _next;
+        private readonly IRuntimeInfo _runtimeInfo;
+
+        public StartingUpMiddleware(RequestDelegate next, IRuntimeInfo runtimeInfo)
+        {
+            _next = next;
+            _runtimeInfo = runtimeInfo;
+        }
+
+        public async Task InvokeAsync(HttpContext context)
+        {
+            if (_runtimeInfo.IsStarting)
+            {
+                var isJson = context.Request.IsApiRequest();
+                var message = isJson ? STJson.ToJson(new { ErrorMessage = MESSAGE }) : MESSAGE;
+                var bytes = Encoding.UTF8.GetBytes(message);
+
+                context.Response.StatusCode = 503;
+                context.Response.ContentType = isJson ? "application/json" : "text/plain";
+                await context.Response.Body.WriteAsync(bytes, 0, bytes.Length);
+
+                return;
+            }
+
+            await _next(context);
+        }
+    }
+}

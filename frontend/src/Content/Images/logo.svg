@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Requestarr</title>
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="#7048e8"/>
+  <path d="M176 392 V128 H276 A80 80 0 0 1 276 288 H176 M268 288 L344 392" fill="none" stroke="#ffffff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

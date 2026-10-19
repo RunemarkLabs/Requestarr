@@ -1,0 +1,102 @@
+# Local development and test stack. Start with:  docker/dev.sh up
+# Everything here is disposable and separate from any production deployment:
+# its own project name, volumes, network, and host ports (bound to localhost).
+name: requestarr-dev
+
+services:
+  requestarr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: requestarr:dev
+    env_file: secrets.env
+    environment:
+      REQUESTARR_PROVISIONING_FILE: /provisioning/provisioning.yml
+      TZ: Etc/UTC
+    volumes:
+      - requestarr-config:/config
+      - ./provisioning.yml:/provisioning/provisioning.yml:ro
+    ports:
+      - "127.0.0.1:${REQUESTARR_PORT:-9797}:9797"
+    depends_on:
+      test-backends-init:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Dedicated test backends. Known API keys come from secrets.env; auth is left to
+  # localhost-only port binding so the owner can watch them in a browser.
+  sonarr-test:
+    image: ${SONARR_TEST_IMAGE:-lscr.io/linuxserver/sonarr:latest}
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      SONARR__AUTH__APIKEY: ${SONARR_TEST_API_KEY:?run docker/dev.sh init}
+      SONARR__AUTH__METHOD: External
+      SONARR__AUTH__REQUIRED: DisabledForLocalAddresses
+      SONARR__LOG__ANALYTICSENABLED: "false"
+    volumes:
+      - sonarr-test-config:/config
+      - test-media:/data
+    ports:
+      - "127.0.0.1:${SONARR_TEST_PORT:-18989}:8989"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    restart: unless-stopped
+
+  radarr-test:
+    image: ${RADARR_TEST_IMAGE:-lscr.io/linuxserver/radarr:latest}
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      RADARR__AUTH__APIKEY: ${RADARR_TEST_API_KEY:?run docker/dev.sh init}
+      RADARR__AUTH__METHOD: External
+      RADARR__AUTH__REQUIRED: DisabledForLocalAddresses
+      RADARR__LOG__ANALYTICSENABLED: "false"
+    volumes:
+      - radarr-test-config:/config
+      - test-media:/data
+    ports:
+      - "127.0.0.1:${RADARR_TEST_PORT:-17878}:7878"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    restart: unless-stopped
+
+  # Creates the media folders and registers them as root folders, then stays up
+  # (healthy) so `docker compose up --wait` and depends_on can rely on it.
+  test-backends-init:
+    image: ${CURL_IMAGE:-curlimages/curl:latest}
+    user: "0:0"
+    environment:
+      SONARR_TEST_API_KEY: ${SONARR_TEST_API_KEY}
+      RADARR_TEST_API_KEY: ${RADARR_TEST_API_KEY}
+    volumes:
+      - test-media:/data
+      - ./test-backends-init.sh:/test-backends-init.sh:ro
+    entrypoint: ["/bin/sh", "/test-backends-init.sh"]
+    depends_on:
+      sonarr-test:
+        condition: service_healthy
+      radarr-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 3s
+      timeout: 3s
+      start_period: 120s
+      retries: 40
+
+volumes:
+  requestarr-config:
+  sonarr-test-config:
+  radarr-test-config:
+  test-media:
