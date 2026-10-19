@@ -87,6 +87,7 @@ namespace NzbDrone.Core.HealthCheck
         UpdateAvailable,
         UpdateStartupNotWritable,
         UpdateStartupTranslocation,
-        UpdateUiNotWritable
+        UpdateUiNotWritable,
+        ProvisioningFailed
     }
 }

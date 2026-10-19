@@ -27,6 +27,7 @@ namespace NzbDrone.Core.Configuration
     {
         Dictionary<string, object> GetConfigDictionary();
         void SaveConfigDictionary(Dictionary<string, object> configValues);
+        void SetApiKey(string apiKey);
         void EnsureDefaultConfigFile();
 
         string BindAddress { get; }
@@ -501,6 +502,17 @@ namespace NzbDrone.Core.Configuration
             MigrateConfigFile();
             EnsureDefaultConfigFile();
             DeleteOldValues();
+        }
+
+        public void SetApiKey(string apiKey)
+        {
+            if (apiKey.IsNullOrWhiteSpace() || apiKey == GetValue("ApiKey", null, false))
+            {
+                return;
+            }
+
+            SetValue("ApiKey", apiKey);
+            _eventAggregator.PublishEvent(new ApiKeyChangedEvent());
         }
 
         public void Execute(ResetApiKeyCommand message)
