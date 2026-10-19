@@ -1,12 +1,16 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using NzbDrone.Core.Test.Framework;
 using Requestarr.Core.Audit;
+using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
 using Requestarr.Core.Discord.Handlers;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Provisioning;
+using Requestarr.Core.Requests;
 using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Test.Discord.Harness
@@ -21,6 +25,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         public const ulong Moderator = 900000000000001003;
 
         protected FakeDiscordGuild Discord { get; private set; }
+        protected FakeRadarr Radarr { get; private set; }
+        protected FakeSonarr Sonarr { get; private set; }
         protected InteractionHarness Harness { get; private set; }
         protected DiscordGuildConfig Config => Mocker.Resolve<IGuildSetupService>().GetConfig();
         protected ulong AdminChannel => ulong.Parse(Config.AdminChannelId);
@@ -32,6 +38,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             Discord.AddMember(Alice, "alice");
             Discord.AddMember(Bob, "bob");
             Discord.AddMember(Moderator, "mod", false, AdminRole);
+            Discord.Roles[AdminRole] = "Requestarr Admin";
 
             var settings = new DiscordSettingsStore();
             settings.Set(new DiscordSettings { BotToken = "test", ApplicationId = 1, GuildId = FakeDiscordGuild.Guild, AdminRoleId = AdminRole });
@@ -46,13 +53,38 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IAuditRepository>(Mocker.Resolve<AuditRepository>());
             Mocker.SetConstant<IDiscordGuildConfigRepository>(Mocker.Resolve<DiscordGuildConfigRepository>());
             Mocker.SetConstant<IAuditService>(Mocker.Resolve<AuditService>());
+            Mocker.SetConstant<IBackendRepository>(Mocker.Resolve<BackendRepository>());
+            Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
+            Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
+            Radarr = new FakeRadarr();
+            Sonarr = new FakeSonarr();
+            Mocker.SetConstant<IRadarrApi>(Radarr);
+            Mocker.SetConstant<ISonarrApi>(Sonarr);
+            Mocker.SetConstant<IBackendService>(Mocker.Resolve<BackendService>());
+            Mocker.Resolve<IBackendService>().SyncFromProvisioning(new BackendsProvisioning
+            {
+                Radarr = new List<BackendInstanceProvisioning>
+                {
+                    new() { Name = "Radarr", Url = "http://radarr-test:7878", ApiKey = "k", QualityProfile = "HD-1080p", RootFolder = "/data/media", Default = true },
+                    new() { Name = "Radarr 4K", Url = "http://radarr-4k:7878", ApiKey = "k", QualityProfile = "Any", RootFolder = "/data/media" }
+                },
+                Sonarr = new List<BackendInstanceProvisioning>
+                {
+                    new() { Name = "Sonarr", Url = "http://sonarr-test:8989", ApiKey = "k", QualityProfile = "HD-1080p", RootFolder = "/data/media", SeriesType = "anime" }
+                }
+            });
             Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
+            Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
 
             Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
 
-            Harness = new InteractionHarness(Mocker.Resolve<UserCommandHandler>(), Mocker.Resolve<MediaServerHandler>());
+            Harness = new InteractionHarness(
+                Mocker.Resolve<UserCommandHandler>(),
+                Mocker.Resolve<MediaServerHandler>(),
+                Mocker.Resolve<RequestHandler>(),
+                Mocker.Resolve<ApprovalHandler>());
         }
 
         protected IUserManagementService Users => Mocker.Resolve<IUserManagementService>();

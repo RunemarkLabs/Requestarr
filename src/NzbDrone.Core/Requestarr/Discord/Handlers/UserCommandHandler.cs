@@ -89,7 +89,7 @@ namespace Requestarr.Core.Discord.Handlers
 
                     await responder.Reply(type == null || level == null
                         ? ServiceResult.Fail(DiscordText.TypeNotOffered)
-                        : _users.SetAccess(member.Value, type.Value, level.Value, actor));
+                        : _users.SetAccess(member.Value, type.Value, level.Value, actor, interaction.GetOption<string>("instance")));
                     break;
                 }
 

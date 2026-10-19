@@ -21,6 +21,8 @@ namespace Requestarr.Core.Discord.Handlers
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
             (InteractionKind.SlashCommand, "mediaserver request"),
+            (InteractionKind.SlashCommand, "mediaserver approve"),
+            (InteractionKind.SlashCommand, "mediaserver deny"),
             (InteractionKind.Button, MediaServerRoutes.Approve),
             (InteractionKind.Button, MediaServerRoutes.Deny)
         };
@@ -28,6 +30,22 @@ namespace Requestarr.Core.Discord.Handlers
         public async Task HandleAsync(DiscordInteraction interaction, IInteractionResponder responder)
         {
             var caller = _callers.Resolve(interaction);
+
+            if (interaction.Kind == InteractionKind.SlashCommand && interaction.CommandName != "mediaserver request")
+            {
+                // Shared command, admin subcommands: visible to everyone, checked here.
+                if (caller.AdminDenial != null)
+                {
+                    await responder.Ephemeral(caller.AdminDenial);
+                    return;
+                }
+
+                var id = (int)(interaction.GetInteger("id") ?? 0);
+                var approveCommand = interaction.CommandName == "mediaserver approve";
+                await responder.DeferAsync();
+                await responder.Reply(await _users.DecideAccessRequestAsync(id, approveCommand, HandlerSupport.ActorFor(interaction, caller), interaction.DisplayName ?? interaction.Username));
+                return;
+            }
 
             if (interaction.Kind == InteractionKind.SlashCommand)
             {

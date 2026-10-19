@@ -17,5 +17,8 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Components only: replace the message the component belongs to.
         Task UpdateMessageAsync(InteractionReply reply);
+
+        // Must be the first response: opens a form (for example a deny reason).
+        Task ShowModalAsync(InteractionModal modal);
     }
 }

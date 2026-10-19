@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
@@ -37,20 +38,61 @@ namespace Requestarr.Core.Discord.Gateway
                     m.Embeds = Embeds(reply);
                 });
             }
+            else if (_interaction is SocketModal modal)
+            {
+                await modal.UpdateAsync(m =>
+                {
+                    m.Content = reply.Content;
+                    m.Components = Components(reply) ?? new ComponentBuilder().Build();
+                    m.Embeds = Embeds(reply);
+                });
+            }
             else
             {
                 await RespondAsync(reply);
             }
         }
 
+        public Task ShowModalAsync(InteractionModal modal)
+        {
+            var builder = new ModalBuilder().WithTitle(DiscordLimits.Truncate(modal.Title, DiscordLimits.ModalTitleLength)).WithCustomId(modal.CustomId);
+
+            foreach (var field in modal.Fields)
+            {
+                var style = field.Paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short;
+                builder.AddTextInput(DiscordLimits.Truncate(field.Label, 45), field.CustomId, style, required: field.Required, maxLength: field.MaxLength);
+            }
+
+            return _interaction.RespondWithModalAsync(builder.Build());
+        }
+
         public static MessageComponent Components(InteractionReply reply)
         {
-            if (reply.Buttons == null || !reply.Buttons.Any())
+            var hasButtons = reply.Buttons != null && reply.Buttons.Any();
+
+            if (!hasButtons && reply.SelectMenu == null)
             {
                 return null;
             }
 
             var builder = new ComponentBuilder();
+
+            if (reply.SelectMenu != null)
+            {
+                var menu = new SelectMenuBuilder()
+                    .WithCustomId(reply.SelectMenu.CustomId)
+                    .WithPlaceholder(DiscordLimits.Truncate(reply.SelectMenu.Placeholder, 150))
+                    .WithMinValues(reply.SelectMenu.MinValues)
+                    .WithMaxValues(Math.Min(reply.SelectMenu.MaxValues, reply.SelectMenu.Options.Count));
+
+                foreach (var option in reply.SelectMenu.Options.Take(DiscordLimits.ChoicesPerMenu))
+                {
+                    var label = DiscordLimits.Truncate(option.Label, DiscordLimits.OptionLabelLength);
+                    menu.AddOption(label, option.Value, DiscordLimits.Truncate(option.Description, DiscordLimits.OptionLabelLength));
+                }
+
+                builder.WithSelectMenu(menu);
+            }
 
             foreach (var button in reply.Buttons.Take(25))
             {

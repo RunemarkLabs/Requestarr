@@ -90,6 +90,7 @@ namespace NzbDrone.Core.HealthCheck
         UpdateUiNotWritable,
         ProvisioningFailed,
         DiscordNotConfigured,
-        DiscordDisconnected
+        DiscordDisconnected,
+        BackendUnavailable
     }
 }

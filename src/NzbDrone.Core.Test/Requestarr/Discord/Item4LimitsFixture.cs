@@ -38,7 +38,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task add_should_refuse_near_the_role_limit()
         {
-            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 1);
+            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 2);
 
             var run = await AddUser(Alice);
 
@@ -49,7 +49,8 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task add_should_still_work_just_below_the_role_limit()
         {
-            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 2);
+            // The scenario already has the admin role.
+            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 3);
 
             (await AddUser(Alice)).LastReply.Content.Should().StartWith("Added alice.");
         }
@@ -60,7 +61,7 @@ namespace Requestarr.Core.Test.Discord
             // Discord.Net validates names, descriptions (100), choice counts (25) on Build().
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToList();
 
-            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("user", "mediaserver");
+            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("user", "queue", "approve", "deny", "request", "requests", "quota", "mediaserver");
 
             foreach (var option in commands.SelectMany(c => c.Options.Value).SelectMany(o => o.Options ?? new()))
             {

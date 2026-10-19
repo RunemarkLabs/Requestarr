@@ -44,6 +44,9 @@ namespace Requestarr.Core.Provisioning
         public string ApplicationId { get; set; }
         public string GuildId { get; set; }
         public string AdminRoleId { get; set; }
+
+        // Role created on first connect when no adminRoleId is given; members holding it are admins.
+        public string AdminRoleName { get; set; }
         public string AdminChannelId { get; set; }
         public string AdminQueueChannelId { get; set; }
         public List<string> RequestCategoryIds { get; set; } = new();
@@ -63,6 +66,9 @@ namespace Requestarr.Core.Provisioning
         public string Url { get; set; }
         public string ApiKey { get; set; }
         public bool Enabled { get; set; } = true;
+
+        // The instance used for users without an explicit assignment; the first listed when none is marked.
+        public bool Default { get; set; }
         public bool PollingOnly { get; set; }
         public string QualityProfile { get; set; }
         public string RootFolder { get; set; }

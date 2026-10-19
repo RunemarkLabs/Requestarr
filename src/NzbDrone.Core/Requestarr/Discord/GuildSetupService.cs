@@ -12,6 +12,9 @@ namespace Requestarr.Core.Discord
         Task<DiscordGuildConfig> EnsureAsync();
         DiscordGuildConfig GetConfig();
         Task<ulong> GetCategoryWithRoomAsync();
+
+        // The resolved admin role (provisioned ID, existing role by name, or the one Requestarr created).
+        ulong? AdminRoleId { get; }
     }
 
     // Makes sure the admin channel and a request-channel category exist. Existing ones are
@@ -33,6 +36,8 @@ namespace Requestarr.Core.Discord
             _logger = logger;
         }
 
+        public ulong? AdminRoleId => ulong.TryParse(GetConfig()?.AdminRoleId, out var id) ? id : _settings.Current.AdminRoleId;
+
         public DiscordGuildConfig GetConfig()
         {
             return _repository.FindByGuild(_gateway.GuildId.ToString());
@@ -43,8 +48,8 @@ namespace Requestarr.Core.Discord
             var settings = _settings.Current;
             var config = GetConfig() ?? new DiscordGuildConfig { GuildId = _gateway.GuildId.ToString() };
 
-            config.AdminRoleId = settings.AdminRoleId?.ToString();
-            var adminRoleId = settings.AdminRoleId;
+            var adminRoleId = await EnsureAdminRoleAsync(settings, config);
+            config.AdminRoleId = adminRoleId.ToString();
 
             var adminChannel = await ExistingOrNull(Parse(config.AdminChannelId)) ??
                                await ExistingOrNull(settings.AdminChannelId) ??
@@ -58,6 +63,7 @@ namespace Requestarr.Core.Discord
                 _audit.Record(Actor.System, "discord.admin-channel.create", "channel", adminChannel.ToString());
             }
 
+            await EnsureAdminAccess(adminChannel.Value, adminRoleId);
             config.AdminChannelId = adminChannel.ToString();
             config.AdminQueueChannelId = adminChannel.ToString();
 
@@ -67,6 +73,7 @@ namespace Requestarr.Core.Discord
             {
                 if (await ExistingOrNull(Parse(id)) != null)
                 {
+                    await EnsureAdminAccess(ulong.Parse(id), adminRoleId);
                     categories.Add(id);
                 }
             }
@@ -78,6 +85,10 @@ namespace Requestarr.Core.Discord
                 if (category == null)
                 {
                     category = await CreateCategoryAsync(1);
+                }
+                else
+                {
+                    await EnsureAdminAccess(category.Value, adminRoleId);
                 }
 
                 categories.Add(category.ToString());
@@ -115,12 +126,57 @@ namespace Requestarr.Core.Discord
         private async Task<ulong> CreateCategoryAsync(int index)
         {
             var name = ChannelLayout.CategoryName(index);
-            var id = await _gateway.CreateCategoryAsync(name, ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, _settings.Current.AdminRoleId));
+            var id = await _gateway.CreateCategoryAsync(name, ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, AdminRoleId));
 
             _logger.Info("Created Discord category '{0}' ({1})", name, id);
             _audit.Record(Actor.System, "discord.category.create", "channel", id.ToString(), name);
 
             return id;
+        }
+
+        // Provisioned role ID if it exists, else a role with the configured name, else create it.
+        // New roles are created at the bottom of the role list, below the bot's own role.
+        private async Task<ulong> EnsureAdminRoleAsync(DiscordSettings settings, DiscordGuildConfig config)
+        {
+            if (settings.AdminRoleId.HasValue && await _gateway.RoleExistsAsync(settings.AdminRoleId.Value))
+            {
+                return settings.AdminRoleId.Value;
+            }
+
+            if (ulong.TryParse(config.AdminRoleId, out var stored) && await _gateway.RoleExistsAsync(stored))
+            {
+                return stored;
+            }
+
+            var name = string.IsNullOrWhiteSpace(settings.AdminRoleName) ? DiscordSettings.DefaultAdminRoleName : settings.AdminRoleName;
+            var existing = await _gateway.FindRoleAsync(name);
+
+            if (existing.HasValue)
+            {
+                return existing.Value;
+            }
+
+            var created = await _gateway.CreateRoleAsync(name);
+            _logger.Info("Created Discord admin role '{0}' ({1})", name, created);
+            _audit.Record(Actor.System, "discord.admin-role.create", "role", created.ToString(), name);
+
+            return created;
+        }
+
+        // Adds the admin role to an admin-only channel or category that lacks it (keeps everything else).
+        private async Task EnsureAdminAccess(ulong channelId, ulong adminRoleId)
+        {
+            var overwrites = await _gateway.GetChannelOverwritesAsync(channelId);
+
+            if (overwrites.Any(o => o.TargetId == adminRoleId))
+            {
+                return;
+            }
+
+            var updated = overwrites.ToList();
+            const ChannelPermissions readWrite = ChannelPermissions.ViewChannel | ChannelPermissions.SendMessages | ChannelPermissions.ReadMessageHistory;
+            updated.Add(new PermissionOverwrite(adminRoleId, OverwriteTarget.Role, readWrite, ChannelPermissions.None));
+            await _gateway.SetChannelOverwritesAsync(channelId, updated);
         }
 
         private async Task<ulong?> ExistingOrNull(ulong? channelId)
