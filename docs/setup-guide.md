@@ -433,7 +433,7 @@ _Coming in Phase 2._
 - **"Admin commands only work in the Requestarr admin channel":** run `/admin …` commands in `#requestarr-admin`, not in a user's channel.
 - **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
 - **Users don't see /admin:** that's intended; it only shows to members with Manage Server (see 5.3).
-- **The panels are posted but not pinned:** the bot's role lacks **Pin Messages**. Turn it on in Server Settings → Roles (see section 2, step 5) and restart Requestarr.
+- **The panels are posted but not pinned, and System → Status warns about Pin Messages:** the bot's role lacks **Pin Messages**. Everything else keeps working. Turn it on in Server Settings → Roles (see section 2, step 5) and restart Requestarr.
 - **The /request type list is empty:** that user has every type set to off. Change it with `/admin user access`.
 - **Discord still shows old commands after an update:** press Ctrl+R in the Discord app, or fully quit it from the system tray and reopen it.
 - **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.

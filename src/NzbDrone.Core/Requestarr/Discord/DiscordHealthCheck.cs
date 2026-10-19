@@ -8,17 +8,20 @@ namespace Requestarr.Core.Discord
     public class DiscordHealthCheck : HealthCheckBase
     {
         private readonly IDiscordClientHost _host;
+        private readonly IDiscordGuildGateway _gateway;
 
-        public DiscordHealthCheck(IDiscordClientHost host, ILocalizationService localizationService)
+        public DiscordHealthCheck(IDiscordClientHost host, IDiscordGuildGateway gateway, ILocalizationService localizationService)
             : base(localizationService)
         {
             _host = host;
+            _gateway = gateway;
         }
 
         public override HealthCheck Check()
         {
             return _host.State switch
             {
+                DiscordBotState.Connected when _gateway.IsConnected && !_gateway.CanPinMessages => Problem(HealthCheckResult.Warning, HealthCheckReason.DiscordMissingPermission, DiscordText.MissingPinMessages, "#discord-missing-permission"),
                 DiscordBotState.Connected => new HealthCheck(GetType()),
                 DiscordBotState.NotConfigured => Problem(HealthCheckResult.Warning, HealthCheckReason.DiscordNotConfigured, "The Discord bot is not configured. Add the discord section and bot token to the provisioning file.", "#discord-not-configured"),
                 DiscordBotState.Connecting => Problem(HealthCheckResult.Warning, HealthCheckReason.DiscordDisconnected, "The Discord bot is connecting.", "#discord-disconnected"),

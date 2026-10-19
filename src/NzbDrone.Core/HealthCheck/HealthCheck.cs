@@ -91,6 +91,7 @@ namespace NzbDrone.Core.HealthCheck
         ProvisioningFailed,
         DiscordNotConfigured,
         DiscordDisconnected,
+        DiscordMissingPermission,
         BackendUnavailable
     }
 }

@@ -214,6 +214,7 @@ namespace Requestarr.Core.Discord
         public const string LinkPlexLabel = "Your Plex username or email";
         public const string CancelLabel = "Cancel request";
         public const string NoUsers = "No Requestarr users yet. Add someone with /admin user add.";
+        public const string MissingPinMessages = "The Discord bot is missing the Pin Messages permission, so panels are posted but not pinned. Turn on Pin Messages for the bot's role in Server Settings, Roles.";
         public const string NothingToRequest = "You can't request anything yet. Ask the admin for access.";
         public const string ChooseType = "Pick a type from the list (start typing in the type option).";
         public const string TmdbIsForMovies = "tmdb: IDs are for movies. Pick the Movies type, or use tvdb: for TV.";

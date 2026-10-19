@@ -23,6 +23,7 @@ namespace Requestarr.Core.Discord.Gateway
         }
 
         public bool IsConnected => _host.State == DiscordBotState.Connected && Guild != null;
+        public bool CanPinMessages => Guild?.CurrentUser?.GuildPermissions.PinMessages ?? false;
         public ulong GuildId => _settings.Current.GuildId;
         public ulong BotUserId => Client.CurrentUser?.Id ?? 0;
         public ulong OwnerId => Guild?.OwnerId ?? 0;

@@ -30,6 +30,9 @@ namespace Requestarr.Core.Discord.Gateway
     public interface IDiscordGuildGateway
     {
         bool IsConnected { get; }
+
+        // Pin Messages (1 << 51) is separate from Manage Messages; without it panels are posted unpinned.
+        bool CanPinMessages { get; }
         ulong GuildId { get; }
         ulong BotUserId { get; }
         ulong OwnerId { get; }

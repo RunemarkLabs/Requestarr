@@ -8,9 +8,9 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Test.CommandSurface
 {
-    // Item 6: server-side admin and channel checks unchanged under the new surface.
+    // Item 7: server-side admin and channel checks unchanged under the new surface.
     [TestFixture]
-    public class Item6EnforcementFixture : RequestScenario
+    public class Item7EnforcementFixture : RequestScenario
     {
         [Test]
         public async Task request_in_someone_elses_channel_is_refused()

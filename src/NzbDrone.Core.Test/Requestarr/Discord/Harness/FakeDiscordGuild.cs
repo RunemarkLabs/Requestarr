@@ -47,6 +47,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         // Simulates a bot without the Pin Messages permission.
         public bool CannotPin { get; set; }
 
+        public bool CanPinMessages => !CannotPin;
+
         public FakeDiscordGuild()
         {
             AddMember(Owner, "owner");

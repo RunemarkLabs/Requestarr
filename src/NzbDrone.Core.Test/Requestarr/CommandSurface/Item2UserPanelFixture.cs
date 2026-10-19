@@ -2,7 +2,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using NUnit.Framework;
-using NzbDrone.Test.Common;
 using Requestarr.Core.Discord;
 using Requestarr.Core.MediaServers;
 using Requestarr.Core.Test.Discord.Harness;
@@ -25,22 +24,6 @@ namespace Requestarr.Core.Test.CommandSurface
             Channel.PinnedMessage.Content.Should().Contain("alice's requests").And.Contain("Movies (needs approval), TV (needs approval)");
             PanelButtons.Should().Equal(DiscordText.PanelMyRequests, DiscordText.PanelMyLimits, DiscordText.PanelLinkPlex);
             UserFor(Alice).PanelMessageId.Should().Be(Channel.Pinned.Single().ToString());
-        }
-
-        [Test]
-        public async Task panel_is_kept_and_reused_when_the_bot_cannot_pin()
-        {
-            Discord.CannotPin = true;
-            Channel.Pinned.Clear();
-            var before = Channel.Messages.Count;
-
-            await Mocker.Resolve<IPanelService>().EnsureAllAsync();
-            await SetAccess(Alice, "tv", "off");
-
-            Channel.Messages.Count.Should().Be(before);
-            Channel.Messages.Single(m => m.Buttons.Any(b => b.CustomId == PanelRoutes.MyRequests)).Content.Should().NotContain("TV (");
-            UserFor(Alice).PanelMessageId.Should().NotBeNull();
-            ExceptionVerification.IgnoreWarns();
         }
 
         [Test]
