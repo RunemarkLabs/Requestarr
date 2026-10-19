@@ -68,9 +68,10 @@ namespace Requestarr.Core.Discord.Help
                 Title = "TV seasons",
                 Summary = "All seasons or choose your own",
                 Visible = v => v.Types.Contains(ContentType.Tv),
-                Intro = _ => $"**{DiscordText.AllSeasons}**: every season now, and new seasons as they air. Specials aren't included.\n" +
-                             $"**{DiscordText.ChooseSeasonsLabel}**: pick the seasons you want, and optionally \"{DiscordText.AlsoFutureSeasons}\". Specials are only included if you pick them.\n" +
-                             $"Before anything is sent, Requestarr says what you chose in plain words. Press **{DiscordText.RequestLabel}** to send it or **{DiscordText.BackLabel}** to change it."
+                Intro = _ => $"**{DiscordText.AllSeasons}**: requests every season now, and new seasons as they air, straight away. Specials aren't included.\n" +
+                             $"**{DiscordText.ChooseSeasonsLabel}**: pick the seasons you want, and optionally \"{DiscordText.AlsoFutureSeasons}\". Specials are only included if you pick them. " +
+                             $"Requestarr then says what you chose in plain words; press **{DiscordText.RequestLabel}** to send it or **{DiscordText.BackLabel}** to change it.\n" +
+                             "Either way, the final status says exactly which seasons were requested."
             },
             new HelpTopic
             {
@@ -155,7 +156,8 @@ namespace Requestarr.Core.Discord.Help
         public static IReadOnlyList<HelpTopic> Topics(HelpTree tree, HelpViewer viewer) =>
             (tree == HelpTree.Admin ? AdminTopics : UserTopics).Where(t => tree != HelpTree.User || t.Visible(viewer)).ToList();
 
-        public static InteractionReply Home(HelpTree tree, HelpViewer viewer)
+        // castFromTmdb adds The Movie Database's notice to the overview (its credits page).
+        public static InteractionReply Home(HelpTree tree, HelpViewer viewer, bool castFromTmdb = false)
         {
             var overview = tree switch
             {
@@ -166,14 +168,14 @@ namespace Requestarr.Core.Discord.Help
                     : "**Requestarr help**\nYou can't request anything yet; ask the admin for access. Pick a topic."
             };
 
-            return Page(tree, viewer, overview, home: true);
+            return Page(tree, viewer, castFromTmdb ? $"{overview}\n-# {DiscordText.TmdbNotice}" : overview, home: true);
         }
 
-        public static InteractionReply Topic(HelpTree tree, HelpViewer viewer, string key)
+        public static InteractionReply Topic(HelpTree tree, HelpViewer viewer, string key, bool castFromTmdb = false)
         {
             var topic = Topics(tree, viewer).FirstOrDefault(t => t.Key == key);
 
-            return topic == null ? Home(tree, viewer) : Page(tree, viewer, $"**{topic.Title}**\n{Body(topic, viewer)}", home: false);
+            return topic == null ? Home(tree, viewer, castFromTmdb) : Page(tree, viewer, $"**{topic.Title}**\n{Body(topic, viewer)}", home: false);
         }
 
         public static string Body(HelpTopic topic, HelpViewer viewer)

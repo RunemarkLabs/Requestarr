@@ -93,10 +93,8 @@ namespace Requestarr.Core.Test.Requests
             var card = await Harness.SendAsync(FakeInteraction.SelectMenu(results.LastReply.SelectMenu.CustomId, newer.ToString()).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
             LogCard("card", card.LastReply);
 
-            var all = await Click($"{RequestRoutes.TvAll}:{newer}");
-            Log($"[all] confirm: {all.LastReply.Content.Replace("\n", " | ")}");
-            var allFinal = await Click(all.LastReply.Buttons.First().CustomId);
-            Log($"[all] final: {allFinal.LastReply.Content.Replace("\n", " | ")}");
+            var allFinal = await Click($"{RequestRoutes.TvAll}:{newer}");
+            Log($"[all] final (no confirmation step): {allFinal.LastReply.Content.Replace("\n", " | ")}");
 
             // Path 2: Choose seasons, season 2 only.
             var choose = await Click($"{RequestRoutes.TvChoose}:{older}");

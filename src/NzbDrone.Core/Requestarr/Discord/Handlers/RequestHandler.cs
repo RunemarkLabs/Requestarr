@@ -11,8 +11,8 @@ using Requestarr.Core.Users;
 namespace Requestarr.Core.Discord.Handlers
 {
     // /request {type} {query}: users in their own channel, or the admin in the admin channel.
-    // A request is one message that changes in place: results, details, seasons (TV), a plain-words
-    // confirmation, then the final status. Buttons on cards from earlier versions keep working.
+    // A request is one message that changes in place: results, details, then the final status. For TV,
+    // "All seasons" sends at once; "Choose seasons" adds a menu and a plain-words confirmation. Buttons on cards from earlier versions keep working.
     public class RequestHandler : IInteractionHandler
     {
         public const int MaxListLines = 20;
@@ -108,7 +108,21 @@ namespace Requestarr.Core.Discord.Handlers
                     break;
                 }
 
+                // All seasons sends straight away; the final status says exactly what was requested.
                 case (InteractionKind.Button, RequestRoutes.TvAll):
+                {
+                    if (!int.TryParse(First(args), out var tvdbId))
+                    {
+                        await responder.Ephemeral(DiscordText.TitleNotFound);
+                        return;
+                    }
+
+                    await responder.DeferAsync();
+                    var result = await _requests.RequestAsync(caller, ContentType.Tv, tvdbId, SeasonChoice.Everything);
+                    await responder.EditAsync(RequestCards.Final(ContentType.Tv, result, SeasonText(result, SeasonChoice.Everything)));
+                    break;
+                }
+
                 case (InteractionKind.Button, RequestRoutes.TvChoose):
                 case (InteractionKind.Button, RequestRoutes.TvBack):
                 case (InteractionKind.SelectMenu, RequestRoutes.TvPick):
@@ -200,12 +214,9 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var reply = interaction.Route switch
-            {
-                RequestRoutes.TvAll => RequestCards.Confirm(detail.Value, SeasonChoice.Everything),
-                RequestRoutes.TvChoose => RequestCards.SeasonMenu(detail.Value),
-                _ => RequestCards.Confirm(detail.Value, RequestCards.FromMenu(interaction.Values))
-            };
+            var reply = interaction.Route == RequestRoutes.TvChoose
+                ? RequestCards.SeasonMenu(detail.Value)
+                : RequestCards.Confirm(detail.Value, RequestCards.FromMenu(interaction.Values));
 
             await responder.EditAsync(reply);
         }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Requestarr.Core.Discord.Help;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Metadata;
 using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
@@ -15,12 +16,14 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly ICallerResolver _callers;
         private readonly IUserMediaAccessRepository _access;
         private readonly IMediaServerAccountRepository _accounts;
+        private readonly IMetadataService _metadata;
 
-        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts)
+        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts, IMetadataService metadata)
         {
             _callers = callers;
             _access = access;
             _accounts = accounts;
+            _metadata = metadata;
         }
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
@@ -63,13 +66,13 @@ namespace Requestarr.Core.Discord.Handlers
 
             if (entry != null)
             {
-                await responder.RespondAsync(HelpCatalog.Home(tree, viewer));
+                await responder.RespondAsync(HelpCatalog.Home(tree, viewer, _metadata.CastEnabled));
                 return;
             }
 
-            var page = interaction.Route == HelpCatalog.RouteHome ? HelpCatalog.Home(tree, viewer)
-                : tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything)
-                : HelpCatalog.Topic(tree, viewer, picked);
+            var page = interaction.Route == HelpCatalog.RouteHome ? HelpCatalog.Home(tree, viewer, _metadata.CastEnabled)
+                : tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything, _metadata.CastEnabled)
+                : HelpCatalog.Topic(tree, viewer, picked, _metadata.CastEnabled);
 
             await responder.UpdateMessageAsync(page);
         }

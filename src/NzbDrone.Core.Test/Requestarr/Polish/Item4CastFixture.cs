@@ -44,7 +44,7 @@ namespace Requestarr.Core.Test.Polish
             results.SelectMenu.Options.Select(o => o.Description).Should().Equal(
                 "2024 · Apple TV · Joel Edgerton, Jennifer Connelly, Alice Braga",
                 "2015 · SYFY · Marc Bendavid, Melissa O'Neil, Anthony Lemke");
-            results.Content.Should().Contain(DiscordText.TmdbSubtext);
+            results.Content.Should().EndWith("\n-# Cast from TMDB");
         }
 
         [Test]

@@ -7,7 +7,8 @@ using Requestarr.Core.Requests;
 
 namespace Requestarr.Core.Test.Polish
 {
-    // Item 1: "All seasons" or "Choose seasons", never both; the choice restated in plain words.
+    // Item 1: "All seasons" (sends at once) or "Choose seasons" (menu, then a plain-words confirmation),
+    // never both; the final status always says which seasons were requested.
     [TestFixture]
     public class Item1SeasonsFixture : PolishScenario
     {
@@ -29,20 +30,20 @@ namespace Requestarr.Core.Test.Polish
         }
 
         [Test]
-        public async Task all_seasons_is_restated_before_anything_is_sent()
+        public async Task all_seasons_sends_at_once_and_says_what_was_requested()
         {
-            var confirm = (await Click(Alice, $"req-tv-all:{DarkMatter}")).LastReply;
+            var final = (await Click(Alice, $"req-tv-all:{DarkMatter}")).LastReply;
 
-            confirm.Content.Should().Contain("You chose **all seasons (1–2) and new seasons as they air, without specials**.");
-            confirm.Buttons.Select(b => b.CustomId).Should().Equal($"req-tv-ok:{DarkMatter}:all", $"req-tv-back:{DarkMatter}");
-            RequestStore.All().Should().BeEmpty();
-            Sonarr.Adds.Should().BeEmpty();
+            final.Content.Should().StartWith(DiscordText.FinalSent).And.NotContain("You chose");
+            final.Content.Should().Contain("Seasons: all seasons (1–2) and new seasons as they air, without specials.");
+            final.Buttons.Should().BeEmpty();
+            Sonarr.Adds.Should().ContainSingle();
         }
 
         [Test]
         public async Task all_seasons_monitors_every_regular_season_and_new_ones_but_not_specials()
         {
-            var final = (await Click(Alice, $"req-tv-ok:{DarkMatter}:all")).LastReply;
+            var final = (await Click(Alice, $"req-tv-all:{DarkMatter}")).LastReply;
 
             var added = Sonarr.Adds.Single();
             added.Seasons.Should().Equal(1, 2);

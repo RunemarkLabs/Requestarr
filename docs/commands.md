@@ -54,10 +54,8 @@ The card also says if the title is:
 
 - **Movies:** press **Request**.
 - **TV:** pick one of two paths:
-  - **All seasons:** every season now, and new seasons as they air. Specials aren't included.
-  - **Choose seasons:** pick seasons from a list, including **Specials** if you want them, and optionally **Also new seasons as they air**. Very long shows list the 24 most recent seasons.
-
-  Requestarr then says what you chose in plain words, for example "season 2 only; new seasons won't be added". Press **Request** to send it or **Back** to change it.
+  - **All seasons:** requests every season now, and new seasons as they air, straight away. Specials aren't included.
+  - **Choose seasons:** pick seasons from a list, including **Specials** if you want them, and optionally **Also new seasons as they air**. Very long shows list the 24 most recent seasons. Requestarr then says what you chose in plain words, for example "season 2 only; new seasons won't be added". Press **Request** to send it or **Back** to change it.
 
 **The final status** is always one of:
 
@@ -165,4 +163,4 @@ Requestarr keeps within Discord's limits:
 
 ## The Movie Database
 
-Cast and TV episode counts come from The Movie Database when the admin configures a key (setup guide 4.6). Wherever they appear, Requestarr notes: "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB."
+Cast and TV episode counts come from The Movie Database when the admin configures a key (setup guide 4.6). Wherever cast appears, Requestarr shows a short "Cast from TMDB" credit. The full notice is in `/help` and `/admin help` while a key is set: This product uses the TMDB API but is not endorsed or certified by TMDB.

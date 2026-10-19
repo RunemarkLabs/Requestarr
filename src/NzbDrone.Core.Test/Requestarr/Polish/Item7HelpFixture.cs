@@ -143,6 +143,17 @@ namespace Requestarr.Core.Test.Polish
         }
 
         [Test]
+        public async Task the_full_tmdb_notice_is_in_help_when_cast_is_enabled()
+        {
+            (await UserHelp(Alice)).LastReply.Content.Should().NotContain("TMDB");
+
+            TmdbKey.Set("test-key");
+
+            (await UserHelp(Alice)).LastReply.Content.Should().Contain(DiscordText.TmdbNotice);
+            (await AdminHelp()).LastReply.Content.Should().Contain(DiscordText.TmdbNotice);
+        }
+
+        [Test]
         public void user_help_never_mentions_admin_commands()
         {
             HelpCatalog.UserTopics.SelectMany(t => t.Commands).Should().NotContain(c => c.StartsWith("admin"));
