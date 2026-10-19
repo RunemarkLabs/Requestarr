@@ -268,6 +268,13 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
+            // One match: skip the menu and go straight to its card.
+            if (results.Value.Count == 1)
+            {
+                await ShowDetail(responder, caller, type, results.Value[0].ExternalId(type).Value, null);
+                return;
+            }
+
             await responder.EditAsync(RequestCards.SearchResults(type, query, results.Value, _metadata.CastEnabled));
         }
 
