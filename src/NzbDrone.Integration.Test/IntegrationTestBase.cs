@@ -15,7 +15,6 @@ using NzbDrone.Integration.Test.Client;
 using NzbDrone.SignalR;
 using NzbDrone.Test.Common.Categories;
 using Prowlarr.Api.V1.Config;
-using Prowlarr.Api.V1.History;
 using Prowlarr.Api.V1.System.Tasks;
 using Prowlarr.Api.V1.Tags;
 using RestSharp;
@@ -30,13 +29,8 @@ namespace NzbDrone.Integration.Test
 
         public CommandClient Commands;
         public ClientBase<TaskResource> Tasks;
-        public ClientBase<HistoryResource> History;
         public ClientBase<HostConfigResource> HostConfig;
-        public IndexerClient Indexers;
         public LogsClient Logs;
-        public NotificationClient Notifications;
-
-        //public ReleaseClient Releases;
         public ClientBase<TagResource> Tags;
 
         private List<SignalRMessage> _signalRReceived;
@@ -86,13 +80,8 @@ namespace NzbDrone.Integration.Test
 
             Commands = new CommandClient(RestClient, ApiKey);
             Tasks = new ClientBase<TaskResource>(RestClient, ApiKey, "system/task");
-            History = new ClientBase<HistoryResource>(RestClient, ApiKey);
             HostConfig = new ClientBase<HostConfigResource>(RestClient, ApiKey, "config/host");
-            Indexers = new IndexerClient(RestClient, ApiKey);
             Logs = new LogsClient(RestClient, ApiKey);
-            Notifications = new NotificationClient(RestClient, ApiKey);
-
-            //Releases = new ReleaseClient(RestClient, ApiKey);
             Tags = new ClientBase<TagResource>(RestClient, ApiKey);
         }
 

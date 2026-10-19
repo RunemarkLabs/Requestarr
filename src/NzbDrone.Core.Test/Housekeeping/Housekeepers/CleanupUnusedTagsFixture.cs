@@ -1,9 +1,10 @@
+using System;
+using Dapper;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Housekeeping.Housekeepers;
-using NzbDrone.Core.IndexerProxies;
-using NzbDrone.Core.IndexerProxies.Http;
 using NzbDrone.Core.Tags;
 using NzbDrone.Core.Test.Framework;
 
@@ -36,15 +37,11 @@ namespace NzbDrone.Core.Test.Housekeeping.Housekeepers
 
             Db.InsertMany(tags);
 
-            var settings = Builder<HttpSettings>.CreateNew().Build();
-
-            var restrictions = Builder<IndexerProxyDefinition>.CreateListOfSize(2)
-                .All()
-                .With(x => x.Id = 0)
-                .With(x => x.Settings = settings)
-                .With(v => v.Tags.Add(tags[0].Id))
-                .BuildList();
-            Db.InsertMany(restrictions);
+            using (var connection = Mocker.Resolve<IMainDatabase>().OpenConnection())
+            {
+                connection.Execute("INSERT INTO \"Backends\" (\"Name\", \"Implementation\", \"Enable\", \"Tags\", \"Added\") VALUES (@Name, 'Sonarr', @Enable, @Tags, @Added)",
+                    new { Name = "Sonarr", Enable = true, Tags = $"[{tags[0].Id}]", Added = DateTime.UtcNow });
+            }
 
             Subject.Clean();
             AllStoredModels.Should().HaveCount(1);

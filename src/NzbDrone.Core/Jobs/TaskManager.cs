@@ -3,15 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using NLog;
 using NzbDrone.Common.Cache;
-using NzbDrone.Core.Applications;
 using NzbDrone.Core.Backup;
 using NzbDrone.Core.Caching;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Configuration.Events;
 using NzbDrone.Core.HealthCheck;
-using NzbDrone.Core.History;
 using NzbDrone.Core.Housekeeping;
-using NzbDrone.Core.IndexerVersions;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
@@ -92,24 +89,6 @@ namespace NzbDrone.Core.Jobs
                     {
                         Interval = 24 * 60,
                         TypeName = typeof(HousekeepingCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 24 * 60,
-                        TypeName = typeof(CleanUpHistoryCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 24 * 60,
-                        TypeName = typeof(IndexerDefinitionUpdateCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 6 * 60,
-                        TypeName = typeof(ApplicationIndexerSyncCommand).FullName
                     },
 
                     new ScheduledTask

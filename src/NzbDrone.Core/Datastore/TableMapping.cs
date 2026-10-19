@@ -3,21 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using Dapper;
 using NzbDrone.Common.Reflection;
-using NzbDrone.Core.Applications;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.CustomFilters;
 using NzbDrone.Core.Datastore.Converters;
-using NzbDrone.Core.Download;
-using NzbDrone.Core.IndexerProxies;
-using NzbDrone.Core.Indexers;
-using NzbDrone.Core.IndexerVersions;
 using NzbDrone.Core.Instrumentation;
 using NzbDrone.Core.Jobs;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Notifications;
-using NzbDrone.Core.Parser.Model;
-using NzbDrone.Core.Profiles;
 using NzbDrone.Core.Tags;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Update.History;
@@ -43,63 +35,16 @@ namespace NzbDrone.Core.Datastore
             Mapper.Entity<ScheduledTask>("ScheduledTasks").RegisterModel()
                   .Ignore(i => i.Priority);
 
-            Mapper.Entity<IndexerDefinition>("Indexers").RegisterModel()
-                  .Ignore(x => x.ImplementationName)
-                  .Ignore(i => i.Description)
-                  .Ignore(i => i.Language)
-                  .Ignore(i => i.Encoding)
-                  .Ignore(i => i.IndexerUrls)
-                  .Ignore(i => i.LegacyUrls)
-                  .Ignore(i => i.Protocol)
-                  .Ignore(i => i.Privacy)
-                  .Ignore(i => i.SupportsRss)
-                  .Ignore(i => i.SupportsSearch)
-                  .Ignore(i => i.SupportsRedirect)
-                  .Ignore(i => i.SupportsPagination)
-                  .Ignore(i => i.Capabilities)
-                  .HasOne(a => a.AppProfile, a => a.AppProfileId);
-
-            Mapper.Entity<DownloadClientDefinition>("DownloadClients").RegisterModel()
-                  .Ignore(x => x.ImplementationName)
-                  .Ignore(d => d.SupportsCategories)
-                  .Ignore(d => d.Protocol)
-                  .Ignore(d => d.Tags);
-
-            Mapper.Entity<NotificationDefinition>("Notifications").RegisterModel()
-                  .Ignore(x => x.ImplementationName)
-                  .Ignore(i => i.SupportsOnGrab)
-                  .Ignore(i => i.SupportsOnHealthIssue)
-                  .Ignore(i => i.SupportsOnHealthRestored)
-                  .Ignore(i => i.SupportsOnApplicationUpdate);
-
-            Mapper.Entity<IndexerProxyDefinition>("IndexerProxies").RegisterModel()
-                  .Ignore(x => x.ImplementationName);
-
-            Mapper.Entity<ApplicationDefinition>("Applications").RegisterModel()
-                  .Ignore(x => x.ImplementationName);
-
-            Mapper.Entity<History.History>("History").RegisterModel();
-
             Mapper.Entity<Log>("Logs").RegisterModel();
 
             Mapper.Entity<Tag>("Tags").RegisterModel();
-
-            Mapper.Entity<AppIndexerMap>("ApplicationIndexerMapping").RegisterModel();
 
             Mapper.Entity<User>("Users").RegisterModel();
             Mapper.Entity<CommandModel>("Commands").RegisterModel()
                   .Ignore(c => c.Message);
 
-            Mapper.Entity<IndexerStatus>("IndexerStatus").RegisterModel();
-            Mapper.Entity<DownloadClientStatus>("DownloadClientStatus").RegisterModel();
-            Mapper.Entity<ApplicationStatus>("ApplicationStatus").RegisterModel();
-            Mapper.Entity<NotificationStatus>("NotificationStatus").RegisterModel();
-
             Mapper.Entity<CustomFilter>("CustomFilters").RegisterModel();
             Mapper.Entity<UpdateHistory>("UpdateHistory").RegisterModel();
-
-            Mapper.Entity<AppSyncProfile>("AppSyncProfiles").RegisterModel();
-            Mapper.Entity<IndexerDefinitionVersion>("IndexerDefinitionVersions").RegisterModel();
         }
 
         private static void RegisterMappers()
@@ -115,9 +60,7 @@ namespace NzbDrone.Core.Datastore
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<KeyValuePair<string, int>>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<KeyValuePair<string, int>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<string>>());
-            SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<ReleaseInfo>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<HashSet<int>>());
-            SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<DownloadClientCategory>>());
             SqlMapper.AddTypeHandler(new OsPathConverter());
             SqlMapper.RemoveTypeMap(typeof(Guid));
             SqlMapper.RemoveTypeMap(typeof(Guid?));

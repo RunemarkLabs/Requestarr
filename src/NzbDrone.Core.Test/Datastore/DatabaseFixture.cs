@@ -4,7 +4,6 @@ using Dapper;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Datastore;
-using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.Datastore
@@ -15,7 +14,7 @@ namespace NzbDrone.Core.Test.Datastore
         public void SingleOrDefault_should_return_null_on_empty_db()
         {
             Mocker.Resolve<IDatabase>()
-                .OpenConnection().Query<IndexerDefinition>("SELECT * FROM \"Indexers\"")
+                .OpenConnection().Query("SELECT * FROM \"RequestarrUsers\"")
                 .SingleOrDefault()
                 .Should()
                 .BeNull();

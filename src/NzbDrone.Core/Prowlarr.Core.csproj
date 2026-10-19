@@ -1,12 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="AngleSharp.Xml" Version="1.0.0" />
     <PackageReference Include="Dapper" Version="2.1.79" />
-    <PackageReference Include="Diacritical.Net" Version="1.0.4" />
-    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.27" />
     <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.27" />
     <PackageReference Include="NLog.Targets.Syslog" Version="7.0.0" />
@@ -20,17 +17,12 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NLog" Version="5.5.1" />
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
-    <PackageReference Include="MonoTorrent" Version="3.0.2" />
+    <PackageReference Include="Diacritical.Net" Version="1.0.4" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="AngleSharp" Version="1.5.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NzbDrone.Common\Prowlarr.Common.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\Logo\64.png">
-      <Link>Resources\Logo\64.png</Link>
-    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <Content Include="Localization\Core\**">
