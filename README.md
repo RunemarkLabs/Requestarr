@@ -43,6 +43,11 @@ Multiple instances of each service are supported (for example, a separate 4K Rad
 - .NET backend, React web portal, SQLite storage
 - Discord integration via [Discord.Net](https://github.com/discord-net/Discord.Net)
 
+## Development
+
+- [docs/development.md](docs/development.md): building, tests, the Docker dev stack (`docker/dev.sh up`), the provisioning file, and the Discord interaction test harness
+- [docs/upstream.md](docs/upstream.md): which Prowlarr commit the foundation came from, what was removed, and how to pull upstream fixes
+
 ## Background
 
 Requestarr is inspired by [Requestrr](https://github.com/thomst08/requestrr) and is a ground-up rebuild on the Servarr foundation, adding per-user channels, access control, and governed removals. It is an independent project and is not affiliated with or endorsed by the Servarr team or the Requestrr maintainers.

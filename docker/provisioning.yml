@@ -1,0 +1,41 @@
+# Provisioning for the local dev stack. Applied by Requestarr on every start:
+# keys present here win over UI changes; keys left out are untouched.
+# Secrets are ${VAR} references resolved from docker/secrets.env.
+# ${VAR:-default} supplies a default; $${VAR} is a literal.
+version: 1
+
+general:
+  instanceName: Requestarr (dev)
+  logLevel: debug
+  analyticsEnabled: false
+
+auth:
+  method: forms
+  required: disabledForLocalAddresses
+  username: ${REQUESTARR_ADMIN_USERNAME}
+  password: ${REQUESTARR_ADMIN_PASSWORD}
+  apiKey: ${REQUESTARR_API_KEY}
+
+# Phase 1 sections below are validated now and applied once each feature lands.
+
+discord:
+  botToken: ${DISCORD_BOT_TOKEN:-}
+  applicationId: ${DISCORD_APPLICATION_ID:-}
+  guildId: ${DISCORD_TEST_GUILD_ID:-}
+
+# Any number of instances per type; names must be unique.
+backends:
+  sonarr:
+    - name: Sonarr (test)
+      url: http://sonarr-test:8989
+      apiKey: ${SONARR_TEST_API_KEY}
+      rootFolder: /data/tv
+      seriesType: standard
+  radarr:
+    - name: Radarr (test)
+      url: http://radarr-test:7878
+      apiKey: ${RADARR_TEST_API_KEY}
+      rootFolder: /data/movies
+
+mediaServers:
+  plex: []

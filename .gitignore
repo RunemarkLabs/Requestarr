@@ -196,3 +196,6 @@ node_modules.nosync
 
 # API doc generation
 .config/
+
+# Local dev stack secrets (template: docker/secrets.env.example)
+docker/secrets.env
