@@ -1,0 +1,121 @@
+using System.Collections.Generic;
+using System.Linq;
+using NLog;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.IndexerSearch.Definitions;
+using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Parser.Model;
+
+namespace NzbDrone.Core.Indexers.Definitions.FileList;
+
+public class FileList : TorrentIndexerBase<FileListSettings>
+{
+    public override string Name => "FileList.io";
+    public override string[] IndexerUrls => new[]
+    {
+        "https://filelist.io/",
+        "https://thefl.org/",
+    };
+    public override string[] LegacyUrls => new[]
+    {
+        "https://filelist.io",
+        "https://filelist.ro/",
+        "http://filelist.ro/",
+        "http://flro.org/",
+        "https://flro.org/"
+    };
+    public override string Description => "FileList (FL) is a ROMANIAN Private Torrent Tracker for 0DAY / GENERAL";
+    public override IndexerPrivacy Privacy => IndexerPrivacy.Private;
+    public override bool SupportsRss => true;
+    public override bool SupportsSearch => true;
+    public override bool SupportsRedirect => true;
+    public override IndexerCapabilities Capabilities => SetCapabilities();
+
+    public FileList(IIndexerHttpClient httpClient,
+        IEventAggregator eventAggregator,
+        IIndexerStatusService indexerStatusService,
+        IConfigService configService,
+        Logger logger)
+        : base(httpClient, eventAggregator, indexerStatusService, configService, logger)
+    {
+    }
+
+    public override IIndexerRequestGenerator GetRequestGenerator()
+    {
+        return new FileListRequestGenerator { Settings = Settings, Capabilities = Capabilities };
+    }
+
+    public override IParseIndexerResponse GetParser()
+    {
+        return new FileListParser(Settings, Capabilities.Categories);
+    }
+
+    protected override IList<ReleaseInfo> CleanupReleases(IEnumerable<ReleaseInfo> releases, SearchCriteriaBase searchCriteria)
+    {
+        var cleanReleases = base.CleanupReleases(releases, searchCriteria);
+
+        return FilterReleasesByQuery(cleanReleases, searchCriteria).ToList();
+    }
+
+    private IndexerCapabilities SetCapabilities()
+    {
+        var caps = new IndexerCapabilities
+        {
+            TvSearchParams = new List<TvSearchParam>
+            {
+                TvSearchParam.Q, TvSearchParam.ImdbId, TvSearchParam.Season, TvSearchParam.Ep
+            },
+            MovieSearchParams = new List<MovieSearchParam>
+            {
+                MovieSearchParam.Q, MovieSearchParam.ImdbId
+            },
+            MusicSearchParams = new List<MusicSearchParam>
+            {
+                MusicSearchParam.Q
+            },
+            BookSearchParams = new List<BookSearchParam>
+            {
+                BookSearchParam.Q
+            },
+            Flags = new List<IndexerFlag>
+            {
+                IndexerFlag.Internal,
+                IndexerFlag.FreeLeech
+            }
+        };
+
+        caps.Categories.AddCategoryMapping(24, NewznabStandardCategory.TVAnime, "Anime");
+        caps.Categories.AddCategoryMapping(11, NewznabStandardCategory.Audio, "Music");
+        caps.Categories.AddCategoryMapping(29, NewznabStandardCategory.Books, "Books");
+        caps.Categories.AddCategoryMapping(30, NewznabStandardCategory.Other, "Courses");
+        caps.Categories.AddCategoryMapping(15, NewznabStandardCategory.TV, "Cartoons");
+        caps.Categories.AddCategoryMapping(18, NewznabStandardCategory.Other, "Various");
+        caps.Categories.AddCategoryMapping(16, NewznabStandardCategory.Books, "Docs");
+        caps.Categories.AddCategoryMapping(25, NewznabStandardCategory.Movies3D, "Movies 3D");
+        caps.Categories.AddCategoryMapping(6, NewznabStandardCategory.MoviesUHD, "Movies 4K");
+        caps.Categories.AddCategoryMapping(26, NewznabStandardCategory.MoviesBluRay, "Movies 4K Blu-Ray");
+        caps.Categories.AddCategoryMapping(20, NewznabStandardCategory.MoviesBluRay, "Movies Blu-Ray");
+        caps.Categories.AddCategoryMapping(2, NewznabStandardCategory.MoviesDVD, "Movies DVD");
+        caps.Categories.AddCategoryMapping(3, NewznabStandardCategory.MoviesForeign, "Movies DVD-RO");
+        caps.Categories.AddCategoryMapping(4, NewznabStandardCategory.MoviesHD, "Movies HD");
+        caps.Categories.AddCategoryMapping(19, NewznabStandardCategory.MoviesForeign, "Movies HD-RO");
+        caps.Categories.AddCategoryMapping(1, NewznabStandardCategory.MoviesSD, "Movies SD");
+        caps.Categories.AddCategoryMapping(5, NewznabStandardCategory.AudioLossless, "FLAC");
+        caps.Categories.AddCategoryMapping(10, NewznabStandardCategory.Console, "Games Console");
+        caps.Categories.AddCategoryMapping(9, NewznabStandardCategory.PCGames, "Games PC");
+        caps.Categories.AddCategoryMapping(31, NewznabStandardCategory.TVForeign, "K-Drama");
+        caps.Categories.AddCategoryMapping(17, NewznabStandardCategory.PC, "Linux");
+        caps.Categories.AddCategoryMapping(22, NewznabStandardCategory.PCMobileOther, "Mobile");
+        caps.Categories.AddCategoryMapping(8, NewznabStandardCategory.PC, "Apps");
+        caps.Categories.AddCategoryMapping(28, NewznabStandardCategory.MoviesForeign, "RO Dubbed");
+        caps.Categories.AddCategoryMapping(28, NewznabStandardCategory.TVForeign, "RO Dubbed");
+        caps.Categories.AddCategoryMapping(27, NewznabStandardCategory.TVUHD, "TV-Series 4K");
+        caps.Categories.AddCategoryMapping(21, NewznabStandardCategory.TVHD, "TV-Series HD");
+        caps.Categories.AddCategoryMapping(23, NewznabStandardCategory.TVSD, "TV-Series SD");
+        caps.Categories.AddCategoryMapping(13, NewznabStandardCategory.TVSport, "Sport");
+        caps.Categories.AddCategoryMapping(12, NewznabStandardCategory.AudioVideo, "Videoclips");
+        caps.Categories.AddCategoryMapping(7, NewznabStandardCategory.XXX, "XXX");
+
+        return caps;
+    }
+}

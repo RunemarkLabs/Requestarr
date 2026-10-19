@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NzbDrone.Core\Prowlarr.Core.csproj" />
+    <ProjectReference Include="..\NzbDrone.Common\Prowlarr.Common.csproj" />
+  </ItemGroup>
+</Project>
