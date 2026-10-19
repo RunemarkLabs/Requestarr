@@ -54,7 +54,7 @@ namespace Requestarr.Core.Test.Requests
             await RequestMovie(Bob, Dune);
             await RequestMovie(Alice, Dune);
             await RequestMovie(Alice, DuneTwo);
-            await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 2L));
+            await Harness.SendAsync(CancelButton(Alice, 2));
             Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Heat", Year = 1995, TmdbId = 949 });
             Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Ronin", Year = 1998, TmdbId = 8195 });
 
@@ -68,18 +68,18 @@ namespace Requestarr.Core.Test.Requests
         {
             await RequestMovie(Alice, Dune);
 
-            var run = await Harness.SendAsync(UserCommand("quota", Alice));
+            var run = await Harness.SendAsync(PanelButton(Alice, PanelRoutes.MyLimits));
 
             run.LastReply.Content.Should().Contain("Movies: needs approval, 1 of 2 used in the last 7 days").And.Contain("TV: needs approval, no limit");
         }
 
         [Test]
-        public async Task admin_can_see_another_users_quota_but_users_cannot()
+        public async Task each_user_sees_only_their_own_limits()
         {
             await RequestMovie(Alice, Dune);
 
-            (await Harness.SendAsync(AdminSlash("quota").WithOption("user", Alice))).LastReply.Content.Should().Contain("**alice**").And.Contain("1 of 2");
-            (await Harness.SendAsync(UserCommand("quota", Bob).WithOption("user", Alice))).LastReply.Content.Should().Contain("**bob**");
+            (await Harness.SendAsync(PanelButton(Alice, PanelRoutes.MyLimits))).LastReply.Content.Should().Contain("**alice**").And.Contain("1 of 2");
+            (await Harness.SendAsync(PanelButton(Bob, PanelRoutes.MyLimits))).LastReply.Content.Should().Contain("**bob**").And.Contain("no limit");
         }
     }
 }

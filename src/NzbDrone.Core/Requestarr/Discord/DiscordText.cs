@@ -203,6 +203,34 @@ namespace Requestarr.Core.Discord
 
         public static string InstanceNotFound(string name, ContentType type) => $"No enabled {(type == ContentType.Tv ? "Sonarr" : "Radarr")} instance named '{name}'.";
 
+        // Panels and the single /request command
+        public const string PanelMyRequests = "My requests";
+        public const string PanelMyLimits = "My limits";
+        public const string PanelLinkPlex = "Link Plex";
+        public const string PanelPendingQueue = "Pending queue";
+        public const string PanelUsers = "Users";
+        public const string AdminPanel = "**Requestarr admin**\nRun `/admin` commands here. Approval cards for requests and media server access appear in this channel.";
+        public const string LinkPlexTitle = "Link your Plex account";
+        public const string LinkPlexLabel = "Your Plex username or email";
+        public const string CancelLabel = "Cancel request";
+        public const string NoUsers = "No Requestarr users yet. Add someone with /admin user add.";
+        public const string NothingToRequest = "You can't request anything yet. Ask the admin for access.";
+        public const string ChooseType = "Pick a type from the list (start typing in the type option).";
+        public const string TmdbIsForMovies = "tmdb: IDs are for movies. Pick the Movies type, or use tvdb: for TV.";
+        public const string TvdbIsForTv = "tvdb: IDs are for TV. Pick the TV type, or use tmdb: for movies.";
+
+        public static string UserPanel(string name, IEnumerable<UserMediaAccess> allowed)
+        {
+            var list = allowed.OrderBy(a => a.ContentType).Select(a => $"{Label(a.ContentType)} ({Label(a.State)})").ToList();
+            var can = list.Any() ? "You can request: " + string.Join(", ", list) + "." : NothingToRequest;
+
+            return $"**Requestarr: {name}'s requests**\n{can}\nType `/request`, pick a type, and search by title, or by ID with `tmdb:603` / `tvdb:12345`.";
+        }
+
+        public static string UserLine(RequestarrUser user, IEnumerable<UserMediaAccess> access) =>
+            $"• {user.DisplayName} · {Label(user.Status)}{(user.PrivateChannelId != null && user.Status != UserStatus.Removed ? $" · <#{user.PrivateChannelId}>" : string.Empty)} · " +
+            string.Join(", ", access.Where(a => ContentTypes.IsOffered(a.ContentType)).OrderBy(a => a.ContentType).Select(a => $"{Label(a.ContentType)}: {Label(a.State)}"));
+
         public const string ApproveLabel = "Approve";
         public const string DenyLabel = "Deny";
 
@@ -243,6 +271,12 @@ namespace Requestarr.Core.Discord
         // Slash command descriptions (Discord: up to 100 characters)
         public static class Commands
         {
+            public const string Admin = "Requestarr admin commands";
+            public const string AdminUser = "Manage Requestarr users";
+            public const string AdminMediaServer = "Media server access requests";
+            public const string RequestOne = "Request a movie or TV show";
+            public const string OptionRequestType = "What to request (only types you have access to)";
+            public const string OptionRequestQuery = "Title to search for, or tmdb:603 / tvdb:12345";
             public const string User = "Manage Requestarr users (admin)";
             public const string UserAdd = "Add a server member as a Requestarr user";
             public const string UserRemove = "Remove a user; their channel is archived and history kept";

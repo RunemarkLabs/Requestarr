@@ -17,7 +17,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task movie_search_should_list_results_in_a_select_menu()
         {
-            var run = await Harness.SendAsync(UserCommand("request movie", Alice).WithOption("query", "dune"));
+            var run = await Harness.SendAsync(Search(Alice, "movie", "dune"));
 
             run.LastReply.Content.Should().Be(DiscordText.SearchResults(ContentType.Movie, "dune", 2));
             var menu = run.LastReply.SelectMenu;
@@ -33,7 +33,7 @@ namespace Requestarr.Core.Test.Requests
                 Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Long " + new string('x', 150) + i, TmdbId = 1000 + i, Overview = new string('o', 300) });
             }
 
-            var run = await Harness.SendAsync(UserCommand("request movie", Alice).WithOption("query", "long"));
+            var run = await Harness.SendAsync(Search(Alice, "movie", "long"));
 
             var menu = run.LastReply.SelectMenu;
             menu.Options.Count.Should().Be(RequestService.MaxSearchResults);
@@ -55,15 +55,15 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task request_by_tmdb_and_tvdb_id_should_show_detail_directly()
         {
-            (await Harness.SendAsync(UserCommand("request movie-tmdb", Alice).WithOption("id", (long)Dune))).LastReply.Embeds.Single().Title.Should().Be("Dune (2021)");
-            (await Harness.SendAsync(UserCommand("request tv-tvdb", Alice).WithOption("id", (long)Severance))).LastReply.Embeds.Single().Title.Should().Be("Severance (2022)");
+            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:" + Dune))).LastReply.Embeds.Single().Title.Should().Be("Dune (2021)");
+            (await Harness.SendAsync(Search(Alice, "tv", "tvdb:" + Severance))).LastReply.Embeds.Single().Title.Should().Be("Severance (2022)");
         }
 
         [Test]
         public async Task unknown_id_and_empty_search_should_explain()
         {
-            (await Harness.SendAsync(UserCommand("request movie-tmdb", Alice).WithOption("id", 999L))).LastReply.Content.Should().Be(DiscordText.TitleNotFound);
-            (await Harness.SendAsync(UserCommand("request movie", Alice).WithOption("query", "zzz"))).LastReply.Content.Should().Be(DiscordText.NothingFound);
+            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:999"))).LastReply.Content.Should().Be(DiscordText.TitleNotFound);
+            (await Harness.SendAsync(Search(Alice, "movie", "zzz"))).LastReply.Content.Should().Be(DiscordText.NothingFound);
         }
 
         [Test]
@@ -71,7 +71,7 @@ namespace Requestarr.Core.Test.Requests
         {
             Radarr.Unreachable = true;
 
-            (await Harness.SendAsync(UserCommand("request movie", Alice).WithOption("query", "dune"))).LastReply.Content.Should().Be(DiscordText.BackendUnavailable("Radarr"));
+            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Be(DiscordText.BackendUnavailable("Radarr"));
 
             ExceptionVerification.IgnoreWarns();
         }
@@ -79,7 +79,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task searching_in_someone_elses_channel_should_be_refused()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("request movie").WithOption("query", "dune").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("request").WithOption("type", "movie").WithOption("query", "dune").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)));
 
             run.LastReply.Content.Should().Be(DiscordText.OwnChannelOnly);
         }

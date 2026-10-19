@@ -8,7 +8,8 @@ namespace Requestarr.Core.Discord.Interactions
         SlashCommand,
         Button,
         SelectMenu,
-        ModalSubmit
+        ModalSubmit,
+        Autocomplete
     }
 
     // Library-neutral view of one Discord interaction. The gateway adapter (Phase 1) maps
@@ -26,6 +27,9 @@ namespace Requestarr.Core.Discord.Interactions
 
         public IReadOnlyDictionary<string, object> Options { get; init; } = new Dictionary<string, object>();
 
+        // Autocomplete: the option the user is typing in (its current text is in Options).
+        public string FocusedOption { get; init; }
+
         // Select menus: the chosen values. Modals: field values keyed by field custom ID.
         public IReadOnlyList<string> Values { get; init; } = new List<string>();
         public IReadOnlyDictionary<string, string> Fields { get; init; } = new Dictionary<string, string>();
@@ -38,7 +42,7 @@ namespace Requestarr.Core.Discord.Interactions
         public ulong ChannelId { get; init; }
 
         // Route used for dispatch: the command path, or the custom ID up to the first ':'.
-        public string Route => Kind == InteractionKind.SlashCommand
+        public string Route => Kind == InteractionKind.SlashCommand || Kind == InteractionKind.Autocomplete
             ? CommandName
             : CustomId?.Split(':')[0];
 

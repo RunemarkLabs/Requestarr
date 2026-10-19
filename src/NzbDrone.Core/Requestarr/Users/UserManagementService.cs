@@ -58,6 +58,7 @@ namespace Requestarr.Core.Users
         private readonly IGuildSetupService _guildSetup;
         private readonly IBackendService _backends;
         private readonly IAuditService _audit;
+        private readonly IPanelService _panels;
         private readonly Logger _logger;
 
         public UserManagementService(IRequestarrUserRepository users,
@@ -69,6 +70,7 @@ namespace Requestarr.Core.Users
                                      IGuildSetupService guildSetup,
                                      IBackendService backends,
                                      IAuditService audit,
+                                     IPanelService panels,
                                      Logger logger)
         {
             _users = users;
@@ -80,6 +82,7 @@ namespace Requestarr.Core.Users
             _guildSetup = guildSetup;
             _backends = backends;
             _audit = audit;
+            _panels = panels;
             _logger = logger;
         }
 
@@ -157,6 +160,7 @@ namespace Requestarr.Core.Users
             var rows = SaveAccess(user.Id, access);
 
             await _gateway.SendMessageAsync(channelId.Value, new InteractionReply { Content = DiscordText.Welcome(discordUserId, rows) });
+            await _panels.RefreshUserPanelAsync(user);
 
             var accessSummary = string.Join(", ", rows.Where(r => ContentTypes.IsOffered(r.ContentType)).Select(r => $"{r.ContentType}={r.State}"));
             _audit.Record(actor, "user.add", "user", user.Id.ToString(), $"discord {discordUserId}, role {roleId}, channel {channelId}, access {accessSummary}");
@@ -295,6 +299,7 @@ namespace Requestarr.Core.Users
             _access.Upsert(row);
 
             _audit.Record(actor, "user.access", "user", user.Id.ToString(), $"{type}: {previous} -> {state}{(instance != null ? $", instance {instance.Name}" : string.Empty)}");
+            _panels.RefreshUserPanelAsync(user).GetAwaiter().GetResult();
 
             return ServiceResult.Ok(DiscordText.AccessChanged(user.DisplayName, type, state, instance?.Name));
         }
@@ -390,6 +395,7 @@ namespace Requestarr.Core.Users
 
             Link(user, provider, username.Trim());
             _audit.Record(actor, "mediaserver.link", "user", user.Id.ToString(), $"{provider} {username.Trim()}");
+            _panels.RefreshUserPanelAsync(user).GetAwaiter().GetResult();
 
             return ServiceResult.Ok(DiscordText.MediaServerLinked(user.DisplayName, provider, username.Trim()));
         }
@@ -447,6 +453,7 @@ namespace Requestarr.Core.Users
             if (approve)
             {
                 Link(user, request.Provider, request.Username);
+                await _panels.RefreshUserPanelAsync(user);
             }
 
             if (user.Status == UserStatus.Active && ulong.TryParse(user.PrivateChannelId, out var channelId))

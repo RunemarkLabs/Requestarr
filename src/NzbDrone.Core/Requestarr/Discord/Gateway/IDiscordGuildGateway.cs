@@ -55,5 +55,9 @@ namespace Requestarr.Core.Discord.Gateway
         Task AddRoleToMemberAsync(ulong userId, ulong roleId);
 
         Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message);
+
+        // False when the message no longer exists (deleted by someone).
+        Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message);
+        Task PinMessageAsync(ulong channelId, ulong messageId);
     }
 }

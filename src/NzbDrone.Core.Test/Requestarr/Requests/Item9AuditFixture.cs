@@ -19,7 +19,7 @@ namespace Requestarr.Core.Test.Requests
             await RequestMovie(Bob, DuneTwo);                                      // create
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L));      // deny
             await RequestTv(Alice, Severance, "s1");                               // create
-            await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 3L));
+            await Harness.SendAsync(CancelButton(Alice, 3));
             await SetAccess(Bob, "tv", "off");
             await RequestTv(Bob, Severance, "s1");                                 // refused (access)
             await SetAccess(Alice, "movie", "auto");

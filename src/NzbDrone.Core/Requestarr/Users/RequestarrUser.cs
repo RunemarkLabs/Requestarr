@@ -10,6 +10,7 @@ namespace Requestarr.Core.Users
         public UserStatus Status { get; set; }
         public string DiscordRoleId { get; set; }
         public string PrivateChannelId { get; set; }
+        public string PanelMessageId { get; set; }
         public DateTime Added { get; set; }
         public DateTime? StatusChanged { get; set; }
     }

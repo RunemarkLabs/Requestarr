@@ -74,7 +74,7 @@ namespace Requestarr.Core.Test.Requests
             await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "approval"));
 
             // Movie: search through Radarr's own lookup, then request (auto-approve).
-            var search = await Harness.SendAsync(UserCommand("request movie", Alice).WithOption("query", "The Matrix"));
+            var search = await Harness.SendAsync(Search(Alice, "movie", "The Matrix"));
             Log($"[movie] search: {search.LastReply.Content}");
 
             foreach (var option in search.LastReply.SelectMenu?.Options.Take(3) ?? Enumerable.Empty<Core.Discord.Interactions.InteractionSelectOption>())

@@ -50,7 +50,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task user_request_should_post_approve_and_deny_card_in_admin_channel()
         {
-            var run = await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            var run = await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
             run.LastReply.Content.Should().Be(DiscordText.AccessRequestSent(MediaServerProvider.Plex));
             run.LastReply.Ephemeral.Should().BeTrue();
@@ -64,15 +64,15 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task second_pending_request_should_be_refused()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "a"));
+            await Harness.SendAsync(PlexForm(Alice, "a"));
 
-            (await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "b"))).LastReply.Content.Should().Be(DiscordText.AccessRequestAlreadyPending);
+            (await Harness.SendAsync(PlexForm(Alice, "b"))).LastReply.Content.Should().Be(DiscordText.AccessRequestAlreadyPending);
         }
 
         [Test]
         public async Task approve_should_link_account_update_card_and_tell_user()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
             var run = await Harness.SendAsync(FakeInteraction.Button("msreq-approve:1").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
@@ -86,7 +86,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task deny_should_not_link_account()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
             var run = await Harness.SendAsync(FakeInteraction.Button("msreq-deny:1").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
@@ -98,7 +98,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task deciding_twice_or_unknown_request_should_be_refused()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
             await Harness.SendAsync(FakeInteraction.Button("msreq-approve:1").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             (await Harness.SendAsync(FakeInteraction.Button("msreq-deny:1").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel)))
@@ -112,7 +112,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task blank_username_should_be_refused()
         {
-            (await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "  "))).LastReply.Content.Should().Be(DiscordText.InvalidUsername);
+            (await Harness.SendAsync(PlexForm(Alice, "  "))).LastReply.Content.Should().Be(DiscordText.InvalidUsername);
         }
     }
 }

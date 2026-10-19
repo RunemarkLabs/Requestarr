@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
@@ -51,6 +52,13 @@ namespace Requestarr.Core.Discord.Gateway
             {
                 await RespondAsync(reply);
             }
+        }
+
+        public Task SuggestAsync(IReadOnlyList<InteractionChoice> choices)
+        {
+            var results = choices.Take(DiscordLimits.ChoicesPerMenu).Select(c => new AutocompleteResult(DiscordLimits.Truncate(c.Name, DiscordLimits.OptionLabelLength), c.Value));
+
+            return ((SocketAutocompleteInteraction)_interaction).RespondAsync(results);
         }
 
         public Task ShowModalAsync(InteractionModal modal)

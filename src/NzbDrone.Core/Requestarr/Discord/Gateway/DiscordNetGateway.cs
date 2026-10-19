@@ -156,6 +156,33 @@ namespace Requestarr.Core.Discord.Gateway
             return sent.Id;
         }
 
+        public async Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel ||
+                await channel.GetMessageAsync(messageId) is not IUserMessage existing)
+            {
+                return false;
+            }
+
+            await existing.ModifyAsync(m =>
+            {
+                m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
+                m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
+            });
+
+            return true;
+        }
+
+        public async Task PinMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&
+                await channel.GetMessageAsync(messageId) is IUserMessage message && !message.IsPinned)
+            {
+                await message.PinAsync();
+            }
+        }
+
         private SocketGuild RequireGuild() => Guild ?? throw new InvalidOperationException(DiscordText.NotConnected);
 
         private async Task<RestGuildChannel> GetGuildChannel(ulong channelId)

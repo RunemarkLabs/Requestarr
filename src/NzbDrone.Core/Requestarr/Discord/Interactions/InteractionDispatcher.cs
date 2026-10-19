@@ -52,7 +52,7 @@ namespace Requestarr.Core.Discord.Interactions
             if (interaction.Route == null || !_routes.TryGetValue((interaction.Kind, Normalize(interaction.Route)), out var handler))
             {
                 _logger.Debug("No handler for {0} '{1}'", interaction.Kind, interaction.Route);
-                await Reply(responder, UnknownInteractionMessage);
+                await Reply(interaction.Kind == InteractionKind.Autocomplete ? null : responder, UnknownInteractionMessage);
 
                 return DispatchOutcome.Unhandled;
             }
@@ -66,7 +66,7 @@ namespace Requestarr.Core.Discord.Interactions
             catch (Exception ex)
             {
                 _logger.Error(ex, "{0} failed handling {1} '{2}' from user {3}", handler.GetType().Name, interaction.Kind, interaction.Route, interaction.UserId);
-                await Reply(responder, FailedInteractionMessage);
+                await Reply(interaction.Kind == InteractionKind.Autocomplete ? null : responder, FailedInteractionMessage);
 
                 return DispatchOutcome.Failed;
             }
@@ -74,6 +74,11 @@ namespace Requestarr.Core.Discord.Interactions
 
         private static async Task Reply(IInteractionResponder responder, string message)
         {
+            if (responder is null)
+            {
+                return;
+            }
+
             var reply = new InteractionReply { Content = message, Ephemeral = true };
 
             if (responder.HasResponded)

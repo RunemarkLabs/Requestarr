@@ -22,7 +22,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_command_by_non_admin_should_be_rejected()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("user suspend").WithOption("member", Bob).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminOnly);
             run.LastReply.Ephemeral.Should().BeTrue();
@@ -32,7 +32,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_command_in_a_user_channel_should_be_rejected_even_for_admin()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("user suspend").WithOption("member", Bob).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
             UserFor(Bob).Status.Should().Be(UserStatus.Active);
@@ -41,7 +41,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_role_member_can_run_admin_commands_in_admin_channel()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("user suspend").WithOption("member", Bob).By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.UserSuspendedDone("bob"));
         }
@@ -57,7 +57,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task user_command_in_another_users_channel_should_be_rejected()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("mediaserver request").WithOption("username", "x").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)));
+            var run = await Harness.SendAsync(FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "x").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)));
 
             run.LastReply.Content.Should().Be(DiscordText.OwnChannelOnly);
         }
@@ -65,7 +65,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task user_command_in_admin_channel_by_admin_should_point_to_admin_command()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("mediaserver request").WithOption("username", "x").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "x").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminUseUserCommand);
         }
@@ -73,7 +73,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task user_command_by_someone_not_added_should_be_rejected()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("mediaserver request").WithOption("username", "x").By(Moderator).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "x").By(Moderator).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.NotAUser);
         }
@@ -83,7 +83,7 @@ namespace Requestarr.Core.Test.Discord
         {
             await Harness.SendAsync(AdminCommand("user suspend", Alice));
 
-            var run = await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "x"));
+            var run = await Harness.SendAsync(PlexForm(Alice, "x"));
 
             run.LastReply.Content.Should().Be(DiscordText.Suspended);
         }
@@ -91,7 +91,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task approve_button_clicked_by_user_should_be_rejected_despite_valid_custom_id()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
             var run = await Harness.SendAsync(FakeInteraction.Button("msreq-approve:1").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
@@ -101,7 +101,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task approve_button_outside_admin_channel_should_be_rejected()
         {
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "alice_plex"));
+            await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
             var run = await Harness.SendAsync(FakeInteraction.Button("msreq-approve:1").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 

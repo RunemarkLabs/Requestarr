@@ -59,10 +59,12 @@ namespace Requestarr.Core.Test.Discord
 
             IGuildSetupService guildSetup = null;
             IUserManagementService users = null;
+            IPanelService panels = null;
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
+                new Lazy<IPanelService>(() => panels),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 
@@ -72,6 +74,8 @@ namespace Requestarr.Core.Test.Discord
             guildSetup = Mocker.Resolve<GuildSetupService>();
             Mocker.SetConstant(guildSetup);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            panels = Mocker.Resolve<PanelService>();
+            Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();
             Mocker.SetConstant(users);
             var dispatcher = new InteractionDispatcher(new IInteractionHandler[] { Mocker.Resolve<UserCommandHandler>() }, LogManager.GetLogger("LiveDiscord"));
@@ -128,9 +132,19 @@ namespace Requestarr.Core.Test.Discord
                 var adminOverwrites = await gateway.GetChannelOverwritesAsync(adminChannel);
                 Log($"[admin-role] admin channel allows the role: {adminOverwrites.Any(o => o.TargetId == adminRoleId && o.Allow.HasFlag(ChannelPermissions.ViewChannel))}");
 
-                // Problem 0b: registered commands read back from Discord.
-                foreach (var command in (await host.Client.Rest.GetGuildApplicationCommands(guild.Id)).OrderBy(c => c.Name))
+                // Registered commands read back from Discord: exactly /request (everyone) and /admin (Manage Server).
+                var registered = (await host.Client.Rest.GetGuildApplicationCommands(guild.Id)).OrderBy(c => c.Name).ToList();
+                var global = await host.Client.Rest.GetGlobalApplicationCommands();
+                Log($"[commands] registered on the server: {string.Join(", ", registered.Select(c => "/" + c.Name))}; global: {global.Count}");
+                registered.Select(c => c.Name).Should().BeEquivalentTo("admin", "request");
+                global.Should().BeEmpty();
+
+                foreach (var command in registered)
                 {
+                    var subs = string.Join(", ", command.Options.Select(o => o.Type == global::Discord.ApplicationCommandOptionType.SubCommandGroup
+                        ? $"{o.Name} [{string.Join(" ", o.Options.Select(x => x.Name))}]"
+                        : o.Name));
+                    Log($"[commands] /{command.Name,-8} options: {subs}");
                     var perms = command.DefaultMemberPermissions.RawValue == 0 ? "none (visible to everyone)" : string.Join(", ", command.DefaultMemberPermissions.ToList());
                     Log($"[commands] /{command.Name,-12} default member permission: {perms}");
 
@@ -149,7 +163,7 @@ namespace Requestarr.Core.Test.Discord
                 var target = members.FirstOrDefault(m => !m.IsBot && m.Id != guild.OwnerId) ?? members.First(m => m.Id == guild.OwnerId);
                 Log($"[add] target member {target.Username} ({target.Id}){(target.Id == guild.OwnerId ? " (owner: no other human member)" : string.Empty)}");
 
-                var addRun = await Send(dispatcher, FakeInteraction.SlashCommand("user add").WithOption("member", target.Id)
+                var addRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin user add").WithOption("member", target.Id)
                     .By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[add] outcome={addRun.Outcome} reply: {addRun.Responder.LastReply?.Content?.Replace('\n', ' ')}");
                 addRun.Outcome.Should().Be(DispatchOutcome.Handled);
@@ -189,8 +203,20 @@ namespace Requestarr.Core.Test.Discord
                 overwrites.Where(o => o.TargetId != guild.Id).Should().OnlyContain(o => o.Allow.HasFlag(ChannelPermissions.ViewChannel));
                 Log("[permissions] verified: @everyone denied; only the user's role, the Requestarr Admin role, and the bot allowed");
 
+                // Pinned panels read back from Discord.
+                foreach (var (label, channelId) in new[] { ("user channel", userChannel), ("admin channel", adminChannel) })
+                {
+                    var channel = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(channelId);
+                    var pinned = await channel.GetPinnedMessagesAsync();
+                    var panel = pinned.Single();
+                    var buttons = panel.Components.OfType<global::Discord.ActionRowComponent>().SelectMany(r => r.Components).OfType<global::Discord.ButtonComponent>().Select(b => $"[{b.Label}]");
+                    var lines = panel.Content.Split('\n');
+                    Log($"[panel] {label}: {pinned.Count} pinned; \"{lines[0]}\" buttons {string.Join(" ", buttons)}");
+                    Log($"[panel]   {string.Join(" | ", lines.Skip(1))}");
+                }
+
                 // 4. /user remove
-                var removeRun = await Send(dispatcher, FakeInteraction.SlashCommand("user remove").WithOption("member", target.Id)
+                var removeRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin user remove").WithOption("member", target.Id)
                     .By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[remove] reply: {removeRun.Responder.LastReply?.Content}");
 

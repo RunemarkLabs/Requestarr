@@ -73,7 +73,7 @@ namespace Requestarr.Core.Test.Requests
             var config = await FreshSetup(Settings());
             var role = ulong.Parse(config.AdminRoleId);
 
-            var interaction = FakeInteraction.SlashCommand("user info").By(Bob).WithRoles(role).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
+            var interaction = FakeInteraction.SlashCommand("admin user info").By(Bob).WithRoles(role).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
 
             Mocker.Resolve<ICallerResolver>().Resolve(interaction).IsAdmin.Should().BeTrue();
         }
@@ -92,15 +92,9 @@ namespace Requestarr.Core.Test.Requests
         {
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToDictionary(c => c.Name.Value);
 
-            foreach (var name in new[] { "user", "queue", "approve", "deny" })
-            {
-                commands[name].DefaultMemberPermissions.Value.Should().Be(GuildPermission.ManageGuild, name);
-            }
-
-            foreach (var name in new[] { "request", "requests", "quota", "mediaserver" })
-            {
-                commands[name].DefaultMemberPermissions.IsSpecified.Should().BeFalse(name);
-            }
+            commands.Keys.Should().BeEquivalentTo("admin", "request");
+            commands["admin"].DefaultMemberPermissions.Value.Should().Be(GuildPermission.ManageGuild);
+            commands["request"].DefaultMemberPermissions.IsSpecified.Should().BeFalse();
         }
 
         [Test]
@@ -108,7 +102,7 @@ namespace Requestarr.Core.Test.Requests
         {
             await AddUser(Alice);
 
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("queue").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin queue").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminOnly);
         }

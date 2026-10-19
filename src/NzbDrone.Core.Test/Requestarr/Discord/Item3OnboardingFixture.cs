@@ -67,7 +67,7 @@ namespace Requestarr.Core.Test.Discord
         {
             await AddUser(Alice, music: "approval");
 
-            var welcome = ChannelFor(Alice).Messages.Single().Content;
+            var welcome = ChannelFor(Alice).Messages.First().Content;
             welcome.Should().Contain($"<@{Alice}>").And.Contain("Music: needs approval").And.NotContain("Comics");
         }
 

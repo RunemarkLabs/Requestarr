@@ -13,7 +13,7 @@ namespace Requestarr.Core.Test.Requests
     public class Item3StateFixture : RequestScenario
     {
         private Task<InteractionRun> Detail(ulong user, int tmdbId) =>
-            Harness.SendAsync(UserCommand("request movie-tmdb", user).WithOption("id", (long)tmdbId));
+            Harness.SendAsync(Search(user, "movie", "tmdb:" + tmdbId));
 
         [Test]
         public async Task title_in_library_should_show_available_without_request_button()
