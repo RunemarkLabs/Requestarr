@@ -147,9 +147,10 @@ namespace Requestarr.Core.Discord
         public const string FinalRefused = "⛔ **Not requested**";
         public const string FinalCancelled = "🚫 **Cancelled**";
 
-        // The Movie Database attribution, wherever its data appears.
-        public const string TmdbAttribution = "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB.";
+        // The Movie Database: a short credit wherever its data appears, the full notice in Help and the docs.
+        public const string TmdbAttribution = "Cast from TMDB";
         public const string TmdbSubtext = "-# " + TmdbAttribution;
+        public const string TmdbNotice = "Cast and episode counts come from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB.";
 
         // Card fields
         public const string FieldGenres = "Genres";

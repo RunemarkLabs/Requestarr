@@ -26,7 +26,7 @@ namespace Requestarr.Core.Test.Polish
         {
             var results = (await Harness.SendAsync(Search(Alice, "tv", "dark matter"))).LastReply;
             var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{DarkMatter}"))).LastReply;
-            var final = (await Click(Alice, $"req-tv-ok:{DarkMatter}:all")).LastReply;
+            var final = (await Click(Alice, $"req-tv-all:{DarkMatter}")).LastReply;
             var queue = (await Admin("queue")).LastReply;
 
             var shown = new[]

@@ -263,10 +263,10 @@ The assignment is per user and per content type. Run `/admin user info` to see i
    - already requested by someone, in which case they can follow that request instead of making a second one
    - previously denied, and why
 4. For TV, they choose one of two paths:
-   - **All seasons:** every season now, and new seasons as they air (Sonarr's monitor-new-seasons setting). Specials (season 0) are not included.
-   - **Choose seasons:** pick individual seasons, including **Specials** if they want them, and optionally **Also new seasons as they air**.
+   - **All seasons:** sends the request straight away for every season now, and new seasons as they air (Sonarr's monitor-new-seasons setting). Specials (season 0) are not included.
+   - **Choose seasons:** pick individual seasons, including **Specials** if they want them, and optionally **Also new seasons as they air**. Requestarr then restates the choice in plain words, for example "season 2 only; new seasons won't be added", and they press **Request** or **Back**.
 
-   Before anything is sent, Requestarr restates the choice in plain words, for example "season 2 only; new seasons won't be added". They then press **Request** or **Back**.
+   Either way, the final status says exactly which seasons were requested.
 5. What happens next depends on their access level:
    - **off:** refused
    - **needs approval:** an Approve / Deny card appears in `#requestarr-admin`; Deny asks for a reason
@@ -299,7 +299,7 @@ Sonarr and Radarr don't return cast. With a free The Movie Database key, Request
 
 The key is kept in memory only. It is never written to the database or logs. Cast lookups are cached for 12 hours and give up after a few seconds, so a slow or unavailable The Movie Database never holds up a request.
 
-**Attribution:** wherever The Movie Database data appears, Requestarr says so: "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB." That note is under the result list and in the card footer. If you use a key, The Movie Database's terms of use apply to you.
+**Attribution:** wherever cast appears, a short "Cast from TMDB" credit is shown under the result list and in the card footer. The full notice, "This product uses the TMDB API but is not endorsed or certified by TMDB.", appears in `/help` and `/admin help` while a key is set, and here: Requestarr uses the TMDB API but is not endorsed or certified by TMDB. If you use a key, The Movie Database's terms of use apply to you.
 
 ## 5. Admin setup in Discord
 

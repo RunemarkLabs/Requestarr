@@ -105,6 +105,17 @@ namespace Requestarr.Core.Test.Polish
         }
 
         [Test]
+        public async Task a_single_result_opens_its_card_without_a_menu()
+        {
+            var run = await Harness.SendAsync(Search(Alice, "movie", "arrival"));
+
+            EditedInPlace(run);
+            run.LastReply.SelectMenu.Should().BeNull();
+            run.LastReply.Content.Should().StartWith("🎬 **Movies request** · details").And.Contain(DiscordText.StateInLibrary);
+            run.LastReply.Embeds.Single().Title.Should().Be("Arrival (2016)");
+        }
+
+        [Test]
         public async Task details_can_go_back_to_the_results()
         {
             var results = (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply;
