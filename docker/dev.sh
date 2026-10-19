@@ -5,8 +5,10 @@
 #   docker/dev.sh check                 health and status checks for Requestarr and the test backends
 #   docker/dev.sh down                  stop the stack (data kept)
 #   docker/dev.sh reset-test-backends   wipe the Sonarr/Radarr test instances back to empty and restart them
-#   docker/dev.sh reset-uat             clean slate: stop Requestarr, remove its Discord channels and user roles,
-#                                       wipe its database and the test backends (run `up` afterwards)
+#   docker/dev.sh reset-uat [--stopped] clean slate: remove Requestarr's Discord channels and user roles, wipe its
+#                                       database and the test backends, then start it again so the bot recreates
+#                                       #requestarr-admin and its panel (UAT ready). --stopped leaves Requestarr
+#                                       stopped, for the live Discord test
 #   docker/dev.sh init                  create docker/secrets.env from the template (run by `up`)
 #   docker/dev.sh logs [service]        follow logs
 #
@@ -112,7 +114,15 @@ reset_uat() {
     python -I "$DIR/reset-discord.py"
     docker volume rm "requestarr-dev_requestarr-config" 2>/dev/null || true
     reset_test_backends
-    echo "UAT reset: Discord test server, Requestarr database and test backends are clean. Run docker/dev.sh up."
+
+    if [ "${1:-}" = "--stopped" ]; then
+        echo "UAT reset: everything is clean and Requestarr is stopped. Run docker/dev.sh up when done."
+        return
+    fi
+
+    compose up -d --build --wait
+    check
+    echo "UAT reset: clean and UAT ready. The bot recreates #requestarr-admin and its panel on start."
 }
 
 case "${1:-}" in
@@ -125,10 +135,10 @@ case "${1:-}" in
     check) check ;;
     down) compose down ;;
     reset-test-backends) reset_test_backends ;;
-    reset-uat) reset_uat ;;
+    reset-uat) reset_uat "${2:-}" ;;
     logs) shift; compose logs -f "$@" ;;
     *)
-        sed -n '2,13p' "$0"
+        sed -n '2,15p' "$0"
         exit 1
         ;;
 esac

@@ -64,7 +64,7 @@ Other commands:
 
 - `docker/dev.sh check`: health and status checks.
 - `docker/dev.sh reset-test-backends`: wipes the test Sonarr and Radarr back to empty and reconfigures them.
-- `docker/dev.sh reset-uat`: a clean slate for testing a change. It stops Requestarr and deletes its channels, categories and per-user roles in the Discord test server. It keeps the bot's role, the Requestarr Admin role and everything else. It also wipes the Requestarr database and the test backends. Run `docker/dev.sh up` afterwards.
+- `docker/dev.sh reset-uat`: a clean slate for testing a change. It deletes Requestarr's channels, categories and per-user roles in the Discord test server. It keeps the bot's role, the Requestarr Admin role and everything else. It also wipes the Requestarr database and the test backends, then starts Requestarr again. The bot recreates `#requestarr-admin` and its pinned panel, so the server is ready for testing. Add `--stopped` to leave Requestarr stopped, for the live Discord test.
 - `docker/dev.sh down`: stops the stack; data is kept.
 - `docker/dev.sh logs requestarr`: follows the Requestarr logs.
 
@@ -114,11 +114,10 @@ dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveUatReadBac
 
 For each change, test in this order:
 
-1. `docker/dev.sh reset-uat`
-2. Run the Discord live check. Stop the dev stack's Requestarr first; `reset-uat` does that.
-3. `docker/dev.sh reset-uat` again.
-4. Merge, then `docker/dev.sh up` from `main`.
-5. Run the UAT read-back.
+1. `docker/dev.sh reset-uat --stopped`
+2. Run the Discord live check. It needs the dev stack's Requestarr stopped.
+3. Merge, then run `docker/dev.sh reset-uat` from `main`. The server is clean and has the admin channel and panel.
+4. Run the UAT read-back.
 
 - **Discord:** checks the admin role, the registered commands, onboarding, permission read-back and the pinned panels in the test server. It then deletes what it created. It never onboards a member who already has a request channel.
 - **UAT read-back:** reads the running stack's registered commands and pinned panels over REST. It changes nothing.
