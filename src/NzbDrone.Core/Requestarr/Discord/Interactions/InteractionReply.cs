@@ -30,6 +30,8 @@ namespace Requestarr.Core.Discord.Interactions
 
     public record InteractionSelectOption(string Label, string Value, string Description = null);
 
+    public record InteractionChoice(string Name, string Value);
+
     public class InteractionModal
     {
         public string CustomId { get; init; }

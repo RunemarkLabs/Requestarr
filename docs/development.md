@@ -64,6 +64,7 @@ Other commands:
 
 - `docker/dev.sh check`: health and status checks.
 - `docker/dev.sh reset-test-backends`: wipes the test Sonarr and Radarr back to empty and reconfigures them.
+- `docker/dev.sh reset-uat`: a clean slate for testing a change. It deletes Requestarr's channels, categories and per-user roles in the Discord test server. It keeps the bot's role, the Requestarr Admin role and everything else. It also wipes the Requestarr database and the test backends, then starts Requestarr again. The bot recreates `#requestarr-admin` and its pinned panel, so the server is ready for testing. Add `--stopped` to leave Requestarr stopped, for the live Discord test.
 - `docker/dev.sh down`: stops the stack; data is kept.
 - `docker/dev.sh logs requestarr`: follows the Requestarr logs.
 
@@ -101,14 +102,23 @@ await harness.SendAsync(FakeInteraction.Button("request-approve:42").By(adminId)
 
 See `src/NzbDrone.Core.Test/Requestarr/Discord/Harness`. `FakeRadarr` and `FakeSonarr` stand in for the backends in the same scenarios.
 
-Two live checks are tagged `ManualTest`, so they never run in CI. Both read their keys from `docker/secrets.env`:
+Three live checks are tagged `ManualTest`, so they never run in CI. Both read their keys from `docker/secrets.env`:
 
 ```bash
 set -a; . docker/secrets.env; set +a
 cd _tests/net10.0
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveDiscordFixture" --logger "console;verbosity=detailed"
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveBackendFixture" --logger "console;verbosity=detailed"
+dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveUatReadBackFixture" --logger "console;verbosity=detailed"
 ```
 
-- **Discord:** checks the admin role, command permissions, onboarding and permission read-back in the test server, then cleans up.
+For each change, test in this order:
+
+1. `docker/dev.sh reset-uat --stopped`
+2. Run the Discord live check. It needs the dev stack's Requestarr stopped.
+3. Merge, then run `docker/dev.sh reset-uat` from `main`. The server is clean and has the admin channel and panel.
+4. Run the UAT read-back.
+
+- **Discord:** checks the admin role, the registered commands, onboarding, permission read-back and the pinned panels in the test server. It then deletes what it created. It never onboards a member who already has a request channel.
+- **UAT read-back:** reads the running stack's registered commands and pinned panels over REST. It changes nothing.
 - **Backends:** requests a movie and a show into the dev stack's test Radarr and Sonarr only, and reads back what they stored. The titles are left there. Automating Discord user accounts is not allowed. End-to-end checks use the bot's real effects in the dedicated test server, plus a short manual pass in the Discord app.

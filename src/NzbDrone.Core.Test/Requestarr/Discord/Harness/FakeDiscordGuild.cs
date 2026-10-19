@@ -26,6 +26,10 @@ namespace Requestarr.Core.Test.Discord.Harness
             public string Topic { get; init; }
             public List<PermissionOverwrite> Overwrites { get; set; } = new();
             public List<InteractionReply> Messages { get; } = new();
+            public List<ulong> MessageIds { get; } = new();
+            public HashSet<ulong> Pinned { get; } = new();
+
+            public InteractionReply PinnedMessage => Pinned.Count == 1 ? Messages[MessageIds.IndexOf(Pinned.Single())] : null;
         }
 
         public Dictionary<ulong, string> Roles { get; } = new();
@@ -39,6 +43,11 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         // Fails the next channel creation, to exercise rollback.
         public bool FailNextChannelCreate { get; set; }
+
+        // Simulates a bot without the Pin Messages permission.
+        public bool CannotPin { get; set; }
+
+        public bool CanPinMessages => !CannotPin;
 
         public FakeDiscordGuild()
         {
@@ -168,8 +177,43 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message)
         {
+            var id = NextId();
             Channels[channelId].Messages.Add(message);
-            return Task.FromResult(NextId());
+            Channels[channelId].MessageIds.Add(id);
+            return Task.FromResult(id);
+        }
+
+        public Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message)
+        {
+            var index = Channels.TryGetValue(channelId, out var channel) ? channel.MessageIds.IndexOf(messageId) : -1;
+
+            if (index < 0)
+            {
+                return Task.FromResult(false);
+            }
+
+            channel.Messages[index] = message;
+            return Task.FromResult(true);
+        }
+
+        public Task PinMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (CannotPin)
+            {
+                throw new InvalidOperationException("Missing Permissions");
+            }
+
+            Channels[channelId].Pinned.Add(messageId);
+            return Task.CompletedTask;
+        }
+
+        public void DeleteMessage(ulong channelId, ulong messageId)
+        {
+            var channel = Channels[channelId];
+            var index = channel.MessageIds.IndexOf(messageId);
+            channel.Messages.RemoveAt(index);
+            channel.MessageIds.RemoveAt(index);
+            channel.Pinned.Remove(messageId);
         }
 
         private ulong NextId() => ++_nextId;

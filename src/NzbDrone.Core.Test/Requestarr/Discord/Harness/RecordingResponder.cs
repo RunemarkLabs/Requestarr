@@ -12,7 +12,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         Response,
         Followup,
         MessageUpdate,
-        Modal
+        Modal,
+        Suggestions
     }
 
     public record RecordedResponse(ResponseKind Kind, InteractionReply Reply, bool Ephemeral);
@@ -64,6 +65,16 @@ namespace Requestarr.Core.Test.Discord.Harness
         }
 
         public InteractionModal LastModal { get; private set; }
+
+        public IReadOnlyList<InteractionChoice> Suggestions { get; private set; }
+
+        public Task SuggestAsync(IReadOnlyList<InteractionChoice> choices)
+        {
+            EnsureFirstResponse("suggest");
+            Suggestions = choices;
+            _responses.Add(new RecordedResponse(ResponseKind.Suggestions, null, true));
+            return Task.CompletedTask;
+        }
 
         public Task ShowModalAsync(InteractionModal modal)
         {

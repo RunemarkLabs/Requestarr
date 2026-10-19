@@ -36,6 +36,9 @@ namespace Requestarr.Core.Requests
 
     public record SeasonChoice(bool All, IReadOnlyCollection<int> Seasons, bool Future);
 
+    // A request outcome that also carries the request it created (for a Cancel button on pending ones).
+    public record RequestResult(bool Success, string Message, Request Request) : ServiceResult(Success, Message);
+
     public interface IRequestService
     {
         Task<LookupOutcome<List<MediaLookupResult>>> SearchAsync(RequestCaller caller, ContentType type, string query);
@@ -266,13 +269,13 @@ namespace Requestarr.Core.Requests
                 var sent = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
 
                 return sent
-                    ? ServiceResult.Ok(DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name))
-                    : ServiceResult.Fail(DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason));
+                    ? new RequestResult(true, DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name), request)
+                    : new RequestResult(false, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason), request);
             }
 
             await PostApprovalCard(request, state.Instance, item, caller.Name);
 
-            return ServiceResult.Ok(DiscordText.RequestPending(request.Label, request.Id));
+            return new RequestResult(true, DiscordText.RequestPending(request.Label, request.Id), request);
         }
 
         public async Task<ServiceResult> ApproveAsync(int requestId, Actor admin, string adminName)

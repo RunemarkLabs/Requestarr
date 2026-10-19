@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Requestarr.Core.Discord.Interactions
@@ -20,5 +21,8 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Must be the first response: opens a form (for example a deny reason).
         Task ShowModalAsync(InteractionModal modal);
+
+        // Autocomplete only: up to 25 suggestions for the focused option.
+        Task SuggestAsync(IReadOnlyList<InteractionChoice> choices);
     }
 }

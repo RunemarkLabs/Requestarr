@@ -6,7 +6,7 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
 {
-    // /user ... (admin only, admin channel only)
+    // /admin user ... (admin only, admin channel only)
     public class UserCommandHandler : IInteractionHandler
     {
         private readonly ICallerResolver _callers;
@@ -20,14 +20,14 @@ namespace Requestarr.Core.Discord.Handlers
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
-            (InteractionKind.SlashCommand, "user add"),
-            (InteractionKind.SlashCommand, "user remove"),
-            (InteractionKind.SlashCommand, "user suspend"),
-            (InteractionKind.SlashCommand, "user unsuspend"),
-            (InteractionKind.SlashCommand, "user access"),
-            (InteractionKind.SlashCommand, "user quota"),
-            (InteractionKind.SlashCommand, "user info"),
-            (InteractionKind.SlashCommand, "user mediaserver")
+            (InteractionKind.SlashCommand, "admin user add"),
+            (InteractionKind.SlashCommand, "admin user remove"),
+            (InteractionKind.SlashCommand, "admin user suspend"),
+            (InteractionKind.SlashCommand, "admin user unsuspend"),
+            (InteractionKind.SlashCommand, "admin user access"),
+            (InteractionKind.SlashCommand, "admin user quota"),
+            (InteractionKind.SlashCommand, "admin user info"),
+            (InteractionKind.SlashCommand, "admin user mediaserver")
         };
 
         public async Task HandleAsync(DiscordInteraction interaction, IInteractionResponder responder)
@@ -49,7 +49,7 @@ namespace Requestarr.Core.Discord.Handlers
             }
 
             var actor = HandlerSupport.ActorFor(interaction, caller);
-            var subcommand = interaction.CommandName.Substring("user ".Length).ToLowerInvariant();
+            var subcommand = interaction.CommandName.Substring("admin user ".Length).ToLowerInvariant();
 
             switch (subcommand)
             {

@@ -23,9 +23,9 @@ namespace Requestarr.Core.Discord.Handlers
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
-            (InteractionKind.SlashCommand, "queue"),
-            (InteractionKind.SlashCommand, "approve"),
-            (InteractionKind.SlashCommand, "deny"),
+            (InteractionKind.SlashCommand, "admin queue"),
+            (InteractionKind.SlashCommand, "admin approve"),
+            (InteractionKind.SlashCommand, "admin deny"),
             (InteractionKind.Button, RequestRoutes.Approve),
             (InteractionKind.Button, RequestRoutes.Deny),
             (InteractionKind.ModalSubmit, RequestRoutes.DenyReason)
@@ -47,7 +47,7 @@ namespace Requestarr.Core.Discord.Handlers
 
             switch (interaction.Kind)
             {
-                case InteractionKind.SlashCommand when interaction.CommandName == "queue":
+                case InteractionKind.SlashCommand when interaction.CommandName == "admin queue":
                 {
                     var filterId = interaction.GetSnowflake("user");
                     var filterUser = filterId == null ? null : _users.FindByDiscordId(filterId.Value);
@@ -60,12 +60,12 @@ namespace Requestarr.Core.Discord.Handlers
                     break;
                 }
 
-                case InteractionKind.SlashCommand when interaction.CommandName == "approve":
+                case InteractionKind.SlashCommand when interaction.CommandName == "admin approve":
                     await responder.DeferAsync();
                     await responder.Reply(await _requests.ApproveAsync((int)(interaction.GetInteger("id") ?? 0), actor, adminName));
                     break;
 
-                case InteractionKind.SlashCommand when interaction.CommandName == "deny":
+                case InteractionKind.SlashCommand when interaction.CommandName == "admin deny":
                     await responder.DeferAsync();
                     await responder.Reply(await _requests.DenyAsync((int)(interaction.GetInteger("id") ?? 0), interaction.GetOption<string>("reason"), actor, adminName));
                     break;

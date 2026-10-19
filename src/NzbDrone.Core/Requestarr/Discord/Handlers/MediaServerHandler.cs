@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Requestarr.Core.Discord.Interactions;
-using Requestarr.Core.MediaServers;
 using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
 {
-    // /mediaserver request (user, own channel) and the admin's Approve / Deny buttons.
+    // /admin mediaserver approve|deny and the Approve / Deny buttons on access-request cards.
+    // Users ask for access with the Link Plex button on their panel (PanelHandler).
     public class MediaServerHandler : IInteractionHandler
     {
         private readonly ICallerResolver _callers;
@@ -20,9 +20,8 @@ namespace Requestarr.Core.Discord.Handlers
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
-            (InteractionKind.SlashCommand, "mediaserver request"),
-            (InteractionKind.SlashCommand, "mediaserver approve"),
-            (InteractionKind.SlashCommand, "mediaserver deny"),
+            (InteractionKind.SlashCommand, "admin mediaserver approve"),
+            (InteractionKind.SlashCommand, "admin mediaserver deny"),
             (InteractionKind.Button, MediaServerRoutes.Approve),
             (InteractionKind.Button, MediaServerRoutes.Deny)
         };
@@ -31,9 +30,8 @@ namespace Requestarr.Core.Discord.Handlers
         {
             var caller = _callers.Resolve(interaction);
 
-            if (interaction.Kind == InteractionKind.SlashCommand && interaction.CommandName != "mediaserver request")
+            if (interaction.Kind == InteractionKind.SlashCommand)
             {
-                // Shared command, admin subcommands: visible to everyone, checked here.
                 if (caller.AdminDenial != null)
                 {
                     await responder.Ephemeral(caller.AdminDenial);
@@ -41,23 +39,9 @@ namespace Requestarr.Core.Discord.Handlers
                 }
 
                 var id = (int)(interaction.GetInteger("id") ?? 0);
-                var approveCommand = interaction.CommandName == "mediaserver approve";
+                var approveCommand = interaction.CommandName == "admin mediaserver approve";
                 await responder.DeferAsync();
                 await responder.Reply(await _users.DecideAccessRequestAsync(id, approveCommand, HandlerSupport.ActorFor(interaction, caller), interaction.DisplayName ?? interaction.Username));
-                return;
-            }
-
-            if (interaction.Kind == InteractionKind.SlashCommand)
-            {
-                if (caller.UserDenial != null)
-                {
-                    await responder.Ephemeral(caller.UserDenial);
-                    return;
-                }
-
-                await responder.DeferAsync(ephemeral: true);
-                var result = await _users.RequestMediaServerAccessAsync(caller.User, interaction.UserId, MediaServerProvider.Plex, interaction.GetOption<string>("username"));
-                await responder.Ephemeral(result.Message);
                 return;
             }
 

@@ -72,7 +72,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task admin_search_in_admin_channel_uses_default_instance()
         {
-            var run = await Harness.SendAsync(AdminSlash("request movie").WithOption("query", "dune"));
+            var run = await Harness.SendAsync(AdminRequest("movie", "dune"));
 
             run.LastReply.SelectMenu.Options.Should().HaveCount(2);
         }

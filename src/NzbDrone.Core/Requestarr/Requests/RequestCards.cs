@@ -13,6 +13,7 @@ namespace Requestarr.Core.Requests
         public const string Pick = "req-pick";
         public const string Make = "req-make";
         public const string Seasons = "req-seasons";
+        public const string Cancel = "req-cancel";
         public const string Approve = "req-approve";
         public const string Deny = "req-deny";
         public const string DenyReason = "req-deny-reason";
@@ -68,6 +69,11 @@ namespace Requestarr.Core.Requests
                 stateLine = state.CallerOwnsActive ? DiscordText.StateYours(state.Active.Status, state.Active.Id)
                     : state.CallerFollows ? DiscordText.StateFollowing(state.Active.Id)
                     : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id);
+
+                if (state.CallerOwnsActive && state.Active.Status == RequestStatus.Pending)
+                {
+                    buttons.Add(CancelButton(state.Active.Id));
+                }
 
                 if (!state.CallerOwnsActive && !state.CallerFollows)
                 {
@@ -138,6 +144,29 @@ namespace Requestarr.Core.Requests
                 }
             };
         }
+
+        public static InteractionButton CancelButton(int requestId) =>
+            new() { CustomId = $"{RequestRoutes.Cancel}:{requestId}", Label = DiscordText.CancelLabel, Style = ButtonStyle.Danger };
+
+        // The reply to a request; pending ones the user owns get a Cancel button.
+        public static InteractionReply Outcome(Users.ServiceResult result)
+        {
+            var reply = new InteractionReply { Content = DiscordLimits.Truncate(result.Message, DiscordLimits.MessageLength), Ephemeral = !result.Success };
+
+            if (result is RequestResult { Request: { Status: RequestStatus.Pending } pending })
+            {
+                reply.Buttons.Add(CancelButton(pending.Id));
+            }
+
+            return reply;
+        }
+
+        public static InteractionModal LinkPlex() => new()
+        {
+            CustomId = PanelRoutes.LinkPlexForm,
+            Title = DiscordText.LinkPlexTitle,
+            Fields = new List<InteractionTextField> { new(PanelRoutes.PlexUsernameField, DiscordText.LinkPlexLabel, Required: true, MaxLength: 100, Paragraph: false) }
+        };
 
         public static InteractionModal DenyReason(int requestId)
         {

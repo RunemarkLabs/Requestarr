@@ -51,10 +51,10 @@ namespace Requestarr.Core.Test.Requests
             Harness.SendAsync(FakeInteraction.Button(customId).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
         protected Task<InteractionRun> Admin(string command) =>
-            Harness.SendAsync(FakeInteraction.SlashCommand(command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            Harness.SendAsync(FakeInteraction.SlashCommand("admin " + command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
         protected FakeInteraction AdminSlash(string command) =>
-            FakeInteraction.SlashCommand(command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+            FakeInteraction.SlashCommand("admin " + command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
 
         protected Request LastRequest => RequestStore.All().OrderBy(r => r.Id).Last();
 

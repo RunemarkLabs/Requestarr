@@ -25,6 +25,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         private string _displayName = "Test User";
         private ulong _guildId = DefaultGuildId;
         private ulong _channelId = DefaultChannelId;
+        private string _focused;
 
         private FakeInteraction(InteractionKind kind, string commandName, string customId)
         {
@@ -40,6 +41,10 @@ namespace Requestarr.Core.Test.Discord.Harness
         public static FakeInteraction SelectMenu(string customId, params string[] values) => new FakeInteraction(InteractionKind.SelectMenu, null, customId).WithValues(values);
 
         public static FakeInteraction ModalSubmit(string customId) => new(InteractionKind.ModalSubmit, null, customId);
+
+        // Autocomplete for a command option: the text typed so far is the option's value.
+        public static FakeInteraction Autocomplete(string commandPath, string focusedOption, string typed) =>
+            new FakeInteraction(InteractionKind.Autocomplete, commandPath, null) { _focused = focusedOption }.WithOption(focusedOption, typed);
 
         public FakeInteraction WithOption(string name, object value)
         {
@@ -91,6 +96,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             {
                 Kind = _kind,
                 CommandName = _commandName,
+                FocusedOption = _focused,
                 CustomId = _customId,
                 Options = new Dictionary<string, object>(_options),
                 Fields = new Dictionary<string, string>(_fields),

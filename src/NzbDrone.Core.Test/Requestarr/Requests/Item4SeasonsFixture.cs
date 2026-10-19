@@ -20,7 +20,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task tv_detail_should_offer_all_each_season_and_future()
         {
-            var card = (await Harness.SendAsync(UserCommand("request tv-tvdb", Alice).WithOption("id", (long)Severance))).LastReply;
+            var card = (await Harness.SendAsync(Search(Alice, "tv", "tvdb:" + Severance))).LastReply;
 
             card.SelectMenu.CustomId.Should().Be($"req-seasons:{Severance}");
             card.SelectMenu.Options.Select(o => o.Value).Should().Equal("all", "s1", "s2", "future");
@@ -30,7 +30,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task long_shows_should_offer_the_latest_seasons_within_25_options()
         {
-            var card = (await Harness.SendAsync(UserCommand("request tv-tvdb", Alice).WithOption("id", (long)LongShow))).LastReply;
+            var card = (await Harness.SendAsync(Search(Alice, "tv", "tvdb:" + LongShow))).LastReply;
 
             card.SelectMenu.Options.Count.Should().Be(DiscordLimits.ChoicesPerMenu);
             card.SelectMenu.Options[1].Value.Should().Be("s18");

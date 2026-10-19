@@ -30,6 +30,9 @@ namespace Requestarr.Core.Discord.Gateway
     public interface IDiscordGuildGateway
     {
         bool IsConnected { get; }
+
+        // Pin Messages (1 << 51) is separate from Manage Messages; without it panels are posted unpinned.
+        bool CanPinMessages { get; }
         ulong GuildId { get; }
         ulong BotUserId { get; }
         ulong OwnerId { get; }
@@ -55,5 +58,9 @@ namespace Requestarr.Core.Discord.Gateway
         Task AddRoleToMemberAsync(ulong userId, ulong roleId);
 
         Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message);
+
+        // False when the message no longer exists (deleted by someone).
+        Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message);
+        Task PinMessageAsync(ulong channelId, ulong messageId);
     }
 }

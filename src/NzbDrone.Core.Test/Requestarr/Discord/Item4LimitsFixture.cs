@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
@@ -61,15 +62,18 @@ namespace Requestarr.Core.Test.Discord
             // Discord.Net validates names, descriptions (100), choice counts (25) on Build().
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToList();
 
-            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("user", "queue", "approve", "deny", "request", "requests", "quota", "mediaserver");
+            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("request", "admin");
 
-            foreach (var option in commands.SelectMany(c => c.Options.Value).SelectMany(o => o.Options ?? new()))
+            foreach (var option in commands.SelectMany(c => Flatten(c.Options.Value)))
             {
                 (option.Choices?.Count ?? 0).Should().BeLessThanOrEqualTo(DiscordLimits.ChoicesPerMenu);
                 option.Description.Length.Should().BeLessThanOrEqualTo(DiscordLimits.OptionLabelLength);
                 (option.Choices ?? new()).All(c => c.Name.Length <= DiscordLimits.OptionLabelLength).Should().BeTrue();
             }
         }
+
+        private static IEnumerable<ApplicationCommandOptionProperties> Flatten(IEnumerable<ApplicationCommandOptionProperties> options) =>
+            (options ?? Enumerable.Empty<ApplicationCommandOptionProperties>()).SelectMany(o => new[] { o }.Concat(Flatten(o.Options)));
 
         [Test]
         public void names_should_be_sanitised_and_truncated()

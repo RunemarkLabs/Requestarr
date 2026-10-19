@@ -12,6 +12,7 @@ namespace Requestarr.Core.Discord
         public string AdminRoleId { get; set; }
         public string AdminChannelId { get; set; }
         public string AdminQueueChannelId { get; set; }
+        public string AdminPanelMessageId { get; set; }
         public List<string> RequestCategoryIds { get; set; } = new();
     }
 

@@ -17,9 +17,9 @@ namespace Requestarr.Core.Test.Discord
             await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "auto"));
             await Harness.SendAsync(AdminCommand("user quota", Alice).WithOption("type", "movie").WithOption("limit", 3L));
             await Harness.SendAsync(AdminCommand("user mediaserver", Alice).WithOption("service", "plex").WithOption("username", "a1"));
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "a2"));
+            await Harness.SendAsync(PlexForm(Alice, "a2"));
             await Harness.SendAsync(FakeInteraction.Button("msreq-deny:1").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
-            await Harness.SendAsync(UserCommand("mediaserver request", Alice).WithOption("username", "a3"));
+            await Harness.SendAsync(PlexForm(Alice, "a3"));
             await Harness.SendAsync(FakeInteraction.Button("msreq-approve:2").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
             await Harness.SendAsync(AdminCommand("user suspend", Alice));
             await Harness.SendAsync(AdminCommand("user unsuspend", Alice));
@@ -69,7 +69,7 @@ namespace Requestarr.Core.Test.Discord
             await AddUser(Alice);
             var before = AuditTrail.Count;
 
-            await Harness.SendAsync(FakeInteraction.SlashCommand("user remove").WithOption("member", Alice).By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            await Harness.SendAsync(FakeInteraction.SlashCommand("admin user remove").WithOption("member", Alice).By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             AuditTrail.Count.Should().Be(before);
         }

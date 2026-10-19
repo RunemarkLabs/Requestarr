@@ -23,6 +23,7 @@ namespace Requestarr.Core.Discord.Gateway
         }
 
         public bool IsConnected => _host.State == DiscordBotState.Connected && Guild != null;
+        public bool CanPinMessages => Guild?.CurrentUser?.GuildPermissions.PinMessages ?? false;
         public ulong GuildId => _settings.Current.GuildId;
         public ulong BotUserId => Client.CurrentUser?.Id ?? 0;
         public ulong OwnerId => Guild?.OwnerId ?? 0;
@@ -154,6 +155,33 @@ namespace Requestarr.Core.Discord.Gateway
                 allowedMentions: new AllowedMentions(AllowedMentionTypes.Users));
 
             return sent.Id;
+        }
+
+        public async Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel ||
+                await channel.GetMessageAsync(messageId) is not IUserMessage existing)
+            {
+                return false;
+            }
+
+            await existing.ModifyAsync(m =>
+            {
+                m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
+                m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
+            });
+
+            return true;
+        }
+
+        public async Task PinMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&
+                await channel.GetMessageAsync(messageId) is IUserMessage message && !message.IsPinned)
+            {
+                await message.PinAsync();
+            }
         }
 
         private SocketGuild RequireGuild() => Guild ?? throw new InvalidOperationException(DiscordText.NotConnected);

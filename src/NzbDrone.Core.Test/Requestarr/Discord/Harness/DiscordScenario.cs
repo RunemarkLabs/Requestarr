@@ -59,6 +59,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             UseBackends();
             Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
 
@@ -68,7 +69,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<UserCommandHandler>(),
                 Mocker.Resolve<MediaServerHandler>(),
                 Mocker.Resolve<RequestHandler>(),
-                Mocker.Resolve<ApprovalHandler>());
+                Mocker.Resolve<ApprovalHandler>(),
+                Mocker.Resolve<PanelHandler>());
         }
 
         // Fake Radarr / Sonarr by default; live fixtures override with the real APIs.
@@ -95,9 +97,27 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         protected IUserManagementService Users => Mocker.Resolve<IUserManagementService>();
 
-        // An admin command as the server owner, in the admin channel.
+        // An /admin command as the server owner, in the admin channel ("user add" means /admin user add).
         protected FakeInteraction AdminCommand(string command, ulong member) =>
-            FakeInteraction.SlashCommand(command).WithOption("member", member).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+            FakeInteraction.SlashCommand("admin " + command).WithOption("member", member).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+
+        // /request {type} {query} by a user in their own channel.
+        protected FakeInteraction Search(ulong userId, string type, string query) =>
+            FakeInteraction.SlashCommand("request").WithOption("type", type).WithOption("query", query).By(userId).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(userId));
+
+        // /request from the admin channel by the server owner.
+        protected FakeInteraction AdminRequest(string type, string query) =>
+            FakeInteraction.SlashCommand("request").WithOption("type", type).WithOption("query", query).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+
+        // The Link Plex form from the user's panel, submitted.
+        protected FakeInteraction PlexForm(ulong userId, string username) =>
+            FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, username).By(userId).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(userId));
+
+        protected FakeInteraction PanelButton(ulong userId, string route) =>
+            FakeInteraction.Button(route).By(userId).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(userId));
+
+        protected FakeInteraction CancelButton(ulong userId, int requestId) =>
+            FakeInteraction.Button($"req-cancel:{requestId}").By(userId).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(userId));
 
         protected FakeInteraction UserCommand(string command, ulong userId) =>
             FakeInteraction.SlashCommand(command).By(userId).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(userId));

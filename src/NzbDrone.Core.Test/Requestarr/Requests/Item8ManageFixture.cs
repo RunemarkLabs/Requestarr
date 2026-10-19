@@ -23,27 +23,26 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task user_requests_should_show_own_and_followed_only()
         {
-            var text = (await Harness.SendAsync(UserCommand("requests", Alice))).LastReply.Content;
+            var text = (await Harness.SendAsync(PanelButton(Alice, PanelRoutes.MyRequests))).LastReply.Content;
 
             text.Should().Contain("#1 ·").And.Contain("#2 ·").And.NotContain("#3 ·");
         }
 
         [Test]
-        public async Task admin_requests_should_show_all_with_owner_and_filter_by_user_status_type()
+        public async Task admin_queue_should_show_owner_and_filter_by_user_and_type()
         {
-            (await Harness.SendAsync(AdminSlash("requests"))).LastReply.Content.Should().Contain("#1 ·").And.Contain("#3 ·").And.Contain("· bob");
-            (await Harness.SendAsync(AdminSlash("requests").WithOption("user", Bob))).LastReply.Content.Should().Contain("#2 ·").And.Contain("#3 ·").And.NotContain("#1 ·");
-            (await Harness.SendAsync(AdminSlash("requests").WithOption("type", "tv"))).LastReply.Content.Should().Contain("#3 ·").And.NotContain("#1 ·");
-            (await Harness.SendAsync(AdminSlash("requests").WithOption("status", "approved"))).LastReply.Content.Should().Be(DiscordText.NoRequests);
+            (await Admin("queue")).LastReply.Content.Should().Contain("· bob").And.Contain("· alice");
+            (await Harness.SendAsync(AdminSlash("queue").WithOption("user", Bob))).LastReply.Content.Should().Contain("#2 ·").And.Contain("#3 ·").And.NotContain("#1 ·");
+            (await Harness.SendAsync(AdminSlash("queue").WithOption("type", "tv"))).LastReply.Content.Should().Contain("#3 ·").And.NotContain("#1 ·");
         }
 
         [Test]
         public async Task user_can_cancel_own_pending_request_only()
         {
-            (await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 2L))).LastReply.Content.Should().Be(DiscordText.NotYourRequest);
-            (await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.RequestCancelled("Dune (2021)", 1));
-            (await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.CannotCancel(RequestStatus.Cancelled));
-            (await Harness.SendAsync(UserCommand("request cancel", Alice).WithOption("id", 99L))).LastReply.Content.Should().Be(DiscordText.RequestNotFound);
+            (await Harness.SendAsync(CancelButton(Alice, 2))).LastReply.Content.Should().Be(DiscordText.NotYourRequest);
+            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Be(DiscordText.RequestCancelled("Dune (2021)", 1));
+            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Be(DiscordText.CannotCancel(RequestStatus.Cancelled));
+            (await Harness.SendAsync(CancelButton(Alice, 99))).LastReply.Content.Should().Be(DiscordText.RequestNotFound);
         }
 
         [Test]
@@ -74,7 +73,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task admin_commands_in_a_user_channel_are_refused()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("approve").WithOption("id", 1L).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin approve").WithOption("id", 1L).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Pending);
