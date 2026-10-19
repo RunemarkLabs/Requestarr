@@ -141,20 +141,30 @@ namespace Requestarr.Core.Discord
                     return null;
                 }
 
-                if (ulong.TryParse(storedId, out var existing) && await _gateway.EditMessageAsync(channelId, existing, panel))
-                {
-                    await _gateway.PinMessageAsync(channelId, existing);
-                    return existing;
-                }
+                var id = ulong.TryParse(storedId, out var existing) && await _gateway.EditMessageAsync(channelId, existing, panel)
+                    ? existing
+                    : await _gateway.SendMessageAsync(channelId, panel);
 
-                var id = await _gateway.SendMessageAsync(channelId, panel);
-                await _gateway.PinMessageAsync(channelId, id);
+                await Pin(channelId, id);
                 return id;
             }
             catch (Exception ex)
             {
                 _logger.Warn(ex, "Could not update the panel in channel {0}", channelId);
                 return null;
+            }
+        }
+
+        // Pinning needs the Pin Messages permission. Without it the panel still works, it just isn't pinned.
+        private async Task Pin(ulong channelId, ulong messageId)
+        {
+            try
+            {
+                await _gateway.PinMessageAsync(channelId, messageId);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not pin the panel in channel {0}. Give the bot the Pin Messages permission.", channelId);
             }
         }
     }

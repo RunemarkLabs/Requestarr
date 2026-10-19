@@ -27,10 +27,13 @@ Every Requestarr install uses its own bot. Discord's official reference is https
    - Save.
 5. **OAuth2 → URL Generator:**
    - Scopes: tick `bot` and `applications.commands`.
-   - Permissions: tick Manage Roles, Manage Channels, View Channels, Send Messages, Embed Links, and Read Message History.
+   - Permissions: tick Manage Roles, Manage Channels, View Channels, Send Messages, Embed Links, Read Message History, and Pin Messages.
+     Pin Messages lets Requestarr pin the panels in each channel (section 5).
    - Integration Type: **Guild Install**.
 
-   The generated link ends with `permissions=268520464&integration_type=0&scope=bot+applications.commands`.
+   The generated link ends with `permissions=2251800082205712&integration_type=0&scope=bot+applications.commands`.
+
+   **Already added the bot without Pin Messages?** You don't need to re-invite it. Open **Server Settings → Roles**, pick the bot's role, turn on **Pin Messages**, and save. Then restart Requestarr, and it pins the panels on start.
 6. Open the generated link, pick your server, and authorize. The bot shows as offline until Requestarr runs.
 7. **Bot → Reset Token**, then paste the token straight into Requestarr's secrets file (section 3). Never paste it into chat, issues, or screenshots. If you lose it, reset it again.
 8. In your server, open **Server Settings → Roles** and keep the bot's role above any roles it should manage.
@@ -430,6 +433,7 @@ _Coming in Phase 2._
 - **"Admin commands only work in the Requestarr admin channel":** run `/admin …` commands in `#requestarr-admin`, not in a user's channel.
 - **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
 - **Users don't see /admin:** that's intended; it only shows to members with Manage Server (see 5.3).
+- **The panels are posted but not pinned:** the bot's role lacks **Pin Messages**. Turn it on in Server Settings → Roles (see section 2, step 5) and restart Requestarr.
 - **The /request type list is empty:** that user has every type set to off. Change it with `/admin user access`.
 - **Discord still shows old commands after an update:** press Ctrl+R in the Discord app, or fully quit it from the system tray and reopen it.
 - **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.

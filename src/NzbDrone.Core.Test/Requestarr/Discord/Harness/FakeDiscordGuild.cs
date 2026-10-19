@@ -44,6 +44,9 @@ namespace Requestarr.Core.Test.Discord.Harness
         // Fails the next channel creation, to exercise rollback.
         public bool FailNextChannelCreate { get; set; }
 
+        // Simulates a bot without the Pin Messages permission.
+        public bool CannotPin { get; set; }
+
         public FakeDiscordGuild()
         {
             AddMember(Owner, "owner");
@@ -193,6 +196,11 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task PinMessageAsync(ulong channelId, ulong messageId)
         {
+            if (CannotPin)
+            {
+                throw new InvalidOperationException("Missing Permissions");
+            }
+
             Channels[channelId].Pinned.Add(messageId);
             return Task.CompletedTask;
         }

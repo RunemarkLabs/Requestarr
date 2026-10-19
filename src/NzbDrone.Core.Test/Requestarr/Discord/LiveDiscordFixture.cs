@@ -111,8 +111,21 @@ namespace Requestarr.Core.Test.Discord
                 Log($"[setup] request category '{categoryRest}' ({category}) present: {categoryRest != null}");
                 adminRest.Should().NotBeNull();
                 categoryRest.Should().NotBeNull();
-                created.Add($"channel:{adminChannel}");
-                created.Add($"channel:{category}");
+
+                // Only what this run created is cleaned up; anything already in the server (for example
+                // the UAT setup) is left exactly as it was.
+                var audit = Mocker.Resolve<IAuditRepository>().All().Select(a => a.Action).ToList();
+                Log($"[setup] created by this run: admin channel {audit.Contains("discord.admin-channel.create")}, category {audit.Contains("discord.category.create")}, admin role {audit.Contains("discord.admin-role.create")}");
+
+                if (audit.Contains("discord.admin-channel.create"))
+                {
+                    created.Add($"channel:{adminChannel}");
+                }
+
+                if (audit.Contains("discord.category.create"))
+                {
+                    created.Add($"channel:{category}");
+                }
 
                 // Problem 0: the admin role exists, read back from Discord.
                 var adminRoleId = guildSetup.AdminRoleId.Value;
@@ -124,7 +137,12 @@ namespace Requestarr.Core.Test.Discord
                 // Discord ranks by position, then by ID on ties: the newer role (higher ID) is lower.
                 var belowBot = adminRoleRead.Position < botTop || (adminRoleRead.Position == botTop && adminRoleRead.Id > botRole.Id);
                 var roleCreated = Mocker.Resolve<IAuditRepository>().All().Any(a => a.Action == "discord.admin-role.create");
-                created.Insert(0, $"role:{adminRoleId}");
+                if (roleCreated)
+                {
+                    created.Insert(0, $"role:{adminRoleId}");
+                }
+
+                Log($"[bot] role '{botRole.Name}' Pin Messages: {botRole.Permissions.PinMessages}, Manage Messages: {botRole.Permissions.ManageMessages}");
                 Log($"[admin-role] '{adminRoleRead.Name}' ({adminRoleRead.Id}) {(roleCreated ? "created by Requestarr" : "already existed")}; position {adminRoleRead.Position}, below the bot's role '{botRole.Name}' (position {botTop}): {belowBot}; permissions={adminRoleRead.Permissions.RawValue}");
                 adminRoleRead.Name.Should().Be(DiscordSettings.DefaultAdminRoleName);
                 belowBot.Should().BeTrue();
@@ -173,6 +191,7 @@ namespace Requestarr.Core.Test.Discord
                 var userChannel = ulong.Parse(user.PrivateChannelId);
                 var userRole = ulong.Parse(user.DiscordRoleId);
                 created.Add($"channel:{userChannel}");
+                created.Add($"role:{userRole}");
 
                 var memberRoles = (await host.Client.Rest.GetGuildUserAsync(guild.Id, target.Id)).RoleIds;
                 Log($"[add] role {userRole} assigned to member: {memberRoles.Contains(userRole)}");
@@ -208,10 +227,23 @@ namespace Requestarr.Core.Test.Discord
                 {
                     var channel = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(channelId);
                     var pinned = await channel.GetPinnedMessagesAsync();
-                    var panel = pinned.Single();
+                    var storedId = channelId == userChannel ? users.FindByDiscordId(target.Id).PanelMessageId : guildSetup.GetConfig().AdminPanelMessageId;
+                    storedId.Should().NotBeNull($"a panel is posted in the {label}");
+                    var panelId = ulong.Parse(storedId);
+                    var panel = await channel.GetMessageAsync(panelId);
+
+                    if (channelId == adminChannel && !created.Contains($"channel:{adminChannel}") && panel != null)
+                    {
+                        created.Add($"message:{adminChannel}:{panelId}");
+                    }
+
+                    Log($"[panel] {label}: message {panelId} present: {panel != null}, pinned: {panel?.IsPinned}");
+                    panel.Should().NotBeNull();
+                    panel.IsPinned.Should().BeTrue($"the bot needs Pin Messages to pin the panel in the {label}");
+
                     var buttons = panel.Components.OfType<global::Discord.ActionRowComponent>().SelectMany(r => r.Components).OfType<global::Discord.ButtonComponent>().Select(b => $"[{b.Label}]");
                     var lines = panel.Content.Split('\n');
-                    Log($"[panel] {label}: {pinned.Count} pinned; \"{lines[0]}\" buttons {string.Join(" ", buttons)}");
+                    Log($"[panel] {label}: {pinned.Count} pinned in total; \"{lines[0]}\" buttons {string.Join(" ", buttons)}");
                     Log($"[panel]   {string.Join(" | ", lines.Skip(1))}");
                 }
 
@@ -232,8 +264,20 @@ namespace Requestarr.Core.Test.Discord
                 foreach (var item in created.Where(c => c.StartsWith("role:")))
                 {
                     var roleId = ulong.Parse(item.Split(':')[1]);
-                    await gateway.DeleteRoleAsync(roleId);
-                    Log($"[cleanup] deleted role {roleId}");
+
+                    if (await gateway.RoleExistsAsync(roleId))
+                    {
+                        await gateway.DeleteRoleAsync(roleId);
+                        Log($"[cleanup] deleted role {roleId}");
+                    }
+                }
+
+                foreach (var item in created.Where(c => c.StartsWith("message:")))
+                {
+                    var parts = item.Split(':');
+                    var channel = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(ulong.Parse(parts[1]));
+                    await channel.DeleteMessageAsync(ulong.Parse(parts[2]));
+                    Log($"[cleanup] deleted this run's panel message {parts[2]} from the existing admin channel");
                 }
 
                 foreach (var item in created.Where(c => c.StartsWith("channel:")).Reverse())
@@ -256,20 +300,16 @@ namespace Requestarr.Core.Test.Discord
 
                 if (host.Client?.GetGuild(settings.Current.GuildId) is { } cleanupGuild)
                 {
+                    // Commands are shared with the UAT bot; the stack is restarted from main afterwards to re-register them.
                     await cleanupGuild.BulkOverwriteApplicationCommandAsync(Array.Empty<global::Discord.ApplicationCommandProperties>());
-                    Log("[cleanup] removed guild slash commands");
+                    Log("[cleanup] removed guild slash commands (re-registered when the UAT stack restarts)");
 
-                    foreach (var stray in (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id)).Roles.Where(r => r.Name == DiscordSettings.DefaultAdminRoleName || r.Name.StartsWith(ChannelLayout.UserRolePrefix)))
-                    {
-                        await stray.DeleteAsync();
-                        Log($"[cleanup] deleted role {stray.Id} ({stray.Name})");
-                    }
-
-                    var leftover = (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id)).Roles.Count(r => r.Name.StartsWith(ChannelLayout.UserRolePrefix) || r.Name == DiscordSettings.DefaultAdminRoleName);
-                    var leftoverChannels = (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id).ContinueWith(t => t.Result.GetChannelsAsync()).Unwrap())
-                        .Count(c => c.Name.StartsWith(ChannelLayout.UserChannelPrefix) || c.Name.StartsWith(ChannelLayout.ArchivedPrefix) ||
-                                    c.Name == ChannelLayout.AdminChannelName || c.Name == ChannelLayout.RequestCategoryName);
-                    Log($"[cleanup] leftover requestarr roles: {leftover}, leftover requestarr channels: {leftoverChannels}");
+                    var restGuild2 = await host.Client.Rest.GetGuildAsync(cleanupGuild.Id);
+                    var createdIds = created.Select(c => ulong.Parse(c.Split(':').Last())).ToHashSet();
+                    var channelIds = (await restGuild2.GetChannelsAsync()).Select(c => c.Id).ToHashSet();
+                    var leftover = created.Count(c => (c.StartsWith("role:") && restGuild2.GetRole(ulong.Parse(c.Split(':')[1])) != null) ||
+                                                      (c.StartsWith("channel:") && channelIds.Contains(ulong.Parse(c.Split(':')[1]))));
+                    Log($"[cleanup] objects created by this run still present: {leftover} (of {createdIds.Count} tracked)");
                 }
 
                 await host.StopAsync();
