@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common.Extensions;
 using Requestarr.Core.Audit;
+using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
 using Requestarr.Core.Discord.Interactions;
@@ -25,7 +26,8 @@ namespace Requestarr.Core.Users
         Task<ServiceResult> RemoveAsync(ulong discordUserId, Actor actor);
         Task<ServiceResult> SuspendAsync(ulong discordUserId, Actor actor, string reason = null);
         Task<ServiceResult> UnsuspendAsync(ulong discordUserId, Actor actor);
-        ServiceResult SetAccess(ulong discordUserId, ContentType type, AccessState state, Actor actor);
+        ServiceResult SetAccess(ulong discordUserId, ContentType type, AccessState state, Actor actor, string instanceName = null);
+        RequestarrUser EnsureAdminUser(ulong discordUserId, string username, string displayName);
         ServiceResult SetQuota(ulong discordUserId, ContentType type, int limit, int days, Actor actor);
         ServiceResult Info(ulong discordUserId);
         Task HandleMemberLeftAsync(ulong discordUserId);
@@ -54,7 +56,7 @@ namespace Requestarr.Core.Users
         private readonly IMediaServerAccessRequestRepository _accessRequests;
         private readonly IDiscordGuildGateway _gateway;
         private readonly IGuildSetupService _guildSetup;
-        private readonly IDiscordSettingsStore _settings;
+        private readonly IBackendService _backends;
         private readonly IAuditService _audit;
         private readonly Logger _logger;
 
@@ -65,7 +67,7 @@ namespace Requestarr.Core.Users
                                      IMediaServerAccessRequestRepository accessRequests,
                                      IDiscordGuildGateway gateway,
                                      IGuildSetupService guildSetup,
-                                     IDiscordSettingsStore settings,
+                                     IBackendService backends,
                                      IAuditService audit,
                                      Logger logger)
         {
@@ -76,7 +78,7 @@ namespace Requestarr.Core.Users
             _accessRequests = accessRequests;
             _gateway = gateway;
             _guildSetup = guildSetup;
-            _settings = settings;
+            _backends = backends;
             _audit = audit;
             _logger = logger;
         }
@@ -105,7 +107,8 @@ namespace Requestarr.Core.Users
             var identity = _identities.Find(UserIdentity.DiscordProvider, discordUserId.ToString());
             var user = identity == null ? null : _users.Find(identity.UserId);
 
-            if (user != null && user.Status != UserStatus.Removed)
+            // An admin's own record (created when they request from the admin channel) has no channel yet.
+            if (user != null && user.Status != UserStatus.Removed && user.PrivateChannelId != null)
             {
                 return ServiceResult.Fail(DiscordText.AlreadyUser(member.DisplayName, user.Status));
             }
@@ -124,7 +127,7 @@ namespace Requestarr.Core.Users
                 await _gateway.AddRoleToMemberAsync(member.Id, roleId.Value);
 
                 var categoryId = await _guildSetup.GetCategoryWithRoomAsync();
-                var overwrites = ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _settings.Current.AdminRoleId, roleId.Value, locked: false);
+                var overwrites = ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _guildSetup.AdminRoleId, roleId.Value, locked: false);
                 channelId = await _gateway.CreateTextChannelAsync(ChannelLayout.UserChannelName(member.Username), categoryId, $"Requestarr requests for {member.DisplayName}", overwrites);
             }
             catch (Exception ex)
@@ -172,7 +175,7 @@ namespace Requestarr.Core.Users
 
             if (user.PrivateChannelId != null && ulong.TryParse(user.PrivateChannelId, out var channelId) && await _gateway.ChannelExistsAsync(channelId))
             {
-                await _gateway.SetChannelOverwritesAsync(channelId, ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, _settings.Current.AdminRoleId));
+                await _gateway.SetChannelOverwritesAsync(channelId, ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, _guildSetup.AdminRoleId));
                 await _gateway.RenameChannelAsync(channelId, ChannelLayout.ArchivedName(ChannelLayout.UserChannelName(Identity(user)?.Username ?? user.DisplayName)));
             }
 
@@ -254,7 +257,7 @@ namespace Requestarr.Core.Users
             return ServiceResult.Ok(DiscordText.UserUnsuspendedDone(user.DisplayName));
         }
 
-        public ServiceResult SetAccess(ulong discordUserId, ContentType type, AccessState state, Actor actor)
+        public ServiceResult SetAccess(ulong discordUserId, ContentType type, AccessState state, Actor actor, string instanceName = null)
         {
             if (!ContentTypes.IsOffered(type))
             {
@@ -268,14 +271,51 @@ namespace Requestarr.Core.Users
                 return ServiceResult.Fail(error);
             }
 
+            BackendInstance instance = null;
+
+            if (instanceName.IsNotNullOrWhiteSpace())
+            {
+                instance = _backends.FindByName(instanceName.Trim());
+
+                if (instance == null || !instance.Enable || instance.Implementation != BackendImplementations.ForContentType(type))
+                {
+                    return ServiceResult.Fail(DiscordText.InstanceNotFound(instanceName.Trim(), type));
+                }
+            }
+
             var row = GetOrCreateAccess(user.Id, type);
             var previous = row.State;
             row.State = state;
+
+            if (instance != null)
+            {
+                row.BackendId = instance.Id;
+            }
+
             _access.Upsert(row);
 
-            _audit.Record(actor, "user.access", "user", user.Id.ToString(), $"{type}: {previous} -> {state}");
+            _audit.Record(actor, "user.access", "user", user.Id.ToString(), $"{type}: {previous} -> {state}{(instance != null ? $", instance {instance.Name}" : string.Empty)}");
 
-            return ServiceResult.Ok(DiscordText.AccessChanged(user.DisplayName, type, state));
+            return ServiceResult.Ok(DiscordText.AccessChanged(user.DisplayName, type, state, instance?.Name));
+        }
+
+        // Admins may request from the admin channel without having been added; they get a
+        // Requestarr user record (no role, no channel) so requests have an owner.
+        public RequestarrUser EnsureAdminUser(ulong discordUserId, string username, string displayName)
+        {
+            var existing = FindByDiscordId(discordUserId);
+
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var now = DateTime.UtcNow;
+            var user = _users.Insert(new RequestarrUser { DisplayName = displayName ?? username, Status = UserStatus.Active, Added = now, StatusChanged = now });
+            _identities.Insert(new UserIdentity { UserId = user.Id, Provider = UserIdentity.DiscordProvider, ExternalId = discordUserId.ToString(), Username = username, DisplayName = displayName, Linked = now });
+            _audit.Record(Actor.Discord(discordUserId, username, user.Id), "user.admin-record", "user", user.Id.ToString());
+
+            return user;
         }
 
         public ServiceResult SetQuota(ulong discordUserId, ContentType type, int limit, int days, Actor actor)
@@ -475,7 +515,7 @@ namespace Requestarr.Core.Users
                 return;
             }
 
-            await _gateway.SetChannelOverwritesAsync(channelId, ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _settings.Current.AdminRoleId, roleId, locked));
+            await _gateway.SetChannelOverwritesAsync(channelId, ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _guildSetup.AdminRoleId, roleId, locked));
             await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = notice });
         }
 

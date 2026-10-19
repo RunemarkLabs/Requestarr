@@ -45,7 +45,7 @@ Multiple instances of each service are supported (for example, a separate 4K Rad
 
 ## Getting started
 
-Follow the [setup guide](docs/setup-guide.md) to create your Discord bot and install Requestarr with Docker Compose.
+Follow the [setup guide](docs/setup-guide.md) to create your Discord bot and install Requestarr with Docker Compose. Every Discord command is listed in the [command reference](docs/commands.md).
 
 ## Development
 

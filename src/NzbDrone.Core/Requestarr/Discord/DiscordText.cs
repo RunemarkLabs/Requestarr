@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Requests;
 using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord
@@ -65,7 +66,8 @@ namespace Requestarr.Core.Discord
         public const string ChannelRestoredNotice = "Your Requestarr access is restored. Welcome back!";
         public const string MemberLeftNotice = "This member left the server. Their access is suspended and the channel is locked.";
 
-        public static string AccessChanged(string name, ContentType type, AccessState state) => $"{name}: {Label(type)} is now {Label(state)}.";
+        public static string AccessChanged(string name, ContentType type, AccessState state, string instance = null) =>
+            $"{name}: {Label(type)} is now {Label(state)}{(instance != null ? $", using {instance}" : string.Empty)}.";
 
         public static string QuotaChanged(string name, ContentType type, int? limit, int days) =>
             limit.HasValue ? $"{name}: {Label(type)} quota is now {limit} per {days} day{(days == 1 ? string.Empty : "s")}." : $"{name}: {Label(type)} quota removed.";
@@ -107,6 +109,99 @@ namespace Requestarr.Core.Discord
             $"Your {provider} access request for `{username}` was approved. Your account is linked; the server invite follows in a later release.";
 
         public static string AccessRequestDeniedUser(MediaServerProvider provider) => $"Your {provider} access request was declined by the admin.";
+
+        // Requesting
+        public const string MusicNotYet = "Music requests aren't available yet.";
+        public const string RequestNotFound = "That request doesn't exist.";
+        public const string NotYourRequest = "You can only cancel your own requests.";
+        public const string NothingFound = "Nothing found. Try different words, or request by ID.";
+        public const string TitleNotFound = "That title wasn't found.";
+        public const string ChooseSeasons = "Pick at least one season, or future seasons.";
+        public const string AlreadyRequestedByYou = "You've already requested this.";
+        public const string AlreadyFollowing = "You're already following this request.";
+        public const string AlreadyInLibrary = "This is already in the library, so there's nothing to request.";
+        public const string RequestLabel = "Request";
+        public const string FollowLabel = "Follow request";
+        public const string SearchPlaceholder = "Pick a title";
+        public const string SeasonsPlaceholder = "Pick seasons to request";
+        public const string AllSeasons = "All seasons";
+        public const string FutureSeasons = "Future seasons";
+        public const string FutureSeasonsHint = "Keep monitoring new seasons as they air";
+        public const string DenyReasonTitle = "Deny request";
+        public const string DenyReasonLabel = "Reason (shown to the user)";
+        public const string NoReason = "no reason given";
+        public const string NoRequests = "No requests match.";
+        public const string QueueEmpty = "Nothing is waiting for approval.";
+        public const string StateInLibrary = "✅ Already in the library.";
+
+        public static string AccessOff(ContentType type) => $"You can't request {Label(type).ToLowerInvariant()}. Ask the admin if you'd like access.";
+
+        public static string NoBackend(ContentType type) => $"No {(type == ContentType.Tv ? "Sonarr" : "Radarr")} is set up for {Label(type).ToLowerInvariant()} yet. Ask the admin.";
+
+        public static string BackendUnavailable(string instance) => $"{instance} isn't reachable right now. Try again later.";
+
+        public static string SearchResults(ContentType type, string query, int count) => $"{Label(type)}: {count} result{(count == 1 ? string.Empty : "s")} for \"{query}\". Pick one to see details.";
+
+        public static string StateRequested(string owner, RequestStatus status, int id) => $"📌 Already requested by {owner} (#{id}, {Label(status)}). You can follow it to be notified.";
+
+        public static string StateYours(RequestStatus status, int id) => $"📌 You requested this (#{id}, {Label(status)}).";
+
+        public static string StateFollowing(int id) => $"📌 You're following request #{id}.";
+
+        public static string StatePreviouslyDenied(string reason) => $"⛔ Previously denied: {reason ?? NoReason}. You can request it again.";
+
+        public static string Subscribed(string label, string owner, int id) => $"{owner} already requested {label} (#{id}). You'll be notified when it's available.";
+
+        public static string QuotaReached(ContentType type, int limit, int days, DateTime nextSlot) =>
+            $"You've reached your {Label(type).ToLowerInvariant()} limit ({limit} per {days} days). Your next request frees up {DiscordTimestamp(nextSlot)}.";
+
+        public static string RequestPending(string label, int id) => $"Request #{id} for {label} is waiting for the admin's approval.";
+
+        public static string RequestSent(string label, int id, string instance) => $"Request #{id} for {label} was added to {instance} and a search has started.";
+
+        public static string RequestApprovedNotice(string label, int id, string instance) => $"Your request #{id} for {label} was approved and added to {instance}. A search has started.";
+
+        public static string RequestDeniedNotice(string label, int id, string reason) => $"Your request #{id} for {label} was denied: {reason ?? NoReason}.";
+
+        public static string RequestFailedNotice(string label, int id, string error) => $"Request #{id} for {label} couldn't be added: {error}";
+
+        public static string RequestCancelled(string label, int id) => $"Request #{id} for {label} was cancelled.";
+
+        public static string CannotCancel(RequestStatus status) => $"Only pending requests can be cancelled; this one is {Label(status)}.";
+
+        public static string NotPending(int id, RequestStatus status) => $"Request #{id} is {Label(status)}, not waiting for approval.";
+
+        public static string ApprovalCard(Request request, string owner, string instance) =>
+            $"**Request #{request.Id}** · {Label(request.ContentType)} · {request.Label}\nRequested by {owner} for {instance}" +
+            (request.ContentType == ContentType.Tv ? $"\nSeasons: {Seasons(request)}" : string.Empty);
+
+        public static string ApprovedCard(Request request, string owner, string admin) => $"**Request #{request.Id}: approved** by {admin} · {request.Label} for {owner}";
+
+        public static string DeniedCard(Request request, string owner, string admin, string reason) => $"**Request #{request.Id}: denied** by {admin} · {request.Label} for {owner} · {reason ?? NoReason}";
+
+        public static string AdminApproved(Request request, string outcome) => $"Approved request #{request.Id} for {request.Label}. {outcome}";
+
+        public static string AdminDenied(Request request) => $"Denied request #{request.Id} for {request.Label}.";
+
+        public static string Seasons(Request request)
+        {
+            var seasons = request.Seasons.Any() ? string.Join(", ", request.Seasons.OrderBy(s => s)) : "none";
+            return request.MonitorFutureSeasons ? $"{seasons} + future seasons" : seasons;
+        }
+
+        public static string RequestLine(Request request, string owner, bool showOwner) =>
+            $"#{request.Id} · {Label(request.ContentType)} · {request.Label} · {Label(request.Status)}{(showOwner ? " · " + owner : string.Empty)}";
+
+        public static string QuotaLine(ContentType type, AccessState state, int used, int? limit, int days, DateTime? nextSlot) =>
+            $"• {Label(type)}: {Label(state)}" + (limit.HasValue
+                ? $", {used} of {limit} used in the last {days} days{(used >= limit && nextSlot.HasValue ? $", next slot {DiscordTimestamp(nextSlot.Value)}" : string.Empty)}"
+                : ", no limit");
+
+        public static string Label(RequestStatus status) => status.ToString().ToLowerInvariant();
+
+        public static string DiscordTimestamp(DateTime utc) => $"<t:{new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds()}:R>";
+
+        public static string InstanceNotFound(string name, ContentType type) => $"No enabled {(type == ContentType.Tv ? "Sonarr" : "Radarr")} instance named '{name}'.";
 
         public const string ApproveLabel = "Approve";
         public const string DenyLabel = "Deny";
@@ -159,6 +254,28 @@ namespace Requestarr.Core.Discord
             public const string UserMediaServer = "Link a user's media server account";
             public const string MediaServer = "Media server access";
             public const string MediaServerRequest = "Ask the admin for media server access";
+
+            public const string Queue = "Show requests waiting for approval (admin)";
+            public const string Approve = "Approve a pending request (admin)";
+            public const string Deny = "Deny a pending request (admin)";
+            public const string Request = "Request movies and TV";
+            public const string RequestMovie = "Search for a movie to request";
+            public const string RequestTv = "Search for a TV show to request";
+            public const string RequestMovieTmdb = "Request a movie by its TMDB ID";
+            public const string RequestTvTvdb = "Request a TV show by its TVDB ID";
+            public const string RequestCancel = "Cancel one of your pending requests";
+            public const string Requests = "List requests";
+            public const string Quota = "Show request limits and usage";
+            public const string MediaServerApprove = "Approve a media server access request (admin)";
+            public const string MediaServerDeny = "Deny a media server access request (admin)";
+            public const string OptionInstance = "Backend instance by name (default: the type's default)";
+            public const string OptionReason = "Reason shown to the user";
+            public const string OptionUserFilter = "Only this user (admin)";
+            public const string OptionQuery = "Title to search for";
+            public const string OptionTmdbId = "TMDB movie ID";
+            public const string OptionTvdbId = "TVDB series ID";
+            public const string OptionRequestId = "Request number";
+            public const string OptionStatus = "Request status";
 
             public const string OptionMember = "The server member";
             public const string OptionType = "Content type";

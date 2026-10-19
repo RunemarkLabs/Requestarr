@@ -258,6 +258,11 @@ namespace Requestarr.Core.Provisioning
                     }
                 }
 
+                foreach (var type in all.Where(i => i.Instance.Default).GroupBy(i => i.Type).Where(g => g.Count() > 1))
+                {
+                    yield return $"backends.{type.Key}: only one instance can be the default";
+                }
+
                 foreach (var duplicate in all.Where(i => i.Instance.Name.IsNotNullOrWhiteSpace())
                              .GroupBy(i => i.Instance.Name, StringComparer.OrdinalIgnoreCase)
                              .Where(g => g.Count() > 1))

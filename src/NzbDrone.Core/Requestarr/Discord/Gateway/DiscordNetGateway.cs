@@ -113,6 +113,18 @@ namespace Requestarr.Core.Discord.Gateway
             return role.Id;
         }
 
+        public async Task<bool> RoleExistsAsync(ulong roleId)
+        {
+            var guild = await Client.Rest.GetGuildAsync(GuildId);
+            return guild.GetRole(roleId) != null;
+        }
+
+        public async Task<ulong?> FindRoleAsync(string name)
+        {
+            var guild = await Client.Rest.GetGuildAsync(GuildId);
+            return guild.Roles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase))?.Id;
+        }
+
         public async Task DeleteRoleAsync(ulong roleId)
         {
             var guild = await Client.Rest.GetGuildAsync(GuildId);

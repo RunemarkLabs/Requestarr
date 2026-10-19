@@ -11,7 +11,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         Deferred,
         Response,
         Followup,
-        MessageUpdate
+        MessageUpdate,
+        Modal
     }
 
     public record RecordedResponse(ResponseKind Kind, InteractionReply Reply, bool Ephemeral);
@@ -59,6 +60,16 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             EnsureFirstResponse("update the message");
             _responses.Add(new RecordedResponse(ResponseKind.MessageUpdate, reply, false));
+            return Task.CompletedTask;
+        }
+
+        public InteractionModal LastModal { get; private set; }
+
+        public Task ShowModalAsync(InteractionModal modal)
+        {
+            EnsureFirstResponse("show a modal");
+            LastModal = modal;
+            _responses.Add(new RecordedResponse(ResponseKind.Modal, null, true));
             return Task.CompletedTask;
         }
 

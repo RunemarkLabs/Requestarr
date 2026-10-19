@@ -40,15 +40,13 @@ namespace Requestarr.Core.Discord
     public class CallerResolver : ICallerResolver
     {
         private readonly IDiscordGuildGateway _gateway;
-        private readonly IDiscordSettingsStore _settings;
         private readonly IGuildSetupService _guildSetup;
         private readonly IUserIdentityRepository _identities;
         private readonly IRequestarrUserRepository _users;
 
-        public CallerResolver(IDiscordGuildGateway gateway, IDiscordSettingsStore settings, IGuildSetupService guildSetup, IUserIdentityRepository identities, IRequestarrUserRepository users)
+        public CallerResolver(IDiscordGuildGateway gateway, IGuildSetupService guildSetup, IUserIdentityRepository identities, IRequestarrUserRepository users)
         {
             _gateway = gateway;
-            _settings = settings;
             _guildSetup = guildSetup;
             _identities = identities;
             _users = users;
@@ -61,7 +59,7 @@ namespace Requestarr.Core.Discord
                 return new CallerContext { RightServer = false };
             }
 
-            var adminRoleId = _settings.Current.AdminRoleId;
+            var adminRoleId = _guildSetup.AdminRoleId;
             var isAdmin = interaction.UserId == _gateway.OwnerId || (adminRoleId.HasValue && interaction.RoleIds.Contains(adminRoleId.Value));
             var config = _guildSetup.GetConfig();
 

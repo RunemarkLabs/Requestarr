@@ -9,7 +9,10 @@ namespace Requestarr.Core.Discord
         public string BotToken { get; init; }
         public ulong ApplicationId { get; init; }
         public ulong GuildId { get; init; }
+        public const string DefaultAdminRoleName = "Requestarr Admin";
+
         public ulong? AdminRoleId { get; init; }
+        public string AdminRoleName { get; init; } = DefaultAdminRoleName;
         public ulong? AdminChannelId { get; init; }
         public ulong? RequestCategoryId { get; init; }
 

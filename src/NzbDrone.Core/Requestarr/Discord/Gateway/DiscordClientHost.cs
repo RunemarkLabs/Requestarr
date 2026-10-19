@@ -336,6 +336,24 @@ namespace Requestarr.Core.Discord.Gateway
                     return Base(kind, null, component.Data.CustomId, null, component.Data.Values?.ToList());
                 }
 
+                case SocketModal modal:
+                {
+                    var fields = modal.Data.Components.ToDictionary(c => c.CustomId, c => c.Value);
+                    var mapped = Base(InteractionKind.ModalSubmit, null, modal.Data.CustomId, null, null);
+                    return new DiscordInteraction
+                    {
+                        Kind = mapped.Kind,
+                        CustomId = mapped.CustomId,
+                        Fields = fields,
+                        UserId = mapped.UserId,
+                        Username = mapped.Username,
+                        DisplayName = mapped.DisplayName,
+                        RoleIds = mapped.RoleIds,
+                        GuildId = mapped.GuildId,
+                        ChannelId = mapped.ChannelId
+                    };
+                }
+
                 default:
                     return null;
             }

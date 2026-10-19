@@ -99,4 +99,16 @@ run.LastReply.Content.Should().Contain("Dune");
 await harness.SendAsync(FakeInteraction.Button("request-approve:42").By(adminId).WithRoles(adminRoleId));
 ```
 
-See `src/NzbDrone.Core.Test/Requestarr/Discord/Harness`. Automating Discord user accounts is not allowed. End-to-end checks use the bot's real effects in the dedicated test server, plus a short manual pass in the Discord app.
+See `src/NzbDrone.Core.Test/Requestarr/Discord/Harness`. `FakeRadarr` and `FakeSonarr` stand in for the backends in the same scenarios.
+
+Two live checks are tagged `ManualTest`, so they never run in CI. Both read their keys from `docker/secrets.env`:
+
+```bash
+set -a; . docker/secrets.env; set +a
+cd _tests/net10.0
+dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveDiscordFixture" --logger "console;verbosity=detailed"
+dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveBackendFixture" --logger "console;verbosity=detailed"
+```
+
+- **Discord:** checks the admin role, command permissions, onboarding and permission read-back in the test server, then cleans up.
+- **Backends:** requests a movie and a show into the dev stack's test Radarr and Sonarr only, and reads back what they stored. The titles are left there. Automating Discord user accounts is not allowed. End-to-end checks use the bot's real effects in the dedicated test server, plus a short manual pass in the Discord app.

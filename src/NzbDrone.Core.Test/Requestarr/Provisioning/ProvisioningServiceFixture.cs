@@ -98,7 +98,8 @@ namespace Requestarr.Core.Test.Provisioning
 
             var result = Subject.Apply();
 
-            result.Deferred.Should().BeEquivalentTo("backends (sonarr x2, radarr x1)", "mediaServers");
+            result.Deferred.Should().BeEquivalentTo("mediaServers");
+            result.Applied.Should().Contain("backends (sonarr x2, radarr x1)");
             result.Applied.Should().Contain("discord (no bot token, bot not started)");
         }
 

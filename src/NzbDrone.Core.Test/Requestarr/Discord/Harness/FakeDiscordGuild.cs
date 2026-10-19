@@ -139,6 +139,11 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.FromResult(id);
         }
 
+        public Task<bool> RoleExistsAsync(ulong roleId) => Task.FromResult(Roles.ContainsKey(roleId));
+
+        public Task<ulong?> FindRoleAsync(string name) =>
+            Task.FromResult<ulong?>(Roles.Where(r => string.Equals(r.Value, name, StringComparison.OrdinalIgnoreCase)).Select(r => (ulong?)r.Key).FirstOrDefault());
+
         public Task DeleteRoleAsync(ulong roleId)
         {
             Roles.Remove(roleId);

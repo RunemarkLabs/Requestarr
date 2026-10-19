@@ -7,6 +7,7 @@ using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
+using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 
 namespace Requestarr.Core.Provisioning
@@ -25,6 +26,7 @@ namespace Requestarr.Core.Provisioning
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IUserService _userService;
         private readonly IDiscordSettingsStore _discordSettings;
+        private readonly IBackendService _backends;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -32,6 +34,7 @@ namespace Requestarr.Core.Provisioning
                                    IConfigFileProvider configFileProvider,
                                    IUserService userService,
                                    IDiscordSettingsStore discordSettings,
+                                   IBackendService backends,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -39,6 +42,7 @@ namespace Requestarr.Core.Provisioning
             _configFileProvider = configFileProvider;
             _userService = userService;
             _discordSettings = discordSettings;
+            _backends = backends;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -154,6 +158,7 @@ namespace Requestarr.Core.Provisioning
                 ApplicationId = ParseId(discord.ApplicationId) ?? 0,
                 GuildId = ParseId(discord.GuildId) ?? 0,
                 AdminRoleId = ParseId(discord.AdminRoleId),
+                AdminRoleName = string.IsNullOrWhiteSpace(discord.AdminRoleName) ? DiscordSettings.DefaultAdminRoleName : discord.AdminRoleName.Trim(),
                 AdminChannelId = ParseId(discord.AdminChannelId),
                 RequestCategoryId = ParseId(discord.RequestCategoryIds?.FirstOrDefault())
             });
@@ -163,18 +168,28 @@ namespace Requestarr.Core.Provisioning
                 applied.Add(_discordSettings.Current.IsConfigured ? "discord bot" : "discord (no bot token, bot not started)");
             }
 
+            _backends.SyncFromProvisioning(document.Backends);
+
             if (document.Backends != null)
             {
                 var counts = new (string Type, int Count)[]
                     {
                         ("sonarr", document.Backends.Sonarr.Count),
-                        ("radarr", document.Backends.Radarr.Count),
-                        ("lidarr", document.Backends.Lidarr.Count)
+                        ("radarr", document.Backends.Radarr.Count)
                     }
                     .Where(c => c.Count > 0)
-                    .Select(c => $"{c.Type} x{c.Count}");
+                    .Select(c => $"{c.Type} x{c.Count}")
+                    .ToList();
 
-                deferred.Add("backends (" + string.Join(", ", counts) + ")");
+                if (counts.Any())
+                {
+                    applied.Add("backends (" + string.Join(", ", counts) + ")");
+                }
+
+                if (document.Backends.Lidarr.Any())
+                {
+                    deferred.Add($"backends (lidarr x{document.Backends.Lidarr.Count})");
+                }
             }
 
             if (document.MediaServers != null)

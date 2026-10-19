@@ -49,6 +49,8 @@ namespace Requestarr.Core.Discord.Gateway
         Task DeleteChannelAsync(ulong channelId);
 
         Task<ulong> CreateRoleAsync(string name);
+        Task<bool> RoleExistsAsync(ulong roleId);
+        Task<ulong?> FindRoleAsync(string name);
         Task DeleteRoleAsync(ulong roleId);
         Task AddRoleToMemberAsync(ulong userId, ulong roleId);
 

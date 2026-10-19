@@ -110,6 +110,40 @@ namespace Requestarr.Core.Test.Discord
                 created.Add($"channel:{adminChannel}");
                 created.Add($"channel:{category}");
 
+                // Problem 0: the admin role exists, read back from Discord.
+                var adminRoleId = guildSetup.AdminRoleId.Value;
+                var roleGuild = await host.Client.Rest.GetGuildAsync(guild.Id);
+                var adminRoleRead = roleGuild.GetRole(adminRoleId);
+                var botRole = roleGuild.Roles.Single(r => r.Tags?.BotId == host.Client.CurrentUser.Id);
+                var botTop = botRole.Position;
+
+                // Discord ranks by position, then by ID on ties: the newer role (higher ID) is lower.
+                var belowBot = adminRoleRead.Position < botTop || (adminRoleRead.Position == botTop && adminRoleRead.Id > botRole.Id);
+                var roleCreated = Mocker.Resolve<IAuditRepository>().All().Any(a => a.Action == "discord.admin-role.create");
+                created.Insert(0, $"role:{adminRoleId}");
+                Log($"[admin-role] '{adminRoleRead.Name}' ({adminRoleRead.Id}) {(roleCreated ? "created by Requestarr" : "already existed")}; position {adminRoleRead.Position}, below the bot's role '{botRole.Name}' (position {botTop}): {belowBot}; permissions={adminRoleRead.Permissions.RawValue}");
+                adminRoleRead.Name.Should().Be(DiscordSettings.DefaultAdminRoleName);
+                belowBot.Should().BeTrue();
+
+                var adminOverwrites = await gateway.GetChannelOverwritesAsync(adminChannel);
+                Log($"[admin-role] admin channel allows the role: {adminOverwrites.Any(o => o.TargetId == adminRoleId && o.Allow.HasFlag(ChannelPermissions.ViewChannel))}");
+
+                // Problem 0b: registered commands read back from Discord.
+                foreach (var command in (await host.Client.Rest.GetGuildApplicationCommands(guild.Id)).OrderBy(c => c.Name))
+                {
+                    var perms = command.DefaultMemberPermissions.RawValue == 0 ? "none (visible to everyone)" : string.Join(", ", command.DefaultMemberPermissions.ToList());
+                    Log($"[commands] /{command.Name,-12} default member permission: {perms}");
+
+                    if (DiscordCommandDefinitions.AdminOnly.Contains(command.Name))
+                    {
+                        command.DefaultMemberPermissions.ManageGuild.Should().BeTrue(command.Name);
+                    }
+                    else
+                    {
+                        command.DefaultMemberPermissions.RawValue.Should().Be(0UL, command.Name);
+                    }
+                }
+
                 // 3. /user add on a real member, from the server owner in the admin channel
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
                 var target = members.FirstOrDefault(m => !m.IsBot && m.Id != guild.OwnerId) ?? members.First(m => m.Id == guild.OwnerId);
@@ -148,15 +182,12 @@ namespace Requestarr.Core.Test.Discord
 
                 var expected = new List<ulong> { guild.Id, userRole, host.Client.CurrentUser.Id };
 
-                if (settings.Current.AdminRoleId.HasValue)
-                {
-                    overwrites.Single(o => o.TargetId == settings.Current.AdminRoleId.Value).Allow.Should().HaveFlag(ChannelPermissions.ViewChannel);
-                    expected.Add(settings.Current.AdminRoleId.Value);
-                }
+                overwrites.Single(o => o.TargetId == adminRoleId).Allow.Should().HaveFlag(ChannelPermissions.ViewChannel);
+                expected.Add(adminRoleId);
 
                 overwrites.Select(o => o.TargetId).Should().BeEquivalentTo(expected, "nobody else may see the channel (the owner sees all channels by Discord rule)");
                 overwrites.Where(o => o.TargetId != guild.Id).Should().OnlyContain(o => o.Allow.HasFlag(ChannelPermissions.ViewChannel));
-                Log("[permissions] verified: @everyone denied; only the user's role, admin role (if set), and the bot allowed");
+                Log("[permissions] verified: @everyone denied; only the user's role, the Requestarr Admin role, and the bot allowed");
 
                 // 4. /user remove
                 var removeRun = await Send(dispatcher, FakeInteraction.SlashCommand("user remove").WithOption("member", target.Id)
@@ -172,7 +203,14 @@ namespace Requestarr.Core.Test.Discord
             finally
             {
                 // Remove everything the live test created: channels (user, admin, category) and commands.
-                foreach (var item in created.AsEnumerable().Reverse())
+                foreach (var item in created.Where(c => c.StartsWith("role:")))
+                {
+                    var roleId = ulong.Parse(item.Split(':')[1]);
+                    await gateway.DeleteRoleAsync(roleId);
+                    Log($"[cleanup] deleted role {roleId}");
+                }
+
+                foreach (var item in created.Where(c => c.StartsWith("channel:")).Reverse())
                 {
                     var id = ulong.Parse(item.Split(':')[1]);
 
@@ -195,7 +233,13 @@ namespace Requestarr.Core.Test.Discord
                     await cleanupGuild.BulkOverwriteApplicationCommandAsync(Array.Empty<global::Discord.ApplicationCommandProperties>());
                     Log("[cleanup] removed guild slash commands");
 
-                    var leftover = (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id)).Roles.Count(r => r.Name.StartsWith(ChannelLayout.UserRolePrefix));
+                    foreach (var stray in (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id)).Roles.Where(r => r.Name == DiscordSettings.DefaultAdminRoleName || r.Name.StartsWith(ChannelLayout.UserRolePrefix)))
+                    {
+                        await stray.DeleteAsync();
+                        Log($"[cleanup] deleted role {stray.Id} ({stray.Name})");
+                    }
+
+                    var leftover = (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id)).Roles.Count(r => r.Name.StartsWith(ChannelLayout.UserRolePrefix) || r.Name == DiscordSettings.DefaultAdminRoleName);
                     var leftoverChannels = (await host.Client.Rest.GetGuildAsync(cleanupGuild.Id).ContinueWith(t => t.Result.GetChannelsAsync()).Unwrap())
                         .Count(c => c.Name.StartsWith(ChannelLayout.UserChannelPrefix) || c.Name.StartsWith(ChannelLayout.ArchivedPrefix) ||
                                     c.Name == ChannelLayout.AdminChannelName || c.Name == ChannelLayout.RequestCategoryName);
