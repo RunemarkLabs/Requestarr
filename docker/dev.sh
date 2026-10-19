@@ -5,6 +5,8 @@
 #   docker/dev.sh check                 health and status checks for Requestarr and the test backends
 #   docker/dev.sh down                  stop the stack (data kept)
 #   docker/dev.sh reset-test-backends   wipe the Sonarr/Radarr test instances back to empty and restart them
+#   docker/dev.sh reset-uat             clean slate: stop Requestarr, remove its Discord channels and user roles,
+#                                       wipe its database and the test backends (run `up` afterwards)
 #   docker/dev.sh init                  create docker/secrets.env from the template (run by `up`)
 #   docker/dev.sh logs [service]        follow logs
 #
@@ -104,6 +106,15 @@ reset_test_backends() {
     echo "Test backends reset to empty"
 }
 
+reset_uat() {
+    load_secrets
+    compose rm -sf requestarr
+    python -I "$DIR/reset-discord.py"
+    docker volume rm "requestarr-dev_requestarr-config" 2>/dev/null || true
+    reset_test_backends
+    echo "UAT reset: Discord test server, Requestarr database and test backends are clean. Run docker/dev.sh up."
+}
+
 case "${1:-}" in
     init) init ;;
     up)
@@ -114,9 +125,10 @@ case "${1:-}" in
     check) check ;;
     down) compose down ;;
     reset-test-backends) reset_test_backends ;;
+    reset-uat) reset_uat ;;
     logs) shift; compose logs -f "$@" ;;
     *)
-        sed -n '2,11p' "$0"
+        sed -n '2,13p' "$0"
         exit 1
         ;;
 esac
