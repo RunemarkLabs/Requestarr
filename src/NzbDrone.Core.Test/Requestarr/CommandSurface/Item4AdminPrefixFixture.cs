@@ -23,7 +23,7 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToDictionary(c => c.Name.Value);
 
-            commands.Keys.Should().BeEquivalentTo("request", "admin");
+            commands.Keys.Should().BeEquivalentTo("request", "help", "admin");
             commands["admin"].DefaultMemberPermissions.Value.Should().Be(GuildPermission.ManageGuild);
             commands["request"].DefaultMemberPermissions.IsSpecified.Should().BeFalse();
             commands["request"].Options.Value.Select(o => o.Name).Should().Equal("type", "query");
@@ -52,7 +52,7 @@ namespace Requestarr.Core.Test.CommandSurface
             var expected = new[]
             {
                 "user add", "user remove", "user suspend", "user unsuspend", "user access", "user quota", "user info", "user mediaserver",
-                "queue", "approve", "deny", "mediaserver approve", "mediaserver deny"
+                "help", "queue", "approve", "deny", "mediaserver approve", "mediaserver deny"
             };
 
             paths.Should().BeEquivalentTo(expected);

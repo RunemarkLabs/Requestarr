@@ -26,6 +26,10 @@ discord:
   # (the server owner always is). Optionally use an existing role instead:
   adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}
 
+# Optional: cast from The Movie Database (leave TMDB_API_KEY unset to skip).
+tmdb:
+  apiKey: ${TMDB_API_KEY:-}
+
 # Any number of instances per type; names must be unique.
 backends:
   sonarr:

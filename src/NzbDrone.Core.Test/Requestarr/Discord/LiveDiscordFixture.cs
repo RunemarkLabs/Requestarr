@@ -151,11 +151,11 @@ namespace Requestarr.Core.Test.Discord
                 var adminOverwrites = await gateway.GetChannelOverwritesAsync(adminChannel);
                 Log($"[admin-role] admin channel allows the role: {adminOverwrites.Any(o => o.TargetId == adminRoleId && o.Allow.HasFlag(ChannelPermissions.ViewChannel))}");
 
-                // Registered commands read back from Discord: exactly /request (everyone) and /admin (Manage Server).
+                // Registered commands read back from Discord: exactly /request and /help (everyone) and /admin (Manage Server).
                 var registered = (await host.Client.Rest.GetGuildApplicationCommands(guild.Id)).OrderBy(c => c.Name).ToList();
                 var global = await host.Client.Rest.GetGlobalApplicationCommands();
                 Log($"[commands] registered on the server: {string.Join(", ", registered.Select(c => "/" + c.Name))}; global: {global.Count}");
-                registered.Select(c => c.Name).Should().BeEquivalentTo("admin", "request");
+                registered.Select(c => c.Name).Should().BeEquivalentTo("admin", "help", "request");
                 global.Should().BeEmpty();
 
                 foreach (var command in registered)

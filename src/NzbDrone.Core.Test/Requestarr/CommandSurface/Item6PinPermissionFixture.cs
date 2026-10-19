@@ -78,7 +78,7 @@ namespace Requestarr.Core.Test.CommandSurface
             UserFor(Moderator).PanelMessageId.Should().NotBeNull();
 
             (await Harness.SendAsync(PanelButton(Alice, PanelRoutes.MyLimits))).LastReply.Content.Should().Contain("Movies");
-            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Be(DiscordText.RequestPending("Dune (2021)", 1));
+            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Dune (2021)", 1));
             ExceptionVerification.IgnoreWarns();
         }
 

@@ -48,10 +48,6 @@ namespace Requestarr.Core.Discord
         public static string UserAdded(string name, ulong channelId, IEnumerable<UserMediaAccess> access) =>
             $"Added {name}. Their request channel is <#{channelId}>.\n{FormatAccess(access)}";
 
-        public static string Welcome(ulong discordUserId, IEnumerable<UserMediaAccess> access) =>
-            $"Welcome <@{discordUserId}>! This is your private request channel. Only you and the admin can see it.\n" +
-            $"What you can request:\n{FormatAccess(access)}";
-
         public static string UserRemovedDone(string name) => $"Removed {name}. Their channel is archived and their request history is kept.";
 
         public static string UserSuspendedDone(string name) => $"Suspended {name}. Their channel is locked.";
@@ -123,10 +119,207 @@ namespace Requestarr.Core.Discord
         public const string RequestLabel = "Request";
         public const string FollowLabel = "Follow request";
         public const string SearchPlaceholder = "Pick a title";
-        public const string SeasonsPlaceholder = "Pick seasons to request";
+        public const string SeasonsPlaceholder = "Pick the seasons you want";
         public const string AllSeasons = "All seasons";
-        public const string FutureSeasons = "Future seasons";
-        public const string FutureSeasonsHint = "Keep monitoring new seasons as they air";
+        public const string ChooseSeasonsLabel = "Choose seasons";
+        public const string ChooseSeasonsPrompt = "Pick the seasons you want. Add \"Also new seasons as they air\" to keep getting new ones.";
+        public const string Specials = "Specials";
+        public const string SpecialsHint = "Season 0: extras and one-off episodes";
+        public const string AlsoFutureSeasons = "Also new seasons as they air";
+        public const string AlsoFutureSeasonsHint = "Sonarr monitors seasons that haven't aired yet";
+        public const string BackLabel = "Back";
+        public const string BackToResults = "Back to results";
+        public const string InLibraryShort = "In library";
+        public const string Dot = " · ";
+
+        // Steps of a request block, shown after its header.
+        public const string StepDetails = "details";
+        public const string StepSeasons = "choose seasons";
+        public const string StepConfirm = "confirm";
+        public const string StepStopped = "stopped";
+
+        // Final status of a request block.
+        public const string FinalSent = "✅ **Request sent**";
+        public const string FinalPending = "⏳ **Waiting for approval**";
+        public const string FinalFollowing = "📌 **Following**";
+        public const string FinalAvailable = "✅ **Already available**";
+        public const string FinalFailed = "⚠️ **Couldn't be added**";
+        public const string FinalRefused = "⛔ **Not requested**";
+        public const string FinalCancelled = "🚫 **Cancelled**";
+
+        // The Movie Database attribution, wherever its data appears.
+        public const string TmdbAttribution = "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB.";
+        public const string TmdbSubtext = "-# " + TmdbAttribution;
+
+        // Card fields
+        public const string FieldGenres = "Genres";
+        public const string FieldRating = "Rating";
+        public const string FieldCertification = "Rated";
+        public const string FieldRuntime = "Runtime";
+        public const string FieldNetwork = "Network";
+        public const string FieldStudio = "Studio";
+        public const string FieldStatus = "Status";
+        public const string FieldSeasons = "Seasons";
+        public const string FieldEpisodes = "Episodes";
+        public const string FieldAired = "Aired";
+        public const string FieldReleased = "Released";
+        public const string FieldCast = "Cast";
+        public const string FieldGoesTo = "Goes to";
+
+        public static string BlockHeader(ContentType type, string step) => $"{(type == ContentType.Tv ? "📺" : "🎬")} **{Label(type)} request**{Dot}{step}";
+
+        public static string SeasonLabel(int season) => $"Season {season}";
+
+        public static string YouChose(string choice) => $"You chose **{choice}**.\nPress **Request** to send it, or **Back** to change it.";
+
+        public static string SeasonsLine(string choice) => $"Seasons: {choice}.";
+
+        // Plain words for a season choice, so the confirmation leaves no guesswork.
+        public static string SeasonChoiceText(SeasonChoice choice, IReadOnlyCollection<int> available)
+        {
+            if (choice.All)
+            {
+                return available.Any()
+                    ? $"all seasons ({Ranges(available)}) and new seasons as they air, without specials"
+                    : "all seasons, including new seasons as they air, without specials";
+            }
+
+            return SeasonList(choice.Seasons, choice.Future);
+        }
+
+        public static string SeasonList(IReadOnlyCollection<int> seasons, bool future)
+        {
+            var regular = seasons.Where(s => s > 0).Distinct().OrderBy(s => s).ToList();
+            var parts = new List<string>();
+
+            if (seasons.Contains(0))
+            {
+                parts.Add("specials");
+            }
+
+            if (regular.Any())
+            {
+                parts.Add($"{(regular.Count == 1 ? "season" : "seasons")} {Ranges(regular)}");
+            }
+
+            if (!parts.Any())
+            {
+                return future ? "only new seasons as they air (no existing seasons)" : "no seasons";
+            }
+
+            var list = string.Join(" and ", parts);
+
+            return future ? $"{list}, plus new seasons as they air" : $"{list} only; new seasons won't be added";
+        }
+
+        // 1, 2, 3, 5 -> "1–3 and 5"
+        public static string Ranges(IEnumerable<int> numbers)
+        {
+            var sorted = numbers.Distinct().OrderBy(n => n).ToList();
+            var ranges = new List<string>();
+
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var start = sorted[i];
+
+                while (i + 1 < sorted.Count && sorted[i + 1] == sorted[i] + 1)
+                {
+                    i++;
+                }
+
+                ranges.Add(start == sorted[i] ? $"{start}" : $"{start}–{sorted[i]}");
+            }
+
+            return ranges.Count <= 1 ? string.Join(string.Empty, ranges) : string.Join(", ", ranges.Take(ranges.Count - 1)) + " and " + ranges.Last();
+        }
+
+        public static string Rating(Backends.MediaLookupResult item)
+        {
+            if (!item.Ratings.Any())
+            {
+                return null;
+            }
+
+            if (item.Ratings.Count == 1 && item.Ratings[0].Source == "Rating")
+            {
+                var value = item.Ratings[0].Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                return item.Votes.HasValue ? $"{value} ({item.Votes.Value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} votes)" : value;
+            }
+
+            return string.Join(Dot, item.Ratings.Select(r => r.Source == "Rotten Tomatoes"
+                ? $"{r.Source} {r.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}%"
+                : $"{r.Source} {r.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}"));
+        }
+
+        public static string Runtime(int minutes, bool perEpisode)
+        {
+            var text = minutes >= 60 ? $"{minutes / 60} h{(minutes % 60 > 0 ? $" {minutes % 60} min" : string.Empty)}" : $"{minutes} min";
+            return perEpisode ? $"{text} per episode" : text;
+        }
+
+        public static string SeasonCount(int seasons, bool specials)
+        {
+            if (seasons == 0)
+            {
+                return specials ? "specials only" : null;
+            }
+
+            return specials ? $"{seasons} + specials" : seasons.ToString();
+        }
+
+        public static string Aired(DateTime? first, DateTime? last, bool continuing)
+        {
+            var lines = new List<string>();
+
+            if (first.HasValue)
+            {
+                lines.Add($"First {Day(first.Value)}");
+            }
+
+            if (last.HasValue && !continuing)
+            {
+                lines.Add($"Last {Day(last.Value)}");
+            }
+
+            return lines.Any() ? string.Join("\n", lines) : null;
+        }
+
+        public static string Released(DateTime? cinemas, DateTime? digital, DateTime? physical)
+        {
+            var lines = new List<string>();
+
+            if (cinemas.HasValue)
+            {
+                lines.Add($"In cinemas {Day(cinemas.Value)}");
+            }
+
+            if (digital.HasValue)
+            {
+                lines.Add($"Digital {Day(digital.Value)}");
+            }
+
+            if (physical.HasValue)
+            {
+                lines.Add($"Physical {Day(physical.Value)}");
+            }
+
+            return lines.Any() ? string.Join("\n", lines) : null;
+        }
+
+        public static string Day(DateTime date) => date.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+        // "inCinemas" -> "In cinemas", "continuing" -> "Continuing"
+        public static string Capitalize(string status)
+        {
+            if (string.IsNullOrWhiteSpace(status) || status == "deleted" || status == "tba")
+            {
+                return null;
+            }
+
+            var words = System.Text.RegularExpressions.Regex.Replace(status, "(?<=[a-z])([A-Z])", " $1").ToLowerInvariant();
+            return char.ToUpperInvariant(words[0]) + words.Substring(1);
+        }
+
         public const string DenyReasonTitle = "Deny request";
         public const string DenyReasonLabel = "Reason (shown to the user)";
         public const string NoReason = "no reason given";
@@ -140,7 +333,8 @@ namespace Requestarr.Core.Discord
 
         public static string BackendUnavailable(string instance) => $"{instance} isn't reachable right now. Try again later.";
 
-        public static string SearchResults(ContentType type, string query, int count) => $"{Label(type)}: {count} result{(count == 1 ? string.Empty : "s")} for \"{query}\". Pick one to see details.";
+        public static string SearchResults(ContentType type, string query, int count) =>
+            BlockHeader(type, $"{count} result{(count == 1 ? string.Empty : "s")} for \"{query}\"") + "\nPick one to see the details.";
 
         public static string StateRequested(string owner, RequestStatus status, int id) => $"📌 Already requested by {owner} (#{id}, {Label(status)}). You can follow it to be notified.";
 
@@ -183,11 +377,7 @@ namespace Requestarr.Core.Discord
 
         public static string AdminDenied(Request request) => $"Denied request #{request.Id} for {request.Label}.";
 
-        public static string Seasons(Request request)
-        {
-            var seasons = request.Seasons.Any() ? string.Join(", ", request.Seasons.OrderBy(s => s)) : "none";
-            return request.MonitorFutureSeasons ? $"{seasons} + future seasons" : seasons;
-        }
+        public static string Seasons(Request request) => SeasonList(request.Seasons, request.MonitorFutureSeasons);
 
         public static string RequestLine(Request request, string owner, bool showOwner) =>
             $"#{request.Id} · {Label(request.ContentType)} · {request.Label} · {Label(request.Status)}{(showOwner ? " · " + owner : string.Empty)}";
@@ -207,9 +397,10 @@ namespace Requestarr.Core.Discord
         public const string PanelMyRequests = "My requests";
         public const string PanelMyLimits = "My limits";
         public const string PanelLinkPlex = "Link Plex";
+        public const string PanelHelp = "Help";
         public const string PanelPendingQueue = "Pending queue";
         public const string PanelUsers = "Users";
-        public const string AdminPanel = "**Requestarr admin**\nRun `/admin` commands here. Approval cards for requests and media server access appear in this channel.";
+        public const string AdminPanel = "**Requestarr admin**\nApproval cards for requests and media server access appear in this channel.";
         public const string LinkPlexTitle = "Link your Plex account";
         public const string LinkPlexLabel = "Your Plex username or email";
         public const string CancelLabel = "Cancel request";
@@ -220,12 +411,14 @@ namespace Requestarr.Core.Discord
         public const string TmdbIsForMovies = "tmdb: IDs are for movies. Pick the Movies type, or use tvdb: for TV.";
         public const string TvdbIsForTv = "tvdb: IDs are for TV. Pick the TV type, or use tmdb: for movies.";
 
-        public static string UserPanel(string name, IEnumerable<UserMediaAccess> allowed)
+        // The one pinned message in a user's channel: welcome, real access, buttons. No how-to text.
+        public static string UserPanel(string discordUserId, string name, IEnumerable<UserMediaAccess> allowed)
         {
             var list = allowed.OrderBy(a => a.ContentType).Select(a => $"{Label(a.ContentType)} ({Label(a.State)})").ToList();
             var can = list.Any() ? "You can request: " + string.Join(", ", list) + "." : NothingToRequest;
+            var hello = discordUserId != null ? $"Welcome <@{discordUserId}>! " : string.Empty;
 
-            return $"**Requestarr: {name}'s requests**\n{can}\nType `/request`, pick a type, and search by title, or by ID with `tmdb:603` / `tvdb:12345`.";
+            return $"**Requestarr · {name}**\n{hello}This is your private request channel; only you and the admins can see it.\n{can}";
         }
 
         public static string UserLine(RequestarrUser user, IEnumerable<UserMediaAccess> access) =>
@@ -276,6 +469,8 @@ namespace Requestarr.Core.Discord
             public const string AdminUser = "Manage Requestarr users";
             public const string AdminMediaServer = "Media server access requests";
             public const string RequestOne = "Request a movie or TV show";
+            public const string Help = "How to use Requestarr";
+            public const string AdminHelp = "Help for admins";
             public const string OptionRequestType = "What to request (only types you have access to)";
             public const string OptionRequestQuery = "Title to search for, or tmdb:603 / tvdb:12345";
             public const string User = "Manage Requestarr users (admin)";

@@ -9,6 +9,7 @@ using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
+using Requestarr.Core.Metadata;
 
 namespace Requestarr.Core.Provisioning
 {
@@ -27,6 +28,7 @@ namespace Requestarr.Core.Provisioning
         private readonly IUserService _userService;
         private readonly IDiscordSettingsStore _discordSettings;
         private readonly IBackendService _backends;
+        private readonly ITmdbSettingsStore _tmdb;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -35,6 +37,7 @@ namespace Requestarr.Core.Provisioning
                                    IUserService userService,
                                    IDiscordSettingsStore discordSettings,
                                    IBackendService backends,
+                                   ITmdbSettingsStore tmdb,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -43,6 +46,7 @@ namespace Requestarr.Core.Provisioning
             _userService = userService;
             _discordSettings = discordSettings;
             _backends = backends;
+            _tmdb = tmdb;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -166,6 +170,13 @@ namespace Requestarr.Core.Provisioning
             if (discord != null)
             {
                 applied.Add(_discordSettings.Current.IsConfigured ? "discord bot" : "discord (no bot token, bot not started)");
+            }
+
+            _tmdb.Set(document.Tmdb?.ApiKey);
+
+            if (_tmdb.Enabled)
+            {
+                applied.Add("The Movie Database key (cast enabled)");
             }
 
             _backends.SyncFromProvisioning(document.Backends);

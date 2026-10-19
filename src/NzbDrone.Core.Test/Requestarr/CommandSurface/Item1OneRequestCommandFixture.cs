@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using NUnit.Framework;
 using Requestarr.Core.Discord;
+using Requestarr.Core.Requests;
 using Requestarr.Core.Test.Discord.Harness;
 using Requestarr.Core.Test.Requests;
 using Requestarr.Core.Users;
@@ -73,7 +74,7 @@ namespace Requestarr.Core.Test.CommandSurface
         [Test]
         public async Task request_by_tmdb_and_tvdb_id()
         {
-            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:603"))).LastReply.Content.Should().Be(DiscordText.TitleNotFound);
+            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:603"))).LastReply.Content.Should().Contain(DiscordText.TitleNotFound);
             (await Harness.SendAsync(Search(Alice, "movie", $"tmdb:{Dune}"))).LastReply.Embeds.Single().Title.Should().Be("Dune (2021)");
             (await Harness.SendAsync(Search(Alice, "tv", $"TVDB: {Severance}"))).LastReply.Embeds.Single().Title.Should().Be("Severance (2022)");
         }
@@ -81,8 +82,8 @@ namespace Requestarr.Core.Test.CommandSurface
         [Test]
         public async Task id_of_the_wrong_kind_is_explained()
         {
-            (await Harness.SendAsync(Search(Alice, "tv", $"tmdb:{Dune}"))).LastReply.Content.Should().Be(DiscordText.TmdbIsForMovies);
-            (await Harness.SendAsync(Search(Alice, "movie", $"tvdb:{Severance}"))).LastReply.Content.Should().Be(DiscordText.TvdbIsForTv);
+            (await Harness.SendAsync(Search(Alice, "tv", $"tmdb:{Dune}"))).LastReply.Content.Should().Contain(DiscordText.TmdbIsForMovies);
+            (await Harness.SendAsync(Search(Alice, "movie", $"tvdb:{Severance}"))).LastReply.Content.Should().Contain(DiscordText.TvdbIsForTv);
         }
 
         [Test]
@@ -90,19 +91,20 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             await SetAccess(Alice, "movie", "off");
 
-            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Be(DiscordText.AccessOff(ContentType.Movie));
-            (await Harness.SendAsync(Search(Alice, "music", "x"))).LastReply.Content.Should().Be(DiscordText.MusicNotYet);
-            (await Harness.SendAsync(Search(Alice, "books", "x"))).LastReply.Content.Should().Be(DiscordText.ChooseType);
+            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Contain(DiscordText.AccessOff(ContentType.Movie));
+            (await Harness.SendAsync(Search(Alice, "music", "x"))).LastReply.Content.Should().Contain(DiscordText.MusicNotYet);
+            (await Harness.SendAsync(Search(Alice, "books", "x"))).LastReply.Content.Should().Contain(DiscordText.ChooseType);
         }
 
         [Test]
         public async Task full_request_flow_still_works_behind_the_new_command()
         {
             var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{Severance}"))).LastReply;
-            card.SelectMenu.CustomId.Should().Be($"req-seasons:{Severance}");
+            card.Buttons.Select(b => b.CustomId).Should().Contain($"req-tv-choose:{Severance}");
 
-            (await RequestTv(Alice, Severance, "s1", "future")).LastReply.Content.Should().Be(DiscordText.RequestPending("Severance (2022)", 1));
-            (await RequestTv(Bob, Severance, "s1")).LastReply.Content.Should().Be(DiscordText.Subscribed("Severance (2022)", "alice", 1));
+            (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.TvConfirm}:{Severance}:1f").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice))))
+                .LastReply.Content.Should().Contain(DiscordText.RequestPending("Severance (2022)", 1));
+            (await RequestTv(Bob, Severance, "s1")).LastReply.Content.Should().Contain(DiscordText.Subscribed("Severance (2022)", "alice", 1));
             (await AdminButton("req-approve:1")).LastReply.Content.Should().Contain("approved");
             Sonarr.Adds.Single().MonitorFuture.Should().BeTrue();
         }

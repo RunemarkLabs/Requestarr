@@ -159,7 +159,7 @@ namespace Requestarr.Core.Users
 
             var rows = SaveAccess(user.Id, access);
 
-            await _gateway.SendMessageAsync(channelId.Value, new InteractionReply { Content = DiscordText.Welcome(discordUserId, rows) });
+            // The pinned panel is the welcome: one message, kept in step with the user's access.
             await _panels.RefreshUserPanelAsync(user);
 
             var accessSummary = string.Join(", ", rows.Where(r => ContentTypes.IsOffered(r.ContentType)).Select(r => $"{r.ContentType}={r.State}"));

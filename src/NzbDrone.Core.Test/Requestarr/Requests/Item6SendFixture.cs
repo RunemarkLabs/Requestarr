@@ -55,7 +55,7 @@ namespace Requestarr.Core.Test.Requests
 
             LastRequest.Status.Should().Be(RequestStatus.Failed);
             LastRequest.DecisionReason.Should().Contain("validation failed");
-            run.LastReply.Content.Should().StartWith("Request #1 for Dune (2021) couldn't be added");
+            run.LastReply.Content.Should().Contain("Request #1 for Dune (2021) couldn't be added");
             ExceptionVerification.ExpectedErrors(1);
         }
 
@@ -64,7 +64,7 @@ namespace Requestarr.Core.Test.Requests
         {
             var run = await Harness.SendAsync(FakeInteraction.Button($"req-make:movie:{DuneTwo}").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
-            run.LastReply.Content.Should().Be(DiscordText.RequestSent("Dune: Part Two (2024)", 1, "Radarr"));
+            run.LastReply.Content.Should().Contain(DiscordText.RequestSent("Dune: Part Two (2024)", 1, "Radarr"));
             UserFor(FakeDiscordGuild.Owner).PrivateChannelId.Should().BeNull();
             LastRequest.OwnerUserId.Should().Be(UserFor(FakeDiscordGuild.Owner).Id);
         }

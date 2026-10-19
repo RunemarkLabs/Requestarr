@@ -19,6 +19,10 @@ namespace Requestarr.Core.Discord.Interactions
         // Components only: replace the message the component belongs to.
         Task UpdateMessageAsync(InteractionReply reply);
 
+        // After DeferAsync: replace the deferred response (commands) or the message the component
+        // belongs to (components), so one request stays one message that changes in place.
+        Task EditAsync(InteractionReply reply);
+
         // Must be the first response: opens a form (for example a deny reason).
         Task ShowModalAsync(InteractionModal modal);
 

@@ -17,8 +17,31 @@ namespace Requestarr.Core.Discord
         public const string LinkPlex = "panel-plex";
         public const string LinkPlexForm = "panel-plex-form";
         public const string PlexUsernameField = "username";
+        public const string Help = "panel-help";
         public const string AdminQueue = "adminpanel-queue";
         public const string AdminUsers = "adminpanel-users";
+        public const string AdminHelp = "adminpanel-help";
+    }
+
+    public record PanelButton(string Route, string Label, ButtonStyle Style);
+
+    // Every panel button, once: the panels and the help topics are both built from these.
+    public static class PanelButtons
+    {
+        public static readonly PanelButton MyRequests = new(PanelRoutes.MyRequests, DiscordText.PanelMyRequests, ButtonStyle.Primary);
+        public static readonly PanelButton MyLimits = new(PanelRoutes.MyLimits, DiscordText.PanelMyLimits, ButtonStyle.Secondary);
+        public static readonly PanelButton LinkPlex = new(PanelRoutes.LinkPlex, DiscordText.PanelLinkPlex, ButtonStyle.Success);
+        public static readonly PanelButton Help = new(PanelRoutes.Help, DiscordText.PanelHelp, ButtonStyle.Secondary);
+        public static readonly PanelButton PendingQueue = new(PanelRoutes.AdminQueue, DiscordText.PanelPendingQueue, ButtonStyle.Primary);
+        public static readonly PanelButton Users = new(PanelRoutes.AdminUsers, DiscordText.PanelUsers, ButtonStyle.Secondary);
+        public static readonly PanelButton AdminHelp = new(PanelRoutes.AdminHelp, DiscordText.PanelHelp, ButtonStyle.Secondary);
+
+        public static readonly IReadOnlyList<PanelButton> User = new[] { MyRequests, MyLimits, LinkPlex, Help };
+        public static readonly IReadOnlyList<PanelButton> Admin = new[] { PendingQueue, Users, AdminHelp };
+
+        public static PanelButton ByRoute(string route) => User.Concat(Admin).Single(b => b.Route == route);
+
+        public static InteractionButton ToButton(this PanelButton button) => new() { CustomId = button.Route, Label = button.Label, Style = button.Style };
     }
 
     public interface IPanelService
@@ -37,6 +60,7 @@ namespace Requestarr.Core.Discord
         private readonly IGuildSetupService _guildSetup;
         private readonly IDiscordGuildConfigRepository _configs;
         private readonly IRequestarrUserRepository _users;
+        private readonly IUserIdentityRepository _identities;
         private readonly IUserMediaAccessRepository _access;
         private readonly IMediaServerAccountRepository _accounts;
         private readonly Logger _logger;
@@ -45,6 +69,7 @@ namespace Requestarr.Core.Discord
                             IGuildSetupService guildSetup,
                             IDiscordGuildConfigRepository configs,
                             IRequestarrUserRepository users,
+                            IUserIdentityRepository identities,
                             IUserMediaAccessRepository access,
                             IMediaServerAccountRepository accounts,
                             Logger logger)
@@ -53,6 +78,7 @@ namespace Requestarr.Core.Discord
             _guildSetup = guildSetup;
             _configs = configs;
             _users = users;
+            _identities = identities;
             _access = access;
             _accounts = accounts;
             _logger = logger;
@@ -105,31 +131,19 @@ namespace Requestarr.Core.Discord
         public InteractionReply UserPanel(RequestarrUser user)
         {
             var access = _access.GetForUser(user.Id);
-            var allowed = access.Where(a => ContentTypes.IsOffered(a.ContentType) && a.State != AccessState.Off && a.ContentType != ContentType.Music).ToList();
+            var allowed = access.Where(a => ContentTypes.Requestable.Contains(a.ContentType) && a.State != AccessState.Off).ToList();
             var linked = _accounts.GetForUser(user.Id).Any();
+            var discordId = _identities.GetForUser(user.Id).FirstOrDefault(i => i.Provider == UserIdentity.DiscordProvider)?.ExternalId;
 
-            var buttons = new List<InteractionButton>
-            {
-                new() { CustomId = PanelRoutes.MyRequests, Label = DiscordText.PanelMyRequests, Style = ButtonStyle.Primary },
-                new() { CustomId = PanelRoutes.MyLimits, Label = DiscordText.PanelMyLimits, Style = ButtonStyle.Secondary }
-            };
+            var buttons = PanelButtons.User.Where(b => b != PanelButtons.LinkPlex || !linked).Select(b => b.ToButton()).ToList();
 
-            if (!linked)
-            {
-                buttons.Add(new InteractionButton { CustomId = PanelRoutes.LinkPlex, Label = DiscordText.PanelLinkPlex, Style = ButtonStyle.Success });
-            }
-
-            return new InteractionReply { Content = DiscordText.UserPanel(user.DisplayName, allowed), Buttons = buttons };
+            return new InteractionReply { Content = DiscordText.UserPanel(discordId, user.DisplayName, allowed), Buttons = buttons };
         }
 
         public static InteractionReply AdminPanel() => new()
         {
             Content = DiscordText.AdminPanel,
-            Buttons = new List<InteractionButton>
-            {
-                new() { CustomId = PanelRoutes.AdminQueue, Label = DiscordText.PanelPendingQueue, Style = ButtonStyle.Primary },
-                new() { CustomId = PanelRoutes.AdminUsers, Label = DiscordText.PanelUsers, Style = ButtonStyle.Secondary }
-            }
+            Buttons = PanelButtons.Admin.Select(b => b.ToButton()).ToList()
         };
 
         private async Task<ulong?> Upsert(ulong channelId, string storedId, InteractionReply panel)

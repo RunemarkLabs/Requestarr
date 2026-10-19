@@ -8,6 +8,7 @@ namespace Requestarr.Core.Discord
         public const int ModalTitleLength = 45;
         public const int ChannelNameLength = 100;
         public const int RoleNameLength = 100;
+        public const int CustomIdLength = 100;
 
         // Discord allows 50 channels per category and 250 roles per server. Requestarr stops
         // adding users a few roles short so the admin can still create roles by hand.

@@ -67,8 +67,10 @@ namespace Requestarr.Core.Test.Discord
         {
             await AddUser(Alice, music: "approval");
 
-            var welcome = ChannelFor(Alice).Messages.First().Content;
-            welcome.Should().Contain($"<@{Alice}>").And.Contain("Music: needs approval").And.NotContain("Comics");
+            // One message: the pinned panel is the welcome, and it never lists music before Lidarr exists.
+            ChannelFor(Alice).Messages.Should().ContainSingle();
+            var welcome = ChannelFor(Alice).PinnedMessage.Content;
+            welcome.Should().Contain($"<@{Alice}>").And.Contain("Movies (needs approval)").And.NotContain("Music").And.NotContain("Comics");
         }
 
         [Test]

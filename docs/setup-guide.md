@@ -256,18 +256,50 @@ The assignment is per user and per content type. Run `/admin user info` to see i
 ### 4.5 What happens to a request
 
 1. The user types `/request` in their channel and picks a type. The type list only shows types they have access to. Then they enter a title, or an ID such as `tmdb:603` (movies) or `tvdb:12345` (TV). Results come from their instance's own search, so no extra API keys are needed.
-2. They pick a title and see a card with the poster and overview. The card says if the title is:
+   The whole request stays in **one message** that changes in place: results, details, seasons, confirmation, final status. Each request is its own message, so separate requests don't run together.
+2. Each result line shows the year, the network or studio, and either the top three cast (with The Movie Database key, see 4.6) or the genre. That helps tell apart titles with the same name.
+3. They pick a title and see its card: a large poster and everything Sonarr or Radarr knows about it. That covers genres, rating, age rating, runtime, network or studio, status, seasons, air or release dates, and the overview. The card also shows the top cast and episode count when The Movie Database key is set, and which instance it goes to. The card says if the title is:
    - already in the library
    - already requested by someone, in which case they can follow that request instead of making a second one
    - previously denied, and why
-3. For TV, they pick specific seasons, all seasons, and optionally **Future seasons**, which keeps monitoring new seasons as they air.
-4. What happens next depends on their access level:
+4. For TV, they choose one of two paths:
+   - **All seasons:** every season now, and new seasons as they air (Sonarr's monitor-new-seasons setting). Specials (season 0) are not included.
+   - **Choose seasons:** pick individual seasons, including **Specials** if they want them, and optionally **Also new seasons as they air**.
+
+   Before anything is sent, Requestarr restates the choice in plain words, for example "season 2 only; new seasons won't be added". They then press **Request** or **Back**.
+5. What happens next depends on their access level:
    - **off:** refused
    - **needs approval:** an Approve / Deny card appears in `#requestarr-admin`; Deny asks for a reason
    - **auto-approve:** sent straight away
-5. When a request is approved, Requestarr adds it to the instance with the instance's quality profile, root folder and series type, monitored, and starts a search. The user is told the outcome in their channel.
+6. The message ends with a clear status: **Request sent**, **Waiting for approval** (with a Cancel button), **Following**, **Already available**, or **Not requested** with the reason.
+7. When a request is approved, Requestarr adds it to the instance with the instance's quality profile, root folder and series type, monitored, and starts a search. The user is told the outcome in their channel.
 
 Quotas (section 5.6) count requests a user makes over a rolling window. Following someone else's request doesn't count. When a user hits the limit, Requestarr tells them when their next request frees up.
+
+### 4.6 Cast from The Movie Database (optional)
+
+Sonarr and Radarr don't return cast. With a free The Movie Database key, Requestarr adds the top three cast to each result line and the card, and the episode count to TV cards. Without a key everything still works: result lines show the genre instead, and nothing errors.
+
+1. Create an account at themoviedb.org, then open **Settings → API** and request a developer key (personal use is free).
+2. Copy the **API Read Access Token** (the long one). The shorter v3 API key also works.
+3. Add it to `secrets.env`:
+
+   ```
+   TMDB_API_KEY=your-token
+   ```
+
+4. Reference it in `provisioning.yml`:
+
+   ```yaml
+   tmdb:
+     apiKey: ${TMDB_API_KEY:-}
+   ```
+
+5. Restart Requestarr.
+
+The key is kept in memory only. It is never written to the database or logs. Cast lookups are cached for 12 hours and give up after a few seconds, so a slow or unavailable The Movie Database never holds up a request.
+
+**Attribution:** wherever The Movie Database data appears, Requestarr says so: "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB." That note is under the result list and in the card footer. If you use a key, The Movie Database's terms of use apply to you.
 
 ## 5. Admin setup in Discord
 
@@ -306,12 +338,15 @@ Requestarr checks admin status itself on every command and button click. What Di
 
 ### 5.3 Who sees which commands
 
-Requestarr registers exactly two commands:
+Requestarr registers exactly three commands:
 
 - **`/request`** is visible to everyone. Its type list is filled in for each person from their own access, so someone without TV access never sees TV.
-- **`/admin`** holds every admin command: `/admin user …`, `/admin queue`, `/admin approve`, `/admin deny` and `/admin mediaserver …`. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
+- **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
+- **`/admin`** holds every admin command: `/admin user …`, `/admin queue`, `/admin approve`, `/admin deny`, `/admin mediaserver …` and `/admin help`. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
 Everything else users need is a button: on their pinned panel (5.5) or on their request cards.
+
+User help and admin help are separate. Admin help has its own topics, plus a **What users see** branch so you can walk someone through their help. User help never shows admin topics, even to an admin. Both are built from the same definitions as the commands and buttons, so they can't describe something that no longer exists.
 
 **Optional:** co-admins who hold the Requestarr Admin role but not Manage Server won't see `/admin`. You can also keep `/admin` out of every channel except the admin channel. As the server owner:
 
@@ -331,10 +366,11 @@ On first start, Requestarr creates two things, or reuses them if they already ex
 
 You can rename or move the channel and category. Requestarr tracks them by ID.
 
-The admin channel has a pinned panel with two buttons:
+The admin channel has a pinned panel with three buttons:
 
 - **Pending queue:** lists requests waiting for approval.
 - **Users:** lists everyone with their status, channel and access.
+- **Help:** admin help (the same as `/admin help`).
 
 Requestarr posts the panel on first start and re-posts it if it is deleted.
 
@@ -353,12 +389,13 @@ Requestarr then:
 1. Creates the Requestarr user from the member's Discord account.
 2. Creates a role just for them (`requestarr-{name}`) and gives it to them.
 3. Creates their private channel (`#requests-{name}`). Only that role, the admin role (and the owner), and the bot can see it.
-4. Posts a welcome message there, then pins the user's **panel**. The panel says what they may request and has three buttons:
+4. Posts and pins one message: the user's **panel**, which is also their welcome. It greets them and lists what they may request, always matching their real access. It holds no how-to text, because instructions live in Help and pinned text goes stale. Its buttons are:
    - **My requests:** their requests and the ones they follow.
    - **My limits:** their quota usage.
    - **Link Plex:** a short form for their Plex username, which sends you an access request. This button disappears once an account is linked.
+   - **Help:** user help (the same as `/help`).
 
-   The panel updates itself when you change their access or link their account.
+   The panel updates itself when you change their access or link their account. Existing channels get the new panel in place on the next start.
 
 By default, a new user gets:
 

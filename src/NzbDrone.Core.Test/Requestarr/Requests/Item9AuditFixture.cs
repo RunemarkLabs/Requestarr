@@ -55,7 +55,7 @@ namespace Requestarr.Core.Test.Requests
 
             send.Detail.Should().Be("Sonarr item 101, profile HD-1080p, root /data/media, type anime");
             send.Actor.Should().Be("system");
-            AuditTrail.Single(a => a.Action == "request.create").Detail.Should().Contain("seasons 1, 2 + future seasons");
+            AuditTrail.Single(a => a.Action == "request.create").Detail.Should().Contain("seasons 1–2, plus new seasons as they air");
         }
 
         [Test]

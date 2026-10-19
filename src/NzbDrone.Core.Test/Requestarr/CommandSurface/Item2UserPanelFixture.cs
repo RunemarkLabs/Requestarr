@@ -21,8 +21,8 @@ namespace Requestarr.Core.Test.CommandSurface
         public void new_user_channel_gets_one_pinned_panel()
         {
             Channel.Pinned.Should().ContainSingle();
-            Channel.PinnedMessage.Content.Should().Contain("alice's requests").And.Contain("Movies (needs approval), TV (needs approval)");
-            PanelButtons.Should().Equal(DiscordText.PanelMyRequests, DiscordText.PanelMyLimits, DiscordText.PanelLinkPlex);
+            Channel.PinnedMessage.Content.Should().Contain("Requestarr · alice").And.Contain($"Welcome <@{Alice}>").And.Contain("Movies (needs approval), TV (needs approval)");
+            PanelButtons.Should().Equal(DiscordText.PanelMyRequests, DiscordText.PanelMyLimits, DiscordText.PanelLinkPlex, DiscordText.PanelHelp);
             UserFor(Alice).PanelMessageId.Should().Be(Channel.Pinned.Single().ToString());
         }
 
@@ -42,7 +42,7 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             await Harness.SendAsync(AdminCommand("user mediaserver", Alice).WithOption("service", "plex").WithOption("username", "alice_plex"));
 
-            PanelButtons.Should().Equal(DiscordText.PanelMyRequests, DiscordText.PanelMyLimits);
+            PanelButtons.Should().Equal(DiscordText.PanelMyRequests, DiscordText.PanelMyLimits, DiscordText.PanelHelp);
         }
 
         [Test]

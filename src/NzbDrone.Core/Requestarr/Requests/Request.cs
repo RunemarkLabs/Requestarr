@@ -45,7 +45,7 @@ namespace Requestarr.Core.Requests
 
         public bool IsActive => Status == RequestStatus.Pending || Status == RequestStatus.Approved || Status == RequestStatus.Available;
 
-        public string Label => Year.HasValue ? $"{Title} ({Year})" : Title;
+        public string Label => Titles.WithYear(Title, Year);
     }
 
     public class RequestSubscriber : ModelBase
@@ -97,6 +97,20 @@ namespace Requestarr.Core.Requests
         public List<RequestSubscriber> ForRequest(int requestId) => Query(s => s.RequestId == requestId);
 
         public List<RequestSubscriber> ForUser(int userId) => Query(s => s.UserId == userId);
+    }
+
+    public static class Titles
+    {
+        // Backends already put the year in some titles ("Dark Matter (2024)"); never add it twice.
+        public static string WithYear(string title, int? year)
+        {
+            if (!year.HasValue || string.IsNullOrEmpty(title) || title.TrimEnd().EndsWith($"({year})"))
+            {
+                return title;
+            }
+
+            return $"{title} ({year})";
+        }
     }
 
     public static class RequestOrdering

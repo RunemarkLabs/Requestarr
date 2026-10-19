@@ -54,6 +54,15 @@ namespace Requestarr.Core.Discord.Gateway
             }
         }
 
+        public Task EditAsync(InteractionReply reply) =>
+            _interaction.ModifyOriginalResponseAsync(m =>
+            {
+                m.Content = DiscordLimits.Truncate(reply.Content ?? string.Empty, DiscordLimits.MessageLength);
+                m.Embeds = Embeds(reply) ?? Array.Empty<Embed>();
+                m.Components = Components(reply) ?? new ComponentBuilder().Build();
+                m.AllowedMentions = AllowedMentions.None;
+            });
+
         public Task SuggestAsync(IReadOnlyList<InteractionChoice> choices)
         {
             var results = choices.Take(DiscordLimits.ChoicesPerMenu).Select(c => new AutocompleteResult(DiscordLimits.Truncate(c.Name, DiscordLimits.OptionLabelLength), c.Value));
@@ -129,6 +138,21 @@ namespace Requestarr.Core.Discord.Gateway
                 if (e.ThumbnailUrl != null)
                 {
                     builder.WithThumbnailUrl(e.ThumbnailUrl);
+                }
+
+                if (e.ImageUrl != null)
+                {
+                    builder.WithImageUrl(e.ImageUrl);
+                }
+
+                if (e.Color.HasValue)
+                {
+                    builder.WithColor(new Color(e.Color.Value));
+                }
+
+                if (e.Footer != null)
+                {
+                    builder.WithFooter(DiscordLimits.Truncate(e.Footer, 2048));
                 }
 
                 foreach (var field in e.Fields.Take(25))

@@ -18,7 +18,7 @@ namespace Requestarr.Core.Test.Requests
         {
             await SetAccess(Alice, "movie", "off");
 
-            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Be(DiscordText.AccessOff(ContentType.Movie));
+            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Contain(DiscordText.AccessOff(ContentType.Movie));
             RequestStore.All().Should().BeEmpty();
         }
 
@@ -27,7 +27,7 @@ namespace Requestarr.Core.Test.Requests
         {
             var run = await RequestMovie(Alice, Dune);
 
-            run.LastReply.Content.Should().Be(DiscordText.RequestPending("Dune (2021)", 1));
+            run.LastReply.Content.Should().Contain(DiscordText.RequestPending("Dune (2021)", 1));
             LastRequest.Status.Should().Be(RequestStatus.Pending);
             Radarr.Adds.Should().BeEmpty();
 
@@ -77,7 +77,7 @@ namespace Requestarr.Core.Test.Requests
 
             var run = await RequestMovie(Alice, Dune);
 
-            run.LastReply.Content.Should().Be(DiscordText.RequestSent("Dune (2021)", 1, "Radarr"));
+            run.LastReply.Content.Should().Contain(DiscordText.RequestSent("Dune (2021)", 1, "Radarr"));
             LastRequest.Status.Should().Be(RequestStatus.Approved);
             Discord.Channels[AdminChannel].Messages.Should().NotContain(m => m.Content.Contains("Request #1"));
         }
@@ -87,11 +87,11 @@ namespace Requestarr.Core.Test.Requests
         {
             await RequestMovie(Alice, Dune);
 
-            (await Harness.SendAsync(FakeInteraction.Button("req-approve:1").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel))).LastReply.Content.Should().Be(DiscordText.AdminOnly);
+            (await Harness.SendAsync(FakeInteraction.Button("req-approve:1").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel))).LastReply.Content.Should().Contain(DiscordText.AdminOnly);
 
             await AdminButton("req-approve:1");
-            (await AdminButton("req-approve:1")).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Approved));
-            (await AdminButton("req-deny:1")).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Approved));
+            (await AdminButton("req-approve:1")).LastReply.Content.Should().Contain(DiscordText.NotPending(1, RequestStatus.Approved));
+            (await AdminButton("req-deny:1")).LastReply.Content.Should().Contain(DiscordText.NotPending(1, RequestStatus.Approved));
         }
     }
 }

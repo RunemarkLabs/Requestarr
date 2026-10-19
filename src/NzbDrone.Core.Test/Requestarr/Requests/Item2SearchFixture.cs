@@ -19,9 +19,9 @@ namespace Requestarr.Core.Test.Requests
         {
             var run = await Harness.SendAsync(Search(Alice, "movie", "dune"));
 
-            run.LastReply.Content.Should().Be(DiscordText.SearchResults(ContentType.Movie, "dune", 2));
+            run.LastReply.Content.Should().Contain(DiscordText.SearchResults(ContentType.Movie, "dune", 2));
             var menu = run.LastReply.SelectMenu;
-            menu.CustomId.Should().Be("req-pick:movie");
+            menu.CustomId.Should().Be("req-pick:movie:dune");
             menu.Options.Select(o => (o.Label, o.Value)).Should().Equal(("Dune (2021)", Dune.ToString()), ("Dune: Part Two (2024)", DuneTwo.ToString()));
         }
 
@@ -48,7 +48,7 @@ namespace Requestarr.Core.Test.Requests
             var card = run.LastReply;
             card.Embeds.Single().Title.Should().Be("Dune (2021)");
             card.Embeds.Single().Description.Should().Be("Paul Atreides...");
-            card.Embeds.Single().ThumbnailUrl.Should().Be("https://image.example/dune.jpg");
+            card.Embeds.Single().ImageUrl.Should().Be("https://image.example/dune.jpg");
             card.Buttons.Single().CustomId.Should().Be($"req-make:movie:{Dune}");
         }
 
@@ -62,8 +62,8 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task unknown_id_and_empty_search_should_explain()
         {
-            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:999"))).LastReply.Content.Should().Be(DiscordText.TitleNotFound);
-            (await Harness.SendAsync(Search(Alice, "movie", "zzz"))).LastReply.Content.Should().Be(DiscordText.NothingFound);
+            (await Harness.SendAsync(Search(Alice, "movie", "tmdb:999"))).LastReply.Content.Should().Contain(DiscordText.TitleNotFound);
+            (await Harness.SendAsync(Search(Alice, "movie", "zzz"))).LastReply.Content.Should().Contain(DiscordText.NothingFound);
         }
 
         [Test]
@@ -71,7 +71,7 @@ namespace Requestarr.Core.Test.Requests
         {
             Radarr.Unreachable = true;
 
-            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Be(DiscordText.BackendUnavailable("Radarr"));
+            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Contain(DiscordText.BackendUnavailable("Radarr"));
 
             ExceptionVerification.IgnoreWarns();
         }
@@ -81,7 +81,7 @@ namespace Requestarr.Core.Test.Requests
         {
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand("request").WithOption("type", "movie").WithOption("query", "dune").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)));
 
-            run.LastReply.Content.Should().Be(DiscordText.OwnChannelOnly);
+            run.LastReply.Content.Should().Contain(DiscordText.OwnChannelOnly);
         }
 
         [Test]

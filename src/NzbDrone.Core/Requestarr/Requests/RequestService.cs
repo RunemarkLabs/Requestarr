@@ -8,6 +8,7 @@ using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
 using Requestarr.Core.Discord.Interactions;
+using Requestarr.Core.Metadata;
 using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Requests
@@ -34,16 +35,37 @@ namespace Requestarr.Core.Requests
         public static LookupOutcome<T> Fail(string error) => new(default, error);
     }
 
-    public record SeasonChoice(bool All, IReadOnlyCollection<int> Seasons, bool Future);
+    // All: every regular season now plus new ones as they air (Future), specials excluded.
+    // Otherwise exactly Seasons (0 = specials), plus new seasons when Future is set.
+    public record SeasonChoice(bool All, IReadOnlyCollection<int> Seasons, bool Future)
+    {
+        public static SeasonChoice Everything => new(true, Array.Empty<int>(), true);
+    }
 
-    // A request outcome that also carries the request it created (for a Cancel button on pending ones).
-    public record RequestResult(bool Success, string Message, Request Request) : ServiceResult(Success, Message);
+    public enum RequestOutcome
+    {
+        Sent,
+        Pending,
+        Following,
+        AlreadyAvailable,
+        Refused,
+        Failed
+    }
+
+    // A request outcome with the request it created or joined (for Cancel and the final status line).
+    public record RequestResult(bool Success, string Message, Request Request, RequestOutcome Outcome) : ServiceResult(Success, Message)
+    {
+        public static RequestResult Refused(string message) => new(false, message, null, RequestOutcome.Refused);
+
+        // The title as looked up, for the card on the final status (null when the lookup failed).
+        public MediaLookupResult Item { get; init; }
+    }
 
     public interface IRequestService
     {
         Task<LookupOutcome<List<MediaLookupResult>>> SearchAsync(RequestCaller caller, ContentType type, string query);
         Task<LookupOutcome<TitleState>> DetailAsync(RequestCaller caller, ContentType type, int externalId);
-        Task<ServiceResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null);
+        Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null);
         Task<ServiceResult> ApproveAsync(int requestId, Actor admin, string adminName);
         Task<ServiceResult> DenyAsync(int requestId, string reason, Actor admin, string adminName);
         ServiceResult Cancel(RequestCaller caller, int requestId);
@@ -67,6 +89,7 @@ namespace Requestarr.Core.Requests
         private readonly IDiscordGuildGateway _gateway;
         private readonly IGuildSetupService _guildSetup;
         private readonly IAuditService _audit;
+        private readonly IMetadataService _metadata;
         private readonly Logger _logger;
 
         public RequestService(IRequestRepository requests,
@@ -79,6 +102,7 @@ namespace Requestarr.Core.Requests
                               IDiscordGuildGateway gateway,
                               IGuildSetupService guildSetup,
                               IAuditService audit,
+                              IMetadataService metadata,
                               Logger logger)
         {
             _requests = requests;
@@ -91,6 +115,7 @@ namespace Requestarr.Core.Requests
             _gateway = gateway;
             _guildSetup = guildSetup;
             _audit = audit;
+            _metadata = metadata;
             _logger = logger;
         }
 
@@ -113,9 +138,16 @@ namespace Requestarr.Core.Requests
                     ? await _radarr.LookupAsync(instance.Settings, query)
                     : await _sonarr.LookupAsync(instance.Settings, query);
 
-                return results.Any()
-                    ? LookupOutcome<List<MediaLookupResult>>.Ok(results.Where(r => r.ExternalId(type).HasValue).Take(MaxSearchResults).ToList())
-                    : LookupOutcome<List<MediaLookupResult>>.Fail(DiscordText.NothingFound);
+                var top = results.Where(r => r.ExternalId(type).HasValue).Take(MaxSearchResults).ToList();
+
+                if (!top.Any())
+                {
+                    return LookupOutcome<List<MediaLookupResult>>.Fail(DiscordText.NothingFound);
+                }
+
+                await _metadata.EnrichAsync(type, top);
+
+                return LookupOutcome<List<MediaLookupResult>>.Ok(top);
             }
             catch (BackendException ex)
             {
@@ -150,6 +182,8 @@ namespace Requestarr.Core.Requests
                 return LookupOutcome<TitleState>.Fail(DiscordText.TitleNotFound);
             }
 
+            await _metadata.EnrichAsync(type, new[] { item });
+
             var forTitle = _requests.ForTitle(type, externalId).Where(r => r.BackendId == instance.Id).Newest().ToList();
             var active = forTitle.FirstOrDefault(r => r.IsActive);
 
@@ -165,11 +199,19 @@ namespace Requestarr.Core.Requests
             });
         }
 
-        public async Task<ServiceResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null)
+        public async Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null)
+        {
+            var seen = new System.Runtime.CompilerServices.StrongBox<MediaLookupResult>();
+            var result = await RequestCoreAsync(caller, type, externalId, seasons, seen);
+
+            return result with { Item = seen.Value };
+        }
+
+        private async Task<RequestResult> RequestCoreAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons, System.Runtime.CompilerServices.StrongBox<MediaLookupResult> seen)
         {
             if (type == ContentType.Music)
             {
-                return ServiceResult.Fail(DiscordText.MusicNotYet);
+                return RequestResult.Refused(DiscordText.MusicNotYet);
             }
 
             var access = caller.AsAdmin ? null : AccessFor(caller.User, type);
@@ -177,22 +219,23 @@ namespace Requestarr.Core.Requests
             if (!caller.AsAdmin && access.State == AccessState.Off)
             {
                 _audit.Record(caller.Actor, "request.refused", "title", $"{type}:{externalId}", "access off");
-                return ServiceResult.Fail(DiscordText.AccessOff(type));
+                return RequestResult.Refused(DiscordText.AccessOff(type));
             }
 
             var detail = await DetailAsync(caller, type, externalId);
 
             if (detail.Error != null)
             {
-                return ServiceResult.Fail(detail.Error);
+                return RequestResult.Refused(detail.Error);
             }
 
             var state = detail.Value;
             var item = state.Item;
+            seen.Value = item;
 
             if (item.LibraryId.HasValue)
             {
-                return ServiceResult.Fail(DiscordText.AlreadyInLibrary);
+                return new RequestResult(false, DiscordText.AlreadyInLibrary, null, RequestOutcome.AlreadyAvailable);
             }
 
             // Duplicate: attach as subscriber instead of a second request. No quota cost.
@@ -200,18 +243,18 @@ namespace Requestarr.Core.Requests
             {
                 if (state.CallerOwnsActive)
                 {
-                    return ServiceResult.Fail(DiscordText.AlreadyRequestedByYou);
+                    return new RequestResult(false, DiscordText.AlreadyRequestedByYou, state.Active, RequestOutcome.Refused);
                 }
 
                 if (state.CallerFollows)
                 {
-                    return ServiceResult.Fail(DiscordText.AlreadyFollowing);
+                    return new RequestResult(false, DiscordText.AlreadyFollowing, state.Active, RequestOutcome.Following);
                 }
 
                 _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
                 _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString());
 
-                return ServiceResult.Ok(DiscordText.Subscribed(state.Active.Label, state.ActiveOwner, state.Active.Id));
+                return new RequestResult(true, DiscordText.Subscribed(state.Active.Label, state.ActiveOwner, state.Active.Id), state.Active, RequestOutcome.Following);
             }
 
             var chosen = new List<int>();
@@ -220,12 +263,12 @@ namespace Requestarr.Core.Requests
             if (type == ContentType.Tv)
             {
                 seasons ??= new SeasonChoice(true, Array.Empty<int>(), item.Continuing);
-                chosen = (seasons.All ? item.Seasons : seasons.Seasons.Where(item.Seasons.Contains)).Distinct().OrderBy(s => s).ToList();
+                chosen = (seasons.All ? item.Seasons : seasons.Seasons.Where(s => item.Seasons.Contains(s) || (s == 0 && item.HasSpecials))).Distinct().OrderBy(s => s).ToList();
                 future = seasons.Future;
 
                 if (!chosen.Any() && !future)
                 {
-                    return ServiceResult.Fail(DiscordText.ChooseSeasons);
+                    return RequestResult.Refused(DiscordText.ChooseSeasons);
                 }
             }
 
@@ -241,7 +284,7 @@ namespace Requestarr.Core.Requests
                 {
                     var nextSlot = counted[counted.Count - access.QuotaLimit.Value].Requested + window;
                     _audit.Record(caller.Actor, "request.refused", "title", $"{type}:{externalId}", $"quota {counted.Count}/{access.QuotaLimit}");
-                    return ServiceResult.Fail(DiscordText.QuotaReached(type, access.QuotaLimit.Value, (int)window.TotalDays, nextSlot));
+                    return RequestResult.Refused(DiscordText.QuotaReached(type, access.QuotaLimit.Value, (int)window.TotalDays, nextSlot));
                 }
             }
 
@@ -269,13 +312,13 @@ namespace Requestarr.Core.Requests
                 var sent = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
 
                 return sent
-                    ? new RequestResult(true, DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name), request)
-                    : new RequestResult(false, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason), request);
+                    ? new RequestResult(true, DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name), request, RequestOutcome.Sent)
+                    : new RequestResult(false, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason), request, RequestOutcome.Failed);
             }
 
             await PostApprovalCard(request, state.Instance, item, caller.Name);
 
-            return new RequestResult(true, DiscordText.RequestPending(request.Label, request.Id), request);
+            return new RequestResult(true, DiscordText.RequestPending(request.Label, request.Id), request, RequestOutcome.Pending);
         }
 
         public async Task<ServiceResult> ApproveAsync(int requestId, Actor admin, string adminName)

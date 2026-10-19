@@ -14,6 +14,15 @@ namespace Requestarr.Core.Provisioning
         public DiscordProvisioning Discord { get; set; }
         public BackendsProvisioning Backends { get; set; }
         public MediaServersProvisioning MediaServers { get; set; }
+
+        // Optional: cast and episode counts from The Movie Database.
+        public TmdbProvisioning Tmdb { get; set; }
+    }
+
+    public class TmdbProvisioning
+    {
+        // A v4 API Read Access Token or a v3 API key; empty disables cast.
+        public string ApiKey { get; set; }
     }
 
     public class GeneralProvisioning
