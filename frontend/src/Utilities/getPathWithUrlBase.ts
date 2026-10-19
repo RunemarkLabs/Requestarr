@@ -1,3 +1,3 @@
 export default function getPathWithUrlBase(path: string) {
-  return `${window.Prowlarr.urlBase}${path}`;
+  return `${window.Requestarr.urlBase}${path}`;
 }

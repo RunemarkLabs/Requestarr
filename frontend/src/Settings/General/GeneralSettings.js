@@ -190,7 +190,7 @@ class GeneralSettings extends Component {
           kind={kinds.DANGER}
           title={translate('RestartProwlarr')}
           message={
-            `Prowlarr requires a restart to apply changes, do you want to restart now? ${isWindowsService ? 'Depending which user is running the Prowlarr service you may need to restart Prowlarr as admin once before the service will start automatically.' : ''}`
+            `Requestarr requires a restart to apply changes, do you want to restart now? ${isWindowsService ? 'Depending which user is running the Requestarr service you may need to restart Requestarr as admin once before the service will start automatically.' : ''}`
           }
           cancelLabel={translate('IllRestartLater')}
           confirmLabel={translate('RestartNow')}

@@ -1,5 +1,3 @@
-const scrollPositions: Record<string, number> = {
-  indexerIndex: 0,
-};
+const scrollPositions: Record<string, number> = {};
 
 export default scrollPositions;

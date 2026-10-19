@@ -3,14 +3,12 @@
 interface CssExports {
   'actionMenu': string;
   'appTitle': string;
-  'donate': string;
   'header': string;
   'logo': string;
   'logoContainer': string;
   'logoFull': string;
   'right': string;
   'sidebarToggleContainer': string;
-  'translate': string;
 }
 export const cssExports: CssExports;
 export default cssExports;

@@ -16,50 +16,6 @@ function Settings() {
       <PageContentBody>
         <Link
           className={styles.link}
-          to="/settings/indexers"
-        >
-          {translate('Indexers')}
-        </Link>
-
-        <div className={styles.summary}>
-          {translate('IndexerSettingsSummary')}
-        </div>
-
-        <Link
-          className={styles.link}
-          to="/settings/applications"
-        >
-          {translate('Apps')}
-        </Link>
-
-        <div className={styles.summary}>
-          {translate('AppSettingsSummary')}
-        </div>
-
-        <Link
-          className={styles.link}
-          to="/settings/downloadclients"
-        >
-          {translate('DownloadClients')}
-        </Link>
-
-        <div className={styles.summary}>
-          {translate('DownloadClientsSettingsSummary')}
-        </div>
-
-        <Link
-          className={styles.link}
-          to="/settings/connect"
-        >
-          {translate('Notifications')}
-        </Link>
-
-        <div className={styles.summary}>
-          {translate('ConnectSettingsSummary')}
-        </div>
-
-        <Link
-          className={styles.link}
           to="/settings/tags"
         >
           {translate('Tags')}

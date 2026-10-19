@@ -25,13 +25,6 @@ export const shortcuts = {
     }
   },
 
-  MOVIE_SEARCH_INPUT: {
-    key: 's',
-    get name() {
-      return translate('FocusSearchBox');
-    }
-  },
-
   SAVE_SETTINGS: {
     key: 'mod+s',
     get name() {

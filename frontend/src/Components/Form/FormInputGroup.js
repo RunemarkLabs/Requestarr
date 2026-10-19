@@ -3,22 +3,15 @@ import React from 'react';
 import Link from 'Components/Link/Link';
 import { inputTypes, kinds } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
-import AppProfileSelectInputConnector from './AppProfileSelectInputConnector';
 import AutoCompleteInput from './AutoCompleteInput';
-import CaptchaInputConnector from './CaptchaInputConnector';
-import CardigannCaptchaInputConnector from './CardigannCaptchaInputConnector';
 import CheckInput from './CheckInput';
 import DeviceInputConnector from './DeviceInputConnector';
-import DownloadClientSelectInputConnector from './DownloadClientSelectInputConnector';
 import EnhancedSelectInput from './EnhancedSelectInput';
 import EnhancedSelectInputConnector from './EnhancedSelectInputConnector';
 import FormInputHelpText from './FormInputHelpText';
-import IndexerFlagsSelectInputConnector from './IndexerFlagsSelectInputConnector';
 import InfoInput from './InfoInput';
 import KeyValueListInput from './KeyValueListInput';
-import NewznabCategorySelectInputConnector from './NewznabCategorySelectInputConnector';
 import NumberInput from './NumberInput';
-import OAuthInputConnector from './OAuthInputConnector';
 import PasswordInput from './PasswordInput';
 import PathInputConnector from './PathInputConnector';
 import TagInputConnector from './TagInputConnector';
@@ -30,17 +23,8 @@ import styles from './FormInputGroup.css';
 
 function getComponent(type) {
   switch (type) {
-    case inputTypes.APP_PROFILE_SELECT:
-      return AppProfileSelectInputConnector;
-
     case inputTypes.AUTO_COMPLETE:
       return AutoCompleteInput;
-
-    case inputTypes.CAPTCHA:
-      return CaptchaInputConnector;
-
-    case inputTypes.CARDIGANNCAPTCHA:
-      return CardigannCaptchaInputConnector;
 
     case inputTypes.CHECK:
       return CheckInput;
@@ -57,23 +41,11 @@ function getComponent(type) {
     case inputTypes.NUMBER:
       return NumberInput;
 
-    case inputTypes.OAUTH:
-      return OAuthInputConnector;
-
     case inputTypes.PASSWORD:
       return PasswordInput;
 
     case inputTypes.PATH:
       return PathInputConnector;
-
-    case inputTypes.CATEGORY_SELECT:
-      return NewznabCategorySelectInputConnector;
-
-    case inputTypes.DOWNLOAD_CLIENT_SELECT:
-      return DownloadClientSelectInputConnector;
-
-    case inputTypes.INDEXER_FLAGS_SELECT:
-      return IndexerFlagsSelectInputConnector;
 
     case inputTypes.SELECT:
       return EnhancedSelectInput;

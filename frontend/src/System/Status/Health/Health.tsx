@@ -1,11 +1,9 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import AppState from 'App/State/AppState';
 import Alert from 'Components/Alert';
 import FieldSet from 'Components/FieldSet';
 import Icon from 'Components/Icon';
 import IconButton from 'Components/Link/IconButton';
-import SpinnerIconButton from 'Components/Link/SpinnerIconButton';
 import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import InlineMarkdown from 'Components/Markdown/InlineMarkdown';
 import TableRowCell from 'Components/Table/Cells/TableRowCell';
@@ -14,11 +12,6 @@ import Table from 'Components/Table/Table';
 import TableBody from 'Components/Table/TableBody';
 import TableRow from 'Components/Table/TableRow';
 import { icons, kinds } from 'Helpers/Props';
-import { testAllIndexers } from 'Store/Actions/indexerActions';
-import {
-  testAllApplications,
-  testAllDownloadClients,
-} from 'Store/Actions/settingsActions';
 import { fetchHealth } from 'Store/Actions/systemActions';
 import titleCase from 'Utilities/String/titleCase';
 import translate from 'Utilities/String/translate';
@@ -50,29 +43,7 @@ function Health() {
   const { isFetching, isPopulated, items } = useSelector(
     createHealthSelector()
   );
-  const isTestingAllApplications = useSelector(
-    (state: AppState) => state.settings.applications.isTestingAll
-  );
-  const isTestingAllDownloadClients = useSelector(
-    (state: AppState) => state.settings.downloadClients.isTestingAll
-  );
-  const isTestingAllIndexers = useSelector(
-    (state: AppState) => state.indexers.isTestingAll
-  );
-
   const healthIssues = !!items.length;
-
-  const handleTestAllApplicationsPress = useCallback(() => {
-    dispatch(testAllApplications());
-  }, [dispatch]);
-
-  const handleTestAllDownloadClientsPress = useCallback(() => {
-    dispatch(testAllDownloadClients());
-  }, [dispatch]);
-
-  const handleTestAllIndexersPress = useCallback(() => {
-    dispatch(testAllIndexers());
-  }, [dispatch]);
 
   useEffect(() => {
     dispatch(fetchHealth());
@@ -139,35 +110,6 @@ function Health() {
                       />
 
                       <HealthItemLink source={source} />
-
-                      {source === 'ApplicationStatusCheck' ||
-                      source === 'ApplicationLongTermStatusCheck' ? (
-                        <SpinnerIconButton
-                          name={icons.TEST}
-                          title={translate('TestAll')}
-                          isSpinning={isTestingAllApplications}
-                          onPress={handleTestAllApplicationsPress}
-                        />
-                      ) : null}
-
-                      {source === 'IndexerStatusCheck' ||
-                      source === 'IndexerLongTermStatusCheck' ? (
-                        <SpinnerIconButton
-                          name={icons.TEST}
-                          title={translate('TestAll')}
-                          isSpinning={isTestingAllIndexers}
-                          onPress={handleTestAllIndexersPress}
-                        />
-                      ) : null}
-
-                      {source === 'DownloadClientStatusCheck' ? (
-                        <SpinnerIconButton
-                          name={icons.TEST}
-                          title={translate('TestAll')}
-                          isSpinning={isTestingAllDownloadClients}
-                          onPress={handleTestAllDownloadClientsPress}
-                        />
-                      ) : null}
                     </TableRowCell>
                   </TableRow>
                 );

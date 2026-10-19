@@ -44,7 +44,7 @@ function ErrorBoundaryError(props: ErrorBoundaryErrorProps) {
       <div className={styles.imageContainer}>
         <img
           className={styles.image}
-          src={`${window.Prowlarr.urlBase}/Content/Images/error.png`}
+          src={`${window.Requestarr.urlBase}/Content/Images/error.png`}
         />
       </div>
 
@@ -63,7 +63,9 @@ function ErrorBoundaryError(props: ErrorBoundaryErrorProps) {
           <div>{info.componentStack}</div>
         )}
 
-        <div className={styles.version}>Version: {window.Prowlarr.version}</div>
+        <div className={styles.version}>
+          Version: {window.Requestarr.version}
+        </div>
       </details>
     </div>
   );

@@ -1,11 +1,4 @@
 import CommandAppState from './CommandAppState';
-import HistoryAppState from './HistoryAppState';
-import IndexerAppState, {
-  IndexerHistoryAppState,
-  IndexerIndexAppState,
-  IndexerStatusAppState,
-} from './IndexerAppState';
-import IndexerStatsAppState from './IndexerStatsAppState';
 import SettingsAppState from './SettingsAppState';
 import SystemAppState from './SystemAppState';
 import TagsAppState from './TagsAppState';
@@ -57,12 +50,6 @@ export interface AppSectionState {
 interface AppState {
   app: AppSectionState;
   commands: CommandAppState;
-  history: HistoryAppState;
-  indexerHistory: IndexerHistoryAppState;
-  indexerIndex: IndexerIndexAppState;
-  indexerStats: IndexerStatsAppState;
-  indexerStatus: IndexerStatusAppState;
-  indexers: IndexerAppState;
   settings: SettingsAppState;
   system: SystemAppState;
   tags: TagsAppState;

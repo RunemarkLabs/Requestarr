@@ -2,7 +2,6 @@ import PropTypes from 'prop-types';
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
 import { createSelector } from 'reselect';
-import { fetchApplications, fetchIndexerProxies, fetchNotifications } from 'Store/Actions/settingsActions';
 import { fetchTagDetails, fetchTags } from 'Store/Actions/tagActions';
 import createSortedSectionSelector from 'Store/Selectors/createSortedSectionSelector';
 import sortByProp from 'Utilities/Array/sortByProp';
@@ -28,13 +27,10 @@ function createMapStateToProps() {
 
 const mapDispatchToProps = {
   dispatchFetchTags: fetchTags,
-  dispatchFetchTagDetails: fetchTagDetails,
-  dispatchFetchNotifications: fetchNotifications,
-  dispatchFetchIndexerProxies: fetchIndexerProxies,
-  dispatchFetchApplications: fetchApplications
+  dispatchFetchTagDetails: fetchTagDetails
 };
 
-class MetadatasConnector extends Component {
+class TagsConnector extends Component {
 
   //
   // Lifecycle
@@ -42,17 +38,11 @@ class MetadatasConnector extends Component {
   componentDidMount() {
     const {
       dispatchFetchTags,
-      dispatchFetchTagDetails,
-      dispatchFetchNotifications,
-      dispatchFetchIndexerProxies,
-      dispatchFetchApplications
+      dispatchFetchTagDetails
     } = this.props;
 
     dispatchFetchTags();
     dispatchFetchTagDetails();
-    dispatchFetchNotifications();
-    dispatchFetchIndexerProxies();
-    dispatchFetchApplications();
   }
 
   //
@@ -67,12 +57,9 @@ class MetadatasConnector extends Component {
   }
 }
 
-MetadatasConnector.propTypes = {
+TagsConnector.propTypes = {
   dispatchFetchTags: PropTypes.func.isRequired,
-  dispatchFetchTagDetails: PropTypes.func.isRequired,
-  dispatchFetchNotifications: PropTypes.func.isRequired,
-  dispatchFetchIndexerProxies: PropTypes.func.isRequired,
-  dispatchFetchApplications: PropTypes.func.isRequired
+  dispatchFetchTagDetails: PropTypes.func.isRequired
 };
 
-export default connect(createMapStateToProps, mapDispatchToProps)(MetadatasConnector);
+export default connect(createMapStateToProps, mapDispatchToProps)(TagsConnector);

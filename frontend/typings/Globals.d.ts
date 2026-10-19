@@ -1,7 +1,7 @@
 declare module '*.module.css';
 
 interface Window {
-  Prowlarr: {
+  Requestarr: {
     apiKey: string;
     instanceName: string;
     theme: string;

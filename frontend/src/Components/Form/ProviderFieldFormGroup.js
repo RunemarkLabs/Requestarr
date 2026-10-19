@@ -8,10 +8,6 @@ import { inputTypes } from 'Helpers/Props';
 
 function getType({ type, selectOptionsProviderAction }) {
   switch (type) {
-    case 'captcha':
-      return inputTypes.CAPTCHA;
-    case 'cardigannCaptcha':
-      return inputTypes.CARDIGANNCAPTCHA;
     case 'checkbox':
       return inputTypes.CHECK;
     case 'device':
@@ -35,8 +31,6 @@ function getType({ type, selectOptionsProviderAction }) {
       return inputTypes.TAG_SELECT;
     case 'textbox':
       return inputTypes.TEXT;
-    case 'oAuth':
-      return inputTypes.OAUTH;
     case 'info':
       return inputTypes.INFO;
     default:

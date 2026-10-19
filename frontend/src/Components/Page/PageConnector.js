@@ -5,9 +5,7 @@ import { withRouter } from 'react-router-dom';
 import { createSelector } from 'reselect';
 import { fetchTranslations, saveDimensions, setIsSidebarVisible } from 'Store/Actions/appActions';
 import { fetchCustomFilters } from 'Store/Actions/customFilterActions';
-import { fetchIndexers } from 'Store/Actions/indexerActions';
-import { fetchIndexerStatus } from 'Store/Actions/indexerStatusActions';
-import { fetchAppProfiles, fetchGeneralSettings, fetchIndexerCategories, fetchUISettings } from 'Store/Actions/settingsActions';
+import { fetchGeneralSettings, fetchUISettings } from 'Store/Actions/settingsActions';
 import { fetchStatus } from 'Store/Actions/systemActions';
 import { fetchTags } from 'Store/Actions/tagActions';
 import createDimensionsSelector from 'Store/Selectors/createDimensionsSelector';
@@ -17,7 +15,7 @@ import LoadingPage from './LoadingPage';
 import Page from './Page';
 
 function testLocalStorage() {
-  const key = 'prowlarrTest';
+  const key = 'requestarrTest';
 
   try {
     localStorage.setItem(key, key);
@@ -49,10 +47,6 @@ const selectIsPopulated = createSelector(
   (state) => state.tags.isPopulated,
   (state) => state.settings.ui.isPopulated,
   (state) => state.settings.general.isPopulated,
-  (state) => state.settings.appProfiles.isPopulated,
-  (state) => state.indexers.isPopulated,
-  (state) => state.indexerStatus.isPopulated,
-  (state) => state.settings.indexerCategories.isPopulated,
   (state) => state.system.status.isPopulated,
   (state) => state.app.translations.isPopulated,
   (
@@ -60,10 +54,6 @@ const selectIsPopulated = createSelector(
     tagsIsPopulated,
     uiSettingsIsPopulated,
     generalSettingsIsPopulated,
-    appProfilesIsPopulated,
-    indexersIsPopulated,
-    indexerStatusIsPopulated,
-    indexerCategoriesIsPopulated,
     systemStatusIsPopulated,
     translationsIsPopulated
   ) => {
@@ -72,10 +62,6 @@ const selectIsPopulated = createSelector(
       tagsIsPopulated &&
       uiSettingsIsPopulated &&
       generalSettingsIsPopulated &&
-      appProfilesIsPopulated &&
-      indexersIsPopulated &&
-      indexerStatusIsPopulated &&
-      indexerCategoriesIsPopulated &&
       systemStatusIsPopulated &&
       translationsIsPopulated
     );
@@ -87,10 +73,6 @@ const selectErrors = createSelector(
   (state) => state.tags.error,
   (state) => state.settings.ui.error,
   (state) => state.settings.general.error,
-  (state) => state.settings.appProfiles.error,
-  (state) => state.indexers.error,
-  (state) => state.indexerStatus.error,
-  (state) => state.settings.indexerCategories.error,
   (state) => state.system.status.error,
   (state) => state.app.translations.error,
   (
@@ -98,10 +80,6 @@ const selectErrors = createSelector(
     tagsError,
     uiSettingsError,
     generalSettingsError,
-    appProfilesError,
-    indexersError,
-    indexerStatusError,
-    indexerCategoriesError,
     systemStatusError,
     translationsError
   ) => {
@@ -110,10 +88,6 @@ const selectErrors = createSelector(
       tagsError ||
       uiSettingsError ||
       generalSettingsError ||
-      appProfilesError ||
-      indexersError ||
-      indexerStatusError ||
-      indexerCategoriesError ||
       systemStatusError ||
       translationsError
     );
@@ -124,10 +98,6 @@ const selectErrors = createSelector(
       tagsError,
       uiSettingsError,
       generalSettingsError,
-      appProfilesError,
-      indexersError,
-      indexerStatusError,
-      indexerCategoriesError,
       systemStatusError,
       translationsError
     };
@@ -170,20 +140,8 @@ function createMapDispatchToProps(dispatch, props) {
     dispatchFetchTags() {
       dispatch(fetchTags());
     },
-    dispatchFetchIndexers() {
-      dispatch(fetchIndexers());
-    },
-    dispatchFetchIndexerStatus() {
-      dispatch(fetchIndexerStatus());
-    },
-    dispatchFetchIndexerCategories() {
-      dispatch(fetchIndexerCategories());
-    },
     dispatchFetchUISettings() {
       dispatch(fetchUISettings());
-    },
-    dispatchFetchAppProfiles() {
-      dispatch(fetchAppProfiles());
     },
     dispatchFetchGeneralSettings() {
       dispatch(fetchGeneralSettings());
@@ -220,10 +178,6 @@ class PageConnector extends Component {
     if (!this.props.isPopulated) {
       this.props.dispatchFetchCustomFilters();
       this.props.dispatchFetchTags();
-      this.props.dispatchFetchAppProfiles();
-      this.props.dispatchFetchIndexers();
-      this.props.dispatchFetchIndexerStatus();
-      this.props.dispatchFetchIndexerCategories();
       this.props.dispatchFetchUISettings();
       this.props.dispatchFetchGeneralSettings();
       this.props.dispatchFetchStatus();
@@ -246,10 +200,6 @@ class PageConnector extends Component {
       isPopulated,
       hasError,
       dispatchFetchTags,
-      dispatchFetchAppProfiles,
-      dispatchFetchIndexers,
-      dispatchFetchIndexerStatus,
-      dispatchFetchIndexerCategories,
       dispatchFetchUISettings,
       dispatchFetchGeneralSettings,
       dispatchFetchStatus,
@@ -287,10 +237,6 @@ PageConnector.propTypes = {
   isSidebarVisible: PropTypes.bool.isRequired,
   dispatchFetchCustomFilters: PropTypes.func.isRequired,
   dispatchFetchTags: PropTypes.func.isRequired,
-  dispatchFetchAppProfiles: PropTypes.func.isRequired,
-  dispatchFetchIndexers: PropTypes.func.isRequired,
-  dispatchFetchIndexerStatus: PropTypes.func.isRequired,
-  dispatchFetchIndexerCategories: PropTypes.func.isRequired,
   dispatchFetchUISettings: PropTypes.func.isRequired,
   dispatchFetchGeneralSettings: PropTypes.func.isRequired,
   dispatchFetchStatus: PropTypes.func.isRequired,

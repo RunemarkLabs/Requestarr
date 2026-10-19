@@ -2,7 +2,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import Modal from 'Components/Modal/Modal';
 import { sizes } from 'Helpers/Props';
-import TagDetailsModalContentConnector from './TagDetailsModalContentConnector';
+import TagDetailsModalContent from './TagDetailsModalContent';
 
 function TagDetailsModal(props) {
   const {
@@ -17,7 +17,7 @@ function TagDetailsModal(props) {
       isOpen={isOpen}
       onModalClose={onModalClose}
     >
-      <TagDetailsModalContentConnector
+      <TagDetailsModalContent
         {...otherProps}
         onModalClose={onModalClose}
       />

@@ -10,10 +10,6 @@ export interface Tag extends ModelBase {
 
 export interface TagDetail extends ModelBase {
   label: string;
-  applicationIds: number[];
-  indexerIds: number[];
-  indexerProxyIds: number[];
-  notificationIds: number[];
 }
 
 export interface TagDetailAppState

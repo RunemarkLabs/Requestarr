@@ -2,16 +2,8 @@ import React from 'react';
 import { Redirect, Route } from 'react-router-dom';
 import NotFound from 'Components/NotFound';
 import Switch from 'Components/Router/Switch';
-import HistoryConnector from 'History/HistoryConnector';
-import IndexerIndex from 'Indexer/Index/IndexerIndex';
-import IndexerStats from 'Indexer/Stats/IndexerStats';
-import SearchIndexConnector from 'Search/SearchIndexConnector';
-import ApplicationSettings from 'Settings/Applications/ApplicationSettings';
 import DevelopmentSettingsConnector from 'Settings/Development/DevelopmentSettingsConnector';
-import DownloadClientSettingsConnector from 'Settings/DownloadClients/DownloadClientSettingsConnector';
 import GeneralSettingsConnector from 'Settings/General/GeneralSettingsConnector';
-import IndexerSettings from 'Settings/Indexers/IndexerSettings';
-import NotificationSettings from 'Settings/Notifications/NotificationSettings';
 import Settings from 'Settings/Settings';
 import TagSettings from 'Settings/Tags/TagSettings';
 import UISettingsConnector from 'Settings/UI/UISettingsConnector';
@@ -23,60 +15,35 @@ import Tasks from 'System/Tasks/Tasks';
 import Updates from 'System/Updates/Updates';
 import getPathWithUrlBase from 'Utilities/getPathWithUrlBase';
 
-function RedirectWithUrlBase() {
-  return <Redirect to={getPathWithUrlBase('/')} />;
+function RedirectToSystemStatus() {
+  return <Redirect to={getPathWithUrlBase('/system/status')} />;
 }
 
 function AppRoutes() {
   return (
     <Switch>
       {/*
-        Indexers
+        Home
       */}
 
-      <Route exact={true} path="/" component={IndexerIndex} />
+      <Route exact={true} path="/" render={RedirectToSystemStatus} />
 
-      {window.Prowlarr.urlBase && (
+      {window.Requestarr.urlBase && (
         <Route
           exact={true}
           path="/"
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-ignore
           addUrlBase={false}
-          render={RedirectWithUrlBase}
+          render={RedirectToSystemStatus}
         />
       )}
-
-      <Route path="/indexers/stats" component={IndexerStats} />
-
-      {/*
-        Search
-      */}
-
-      <Route path="/search" component={SearchIndexConnector} />
-
-      {/*
-        Activity
-      */}
-
-      <Route path="/history" component={HistoryConnector} />
 
       {/*
         Settings
       */}
 
       <Route exact={true} path="/settings" component={Settings} />
-
-      <Route path="/settings/indexers" component={IndexerSettings} />
-
-      <Route path="/settings/applications" component={ApplicationSettings} />
-
-      <Route
-        path="/settings/downloadclients"
-        component={DownloadClientSettingsConnector}
-      />
-
-      <Route path="/settings/connect" component={NotificationSettings} />
 
       <Route path="/settings/tags" component={TagSettings} />
 

@@ -32,8 +32,6 @@ module.exports = {
 
   // Drag
   dragHandleWidth: '40px',
-  appProfileItemHeight: '30px',
-  appProfileItemDragSourcePadding: '4px',
 
   // Progress Bar
   progressBarSmallHeight: '5px',

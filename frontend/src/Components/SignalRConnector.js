@@ -6,8 +6,6 @@ import { createSelector } from 'reselect';
 import { setAppValue, setVersion } from 'Store/Actions/appActions';
 import { removeItem, update, updateItem } from 'Store/Actions/baseActions';
 import { fetchCommands, finishCommand, updateCommand } from 'Store/Actions/commandActions';
-import { fetchIndexers } from 'Store/Actions/indexerActions';
-import { fetchIndexerStatus } from 'Store/Actions/indexerStatusActions';
 import { fetchHealth } from 'Store/Actions/systemActions';
 import { fetchTagDetails, fetchTags } from 'Store/Actions/tagActions';
 import { repopulatePage } from 'Utilities/pagePopulator';
@@ -43,8 +41,6 @@ const mapDispatchToProps = {
   dispatchUpdateItem: updateItem,
   dispatchRemoveItem: removeItem,
   dispatchFetchHealth: fetchHealth,
-  dispatchFetchIndexers: fetchIndexers,
-  dispatchFetchIndexerStatus: fetchIndexerStatus,
   dispatchFetchTags: fetchTags,
   dispatchFetchTagDetails: fetchTagDetails
 };
@@ -54,7 +50,7 @@ function Logger(minimumLogLevel) {
 }
 
 Logger.prototype.cleanse = function(message) {
-  const apikey = new RegExp(`access_token=${encodeURIComponent(window.Prowlarr.apiKey)}`, 'g');
+  const apikey = new RegExp(`access_token=${encodeURIComponent(window.Requestarr.apiKey)}`, 'g');
   return message.replace(apikey, 'access_token=(removed)');
 };
 
@@ -94,11 +90,11 @@ class SignalRConnector extends Component {
   componentDidMount() {
     console.log('[signalR] starting');
 
-    const url = `${window.Prowlarr.urlBase}/signalr/messages`;
+    const url = `${window.Requestarr.urlBase}/signalr/messages`;
 
     this.connection = new signalR.HubConnectionBuilder()
       .configureLogging(new Logger(signalR.LogLevel.Information))
-      .withUrl(`${url}?access_token=${encodeURIComponent(window.Prowlarr.apiKey)}`)
+      .withUrl(`${url}?access_token=${encodeURIComponent(window.Requestarr.apiKey)}`)
       .withAutomaticReconnect({
         nextRetryDelayInMilliseconds: (retryContext) => {
           if (retryContext.elapsedMilliseconds > 180000) {
@@ -141,16 +137,6 @@ class SignalRConnector extends Component {
     console.error(`signalR: Unable to find handler for ${name}`);
   };
 
-  handleApplications = ({ action, resource }) => {
-    const section = 'settings.applications';
-
-    if (action === 'created' || action === 'updated') {
-      this.props.dispatchUpdateItem({ section, ...resource });
-    } else if (action === 'deleted') {
-      this.props.dispatchRemoveItem({ section, id: resource.id });
-    }
-  };
-
   handleCommand = (body) => {
     if (body.action === 'sync') {
       this.props.dispatchFetchCommands();
@@ -170,52 +156,8 @@ class SignalRConnector extends Component {
     }
   };
 
-  handleDownloadclient = ({ action, resource }) => {
-    const section = 'settings.downloadClients';
-
-    if (action === 'created' || action === 'updated') {
-      this.props.dispatchUpdateItem({ section, ...resource });
-    } else if (action === 'deleted') {
-      this.props.dispatchRemoveItem({ section, id: resource.id });
-    }
-  };
-
   handleHealth = () => {
     this.props.dispatchFetchHealth();
-  };
-
-  handleIndexerstatus = () => {
-    this.props.dispatchFetchIndexerStatus();
-  };
-
-  handleIndexer = ({ action, resource }) => {
-    const section = 'indexers';
-
-    if (action === 'created' || action === 'updated') {
-      this.props.dispatchUpdateItem({ section, ...resource });
-    } else if (action === 'deleted') {
-      this.props.dispatchRemoveItem({ section, id: resource.id });
-    }
-  };
-
-  handleIndexerproxy = ({ action, resource }) => {
-    const section = 'settings.indexerProxies';
-
-    if (action === 'created' || action === 'updated') {
-      this.props.dispatchUpdateItem({ section, ...resource });
-    } else if (action === 'deleted') {
-      this.props.dispatchRemoveItem({ section, id: resource.id });
-    }
-  };
-
-  handleNotification = ({ action, resource }) => {
-    const section = 'settings.notifications';
-
-    if (action === 'created' || action === 'updated') {
-      this.props.dispatchUpdateItem({ section, ...resource });
-    } else if (action === 'deleted') {
-      this.props.dispatchRemoveItem({ section, id: resource.id });
-    }
   };
 
   handleVersion = (body) => {
@@ -270,7 +212,6 @@ class SignalRConnector extends Component {
 
     const {
       dispatchFetchCommands,
-      dispatchFetchIndexers,
       dispatchSetAppValue
     } = this.props;
 
@@ -283,7 +224,6 @@ class SignalRConnector extends Component {
 
     // Repopulate the page (if a repopulator is set) to ensure things
     // are in sync after reconnecting.
-    dispatchFetchIndexers();
     dispatchFetchCommands();
     repopulatePage();
   };
@@ -318,8 +258,6 @@ SignalRConnector.propTypes = {
   dispatchUpdateItem: PropTypes.func.isRequired,
   dispatchRemoveItem: PropTypes.func.isRequired,
   dispatchFetchHealth: PropTypes.func.isRequired,
-  dispatchFetchIndexers: PropTypes.func.isRequired,
-  dispatchFetchIndexerStatus: PropTypes.func.isRequired,
   dispatchFetchTags: PropTypes.func.isRequired,
   dispatchFetchTagDetails: PropTypes.func.isRequired
 };

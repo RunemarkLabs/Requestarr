@@ -52,11 +52,7 @@ class Tag extends Component {
 
   render() {
     const {
-      label,
-      notificationIds,
-      indexerIds,
-      indexerProxyIds,
-      applicationIds
+      label
     } = this.props;
 
     const {
@@ -64,12 +60,8 @@ class Tag extends Component {
       isDeleteTagModalOpen
     } = this.state;
 
-    const isTagUsed = !!(
-      indexerIds.length ||
-      notificationIds.length ||
-      indexerProxyIds.length ||
-      applicationIds.length
-    );
+    // Nothing in Requestarr references tags yet, so a tag is never in use.
+    const isTagUsed = false;
 
     return (
       <Card
@@ -82,39 +74,6 @@ class Tag extends Component {
         </div>
 
         {
-          isTagUsed &&
-            <div>
-              {
-                !!indexerIds.length &&
-                  <div>
-                    {indexerIds.length} {indexerIds.length > 1 ? translate('Indexers') : translate('Indexer')}
-                  </div>
-              }
-
-              {
-                !!notificationIds.length &&
-                  <div>
-                    {notificationIds.length} {notificationIds.length > 1 ? translate('Notifications') : translate('Notification')}
-                  </div>
-              }
-
-              {
-                !!indexerProxyIds.length &&
-                  <div>
-                    {indexerProxyIds.length} {indexerProxyIds.length > 1 ? translate('IndexerProxies') : translate('IndexerProxy')}
-                  </div>
-              }
-
-              {
-                !!applicationIds.length &&
-                  <div>
-                    {applicationIds.length} {applicationIds.length > 1 ? translate('Applications') : translate('Application')}
-                  </div>
-              }
-            </div>
-        }
-
-        {
           !isTagUsed &&
             <div>
               {translate('NoLinks')}
@@ -124,10 +83,6 @@ class Tag extends Component {
         <TagDetailsModal
           label={label}
           isTagUsed={isTagUsed}
-          indexerIds={indexerIds}
-          notificationIds={notificationIds}
-          indexerProxyIds={indexerProxyIds}
-          applicationIds={applicationIds}
           isOpen={isDetailsModalOpen}
           onModalClose={this.onDetailsModalClose}
           onDeleteTagPress={this.onDeleteTagPress}
@@ -150,18 +105,7 @@ class Tag extends Component {
 Tag.propTypes = {
   id: PropTypes.number.isRequired,
   label: PropTypes.string.isRequired,
-  notificationIds: PropTypes.arrayOf(PropTypes.number).isRequired,
-  indexerIds: PropTypes.arrayOf(PropTypes.number).isRequired,
-  indexerProxyIds: PropTypes.arrayOf(PropTypes.number).isRequired,
-  applicationIds: PropTypes.arrayOf(PropTypes.number).isRequired,
   onConfirmDeleteTag: PropTypes.func.isRequired
-};
-
-Tag.defaultProps = {
-  indexerIds: [],
-  notificationIds: [],
-  indexerProxyIds: [],
-  applicationIds: []
 };
 
 export default Tag;
