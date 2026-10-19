@@ -1,8 +1,9 @@
 # Requestarr command reference
 
-Requestarr registers exactly two Discord commands:
+Requestarr registers exactly three Discord commands:
 
 - **`/request`** for everyone.
+- **`/help`** for everyone.
 - **`/admin`** for admins only. It's hidden from members without Manage Server.
 
 Everything else is a button, on a pinned panel or on a card.
@@ -21,36 +22,78 @@ Requestarr checks who you are and where you are on every command and button clic
 | `type` | Pick from the list. It only shows types you're allowed to request, for example Movies or TV. |
 | `query` | A title to search for, or an ID: `tmdb:603` for a movie, or `tvdb:12345` for a TV show. |
 
-Searching shows up to 10 results. Pick one to see its card, with poster, year and overview.
+A request is **one message** that changes in place as you go: results, details, seasons, a confirmation, then the final status. Nothing else is posted for it, so separate requests stay separate.
 
-**What the card shows:**
+**Results** (up to 10). Each line shows the title with its year, then the year, the network or studio, and either:
+
+- the top three cast, when the admin has set a The Movie Database key, for example `2024 · Apple TV · Joel Edgerton, Jennifer Connelly, Alice Braga`
+- the genre, without a key, for example `2024 · Apple TV · Drama`
+
+Pick one to see its card.
+
+**The card:**
+
+- a large poster
+- genres, rating, age rating, and runtime
+- movies: studio, status, and cinema, digital and physical release dates
+- TV: network, status, number of seasons (and whether there are specials), and first and last air dates
+- the top cast and the episode count, with a The Movie Database key
+- which instance the request goes to
+- the overview, and a link to IMDb
+
+The card also says if the title is:
 
 - **Already in the library:** nothing to request.
 - **Already requested by someone:** press **Follow request**. You'll be notified with them, and it doesn't use your quota.
 - **Previously denied:** shows the reason. You can request it again.
 - **Your own pending request:** has a **Cancel request** button.
 
+**Back to results** returns to the list.
+
 **Making the request:**
 
 - **Movies:** press **Request**.
-- **TV:** pick seasons: specific ones, **All seasons**, and optionally **Future seasons**, which keeps monitoring new seasons as they air. Very long shows list the 23 most recent seasons.
+- **TV:** pick one of two paths:
+  - **All seasons:** every season now, and new seasons as they air. Specials aren't included.
+  - **Choose seasons:** pick seasons from a list, including **Specials** if you want them, and optionally **Also new seasons as they air**. Very long shows list the 24 most recent seasons.
 
-What happens next depends on your access for that type:
+  Requestarr then says what you chose in plain words, for example "season 2 only; new seasons won't be added". Press **Request** to send it or **Back** to change it.
 
-- **Needs approval:** waits for an admin. The reply has a **Cancel request** button until it's decided.
-- **Auto-approve:** added straight away.
+**The final status** is always one of:
 
-The outcome is always posted in your channel.
+| Status | Meaning |
+|---|---|
+| ✅ **Request sent** | Added to Sonarr or Radarr; a search has started. |
+| ⏳ **Waiting for approval** | Waiting for an admin. Has a **Cancel request** button until it's decided. |
+| 📌 **Following** | Someone else asked first; you're notified with them. |
+| ✅ **Already available** | It's in the library. |
+| ⛔ **Not requested** | Refused, with the reason (for example your limit). |
+
+For TV, the status repeats which seasons were requested.
 
 ### Your panel
 
-A pinned message at the top of your channel. It shows what you can request.
+One pinned message at the top of your channel. It welcomes you and shows what you can request, always matching your access.
 
 | Button | What it does |
 |---|---|
 | **My requests** | Lists your requests and the ones you follow (only you see the reply). |
 | **My limits** | Shows your access level and quota usage per type. |
 | **Link Plex** | Opens a form for your Plex username and sends an access request to the admin. It disappears once an account is linked. |
+| **Help** | Opens help, the same as `/help`. |
+
+### `/help`
+
+Opens help that only you can see. It starts with a short overview, then you pick topics from a menu, with **Back** to return. Topics:
+
+- requesting and searching by ID
+- TV seasons
+- following an existing request
+- my requests and cancelling
+- limits
+- linking Plex
+
+You only see topics you can use: no seasons topic without TV access, no Plex topic once you're linked.
 
 ## For admins
 
@@ -78,6 +121,19 @@ All admin commands are under `/admin` and only work in `#requestarr-admin`.
 | `/admin deny id:{number} [reason]` | Denies a request. The reason is shown to the user. The **Deny** button asks for a reason. |
 | `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |
 
+### `/admin help`
+
+Admin help, only you can see it, in `#requestarr-admin` only. Topics:
+
+- onboarding and access
+- approvals and the queue
+- limits
+- media server requests
+- the admin role and command visibility
+- **What users see**: the full user help, so you can walk someone through theirs
+
+`/help` always shows user help, even to an admin.
+
 ### Media server access
 
 | Command | What it does |
@@ -95,6 +151,7 @@ Pinned in `#requestarr-admin`.
 |---|---|
 | **Pending queue** | Lists requests waiting for approval. |
 | **Users** | Lists every user with their status, channel and access. |
+| **Help** | Opens admin help, the same as `/admin help`. |
 
 ## Limits
 
@@ -104,3 +161,8 @@ Requestarr keeps within Discord's limits:
 - At most 25 menu options.
 - Labels of at most 100 characters.
 - Messages of at most 2,000 characters.
+- Button and menu IDs of at most 100 characters.
+
+## The Movie Database
+
+Cast and TV episode counts come from The Movie Database when the admin configures a key (setup guide 4.6). Wherever they appear, Requestarr notes: "Cast from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB."

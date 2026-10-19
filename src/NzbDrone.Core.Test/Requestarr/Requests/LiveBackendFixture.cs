@@ -8,6 +8,9 @@ using NUnit.Framework;
 using NzbDrone.Common.Http;
 using NzbDrone.Test.Common.Categories;
 using Requestarr.Core.Backends;
+using Requestarr.Core.Discord;
+using Requestarr.Core.Discord.Interactions;
+using Requestarr.Core.Metadata;
 using Requestarr.Core.Provisioning;
 using Requestarr.Core.Requests;
 using Requestarr.Core.Test.Discord.Harness;
@@ -54,6 +57,95 @@ namespace Requestarr.Core.Test.Requests
                     new() { Name = "Sonarr (test)", Url = SonarrUrl, ApiKey = SonarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/tv", SeriesType = "standard", Default = true }
                 }
             });
+        }
+
+        // The real The Movie Database client when TMDB_API_KEY is set; otherwise no cast.
+        protected override void UseMetadata()
+        {
+            var key = Environment.GetEnvironmentVariable("TMDB_API_KEY");
+            TmdbKey = new TmdbSettingsStore();
+            TmdbKey.Set(key);
+            Mocker.SetConstant<ITmdbSettingsStore>(TmdbKey);
+            Mocker.SetConstant<ITmdbClient>(new TmdbClient(TmdbKey, NLog.LogManager.GetLogger("LiveTmdb")));
+        }
+
+        // Both season paths through the real handlers into the test Sonarr, then per-season
+        // monitoring and the new-seasons setting read back from Sonarr itself.
+        [Test]
+        public async Task tv_requests_via_both_season_paths_read_back_from_sonarr()
+        {
+            Log($"[tmdb] key configured: {TmdbKey.Enabled}");
+            await AddUser(Alice);
+            await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "auto"));
+
+            var results = await Harness.SendAsync(Search(Alice, "tv", "dark matter"));
+            Log($"[results] {results.LastReply.Content.Replace("\n", " | ")}");
+
+            foreach (var option in results.LastReply.SelectMenu.Options.Take(5))
+            {
+                Log($"[results]   {option.Label}  —  {option.Description}");
+            }
+
+            var newer = int.Parse(results.LastReply.SelectMenu.Options.First(o => o.Label == "Dark Matter (2024)").Value);
+            var older = int.Parse(results.LastReply.SelectMenu.Options.First(o => o.Label == "Dark Matter (2015)").Value);
+
+            // Path 1: All seasons.
+            var card = await Harness.SendAsync(FakeInteraction.SelectMenu(results.LastReply.SelectMenu.CustomId, newer.ToString()).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            LogCard("card", card.LastReply);
+
+            var all = await Click($"{RequestRoutes.TvAll}:{newer}");
+            Log($"[all] confirm: {all.LastReply.Content.Replace("\n", " | ")}");
+            var allFinal = await Click(all.LastReply.Buttons.First().CustomId);
+            Log($"[all] final: {allFinal.LastReply.Content.Replace("\n", " | ")}");
+
+            // Path 2: Choose seasons, season 2 only.
+            var choose = await Click($"{RequestRoutes.TvChoose}:{older}");
+            Log($"[choose] menu: {string.Join(", ", choose.LastReply.SelectMenu.Options.Select(o => $"{o.Label}={o.Value}"))}");
+            var picked = await Harness.SendAsync(FakeInteraction.SelectMenu($"{RequestRoutes.TvPick}:{older}", "s2").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            Log($"[choose] confirm: {picked.LastReply.Content.Replace("\n", " | ")}");
+            var chooseFinal = await Click(picked.LastReply.Buttons.First().CustomId);
+            Log($"[choose] final: {chooseFinal.LastReply.Content.Replace("\n", " | ")}");
+
+            var http = Mocker.Resolve<IHttpClient>();
+            var series = (await Get(http, SonarrUrl, SonarrKey, "series")).Children<JObject>().ToList();
+            var allSeries = series.Single(s => (int)s["tvdbId"] == newer);
+            var chosenSeries = series.Single(s => (int)s["tvdbId"] == older);
+
+            foreach (var (label, s) in new[] { ("all", allSeries), ("choose", chosenSeries) })
+            {
+                Log($"[sonarr] {label}: {s["title"]} ({s["year"]}) monitored={s["monitored"]} monitorNewItems={s["monitorNewItems"]}");
+                Log($"[sonarr] {label}: seasons {string.Join(", ", s["seasons"].Select(x => $"S{x["seasonNumber"]}={((bool)x["monitored"] ? "monitored" : "unmonitored")}"))}");
+            }
+
+            ((string)allSeries["monitorNewItems"]).Should().Be("all");
+            allSeries["seasons"].Where(x => (int)x["seasonNumber"] > 0).Should().OnlyContain(x => (bool)x["monitored"]);
+            allSeries["seasons"].Where(x => (int)x["seasonNumber"] == 0).Should().OnlyContain(x => !(bool)x["monitored"]);
+
+            ((string)chosenSeries["monitorNewItems"]).Should().Be("none");
+            chosenSeries["seasons"].Single(x => (int)x["seasonNumber"] == 2)["monitored"].Value<bool>().Should().BeTrue();
+            chosenSeries["seasons"].Where(x => (int)x["seasonNumber"] != 2).Should().OnlyContain(x => !(bool)x["monitored"]);
+
+            // A movie card from the real Radarr, for the record.
+            var movie = await Harness.SendAsync(Search(Alice, "movie", "tmdb:438631"));
+            LogCard("movie card", movie.LastReply);
+        }
+
+        private Task<InteractionRun> Click(string customId) =>
+            Harness.SendAsync(FakeInteraction.Button(customId).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+
+        private static void LogCard(string label, InteractionReply reply)
+        {
+            var embed = reply.Embeds.Single();
+            Log($"[{label}] {reply.Content.Replace("\n", " | ")}");
+            Log($"[{label}] title=\"{embed.Title}\" link={embed.Url ?? "none"} poster={(embed.ImageUrl != null ? "large image" : "none")} colour=#{embed.Color:X6} footer={embed.Footer ?? "none"}");
+            Log($"[{label}] overview: {DiscordLimits.Truncate(embed.Description, 90)}");
+
+            foreach (var field in embed.Fields)
+            {
+                Log($"[{label}]   {field.Key}: {field.Value.Replace("\n", " / ")}");
+            }
+
+            Log($"[{label}] buttons: {string.Join(" ", reply.Buttons.Select(b => $"[{b.Label}]"))}");
         }
 
         [Test]

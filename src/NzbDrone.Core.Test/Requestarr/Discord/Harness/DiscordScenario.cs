@@ -28,8 +28,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         protected FakeDiscordGuild Discord { get; private set; }
         protected FakeRadarr Radarr { get; private set; }
         protected FakeSonarr Sonarr { get; private set; }
-        protected FakeTmdb Tmdb { get; private set; }
-        protected TmdbSettingsStore TmdbKey { get; private set; }
+        protected FakeTmdb Tmdb { get; set; }
+        protected TmdbSettingsStore TmdbKey { get; set; }
         protected InteractionHarness Harness { get; private set; }
         protected DiscordGuildConfig Config => Mocker.Resolve<IGuildSetupService>().GetConfig();
         protected ulong AdminChannel => ulong.Parse(Config.AdminChannelId);
@@ -60,10 +60,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
             UseBackends();
-            Tmdb = new FakeTmdb();
-            TmdbKey = new TmdbSettingsStore();
-            Mocker.SetConstant<ITmdbSettingsStore>(TmdbKey);
-            Mocker.SetConstant<ITmdbClient>(Tmdb);
+            UseMetadata();
             Mocker.SetConstant<IMetadataService>(Mocker.Resolve<MetadataService>());
             Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
@@ -80,6 +77,15 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<ApprovalHandler>(),
                 Mocker.Resolve<PanelHandler>(),
                 Mocker.Resolve<HelpHandler>());
+        }
+
+        // Fake The Movie Database (no key) by default; live fixtures may use the real client.
+        protected virtual void UseMetadata()
+        {
+            Tmdb = new FakeTmdb();
+            TmdbKey = new TmdbSettingsStore();
+            Mocker.SetConstant<ITmdbSettingsStore>(TmdbKey);
+            Mocker.SetConstant<ITmdbClient>(Tmdb);
         }
 
         // Fake Radarr / Sonarr by default; live fixtures override with the real APIs.
