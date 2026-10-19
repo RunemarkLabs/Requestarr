@@ -108,7 +108,7 @@ namespace NzbDrone.Common.Test.InstrumentationTests
         [TestCase(@"""DownloadURL"":""https://broadcasthe.net/torrents.php?action=download&id=123&authkey=mySecret&torrent_pass=mySecret""")]
 
         // Webhooks - Notifiarr
-        [TestCase(@"https://xxx.yyy/api/v1/notification/prowlarr/9pr04sg6-0123-3210-imav-eql2tyu8xyui")]
+        [TestCase(@"https://xxx.yyy/api/v1/notification/requestarr/9pr04sg6-0123-3210-imav-eql2tyu8xyui")]
         [TestCase("https://notifiarr.com/notifier.php: api=1234530f-422f-4aac-b6b3-01233210aaaa&radarr_health_issue_message=Download")]
 
         // RSS
@@ -118,9 +118,9 @@ namespace NzbDrone.Common.Test.InstrumentationTests
         [TestCase(@"""name"":""apiKey"",""value"":""mySecret""")]
 
         // Internal
-        [TestCase(@"[Info] MigrationController: *** Migrating Database=prowlarr-main;Host=postgres14;Username=mySecret;Password=mySecret;Port=5432;Enlist=False ***")]
+        [TestCase(@"[Info] MigrationController: *** Migrating Database=requestarr-main;Host=postgres14;Username=mySecret;Password=mySecret;Port=5432;Enlist=False ***")]
         [TestCase("/readarr/signalr/messages/negotiate?access_token=1234530f422f4aacb6b301233210aaaa&negotiateVersion=1")]
-        [TestCase(@"[Info] MigrationController: *** Migrating Database=prowlarr-main;Host=postgres14;Username=mySecret;Password=mySecret;Port=5432;token=mySecret;Enlist=False&username=mySecret;mypassword=mySecret;mypass=shouldkeep1;test_token=mySecret;password=123%@%_@!#^#@;use_password=mySecret;get_token=shouldkeep2;usetoken=shouldkeep3;passwrd=mySecret;")]
+        [TestCase(@"[Info] MigrationController: *** Migrating Database=requestarr-main;Host=postgres14;Username=mySecret;Password=mySecret;Port=5432;token=mySecret;Enlist=False&username=mySecret;mypassword=mySecret;mypass=shouldkeep1;test_token=mySecret;password=123%@%_@!#^#@;use_password=mySecret;get_token=shouldkeep2;usetoken=shouldkeep3;passwrd=mySecret;")]
 
         // Discord
         [TestCase(@"https://discord.com/api/webhooks/mySecret")]
@@ -179,7 +179,7 @@ namespace NzbDrone.Common.Test.InstrumentationTests
         }
 
         [TestCase(@"https://www.torrentleech.org/torrents/browse/list/imdbID/tt8005374/categories/29,2,26,27,32,44,7,34,35")]
-        [TestCase(@"https://torrentapi.org/pubapi_v2.php?get_token=get_token&app_id=Prowlarr")]
+        [TestCase(@"https://torrentapi.org/pubapi_v2.php?get_token=get_token&app_id=Requestarr")]
         public void should_not_clean_url(string message)
         {
             var cleansedMessage = CleanseLogMessage.Cleanse(message);

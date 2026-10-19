@@ -29,7 +29,7 @@ namespace NzbDrone.Host.AccessControl
                 }
                 else if (!passive)
                 {
-                    throw new RemoteAccessException("Failed to register URLs for Prowlarr. Prowlarr will not be accessible remotely");
+                    throw new RemoteAccessException("Failed to register URLs for Requestarr. Requestarr will not be accessible remotely");
                 }
             }
         }

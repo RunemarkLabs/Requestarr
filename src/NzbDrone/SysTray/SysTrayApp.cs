@@ -30,8 +30,8 @@ namespace NzbDrone.SysTray
             _trayMenu.Items.Add(new ToolStripSeparator());
             _trayMenu.Items.Add(new ToolStripMenuItem("Exit", null, OnExit));
 
-            _trayIcon.Text = string.Format("Prowlarr - {0}", BuildInfo.Version);
-            _trayIcon.Icon = Properties.Resources.Prowlarr;
+            _trayIcon.Text = string.Format("Requestarr - {0}", BuildInfo.Version);
+            _trayIcon.Icon = Properties.Resources.Requestarr;
 
             _trayIcon.ContextMenuStrip = _trayMenu;
             _trayIcon.Visible = true;

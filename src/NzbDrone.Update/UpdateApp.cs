@@ -33,10 +33,10 @@ namespace NzbDrone.Update
                 var startupContext = new StartupContext(args);
                 NzbDroneLogger.Register(startupContext, true, true);
 
-                Logger.Info("Starting Prowlarr Update Client");
+                Logger.Info("Starting Requestarr Update Client");
 
                 var container = new Container(rules => rules.WithNzbDroneRules())
-                    .AutoAddServices(new List<string> { "Prowlarr.Update" })
+                    .AutoAddServices(new List<string> { "Requestarr.Update" })
                     .AddNzbDroneLogger()
                     .AddStartupContext(startupContext);
 

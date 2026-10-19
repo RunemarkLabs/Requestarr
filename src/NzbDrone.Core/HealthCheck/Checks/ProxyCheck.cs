@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using NLog;
-using NzbDrone.Common.Cloud;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Configuration.Events;
@@ -18,16 +17,12 @@ namespace NzbDrone.Core.HealthCheck.Checks
         private readonly IConfigService _configService;
         private readonly IHttpClient _client;
 
-        private readonly IHttpRequestBuilderFactory _cloudRequestBuilder;
-
-        public ProxyCheck(IProwlarrCloudRequestBuilder cloudRequestBuilder, IConfigService configService, IHttpClient client, Logger logger, ILocalizationService localizationService)
+        public ProxyCheck(IConfigService configService, IHttpClient client, Logger logger, ILocalizationService localizationService)
             : base(localizationService)
         {
             _configService = configService;
             _client = client;
             _logger = logger;
-
-            _cloudRequestBuilder = cloudRequestBuilder.Services;
         }
 
         public override HealthCheck Check()
@@ -51,8 +46,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
                     "#proxy-failed-resolve-ip");
             }
 
-            var request = _cloudRequestBuilder.Create()
-                .Resource("/ping")
+            var request = new HttpRequestBuilder("https://github.com/")
                 .Build();
 
             try

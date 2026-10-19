@@ -23,13 +23,13 @@ using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Host.AccessControl;
 using NzbDrone.SignalR;
-using Prowlarr.Api.V1.System;
-using Prowlarr.Http;
-using Prowlarr.Http.Authentication;
-using Prowlarr.Http.ClientSchema;
-using Prowlarr.Http.ErrorManagement;
-using Prowlarr.Http.Frontend;
-using Prowlarr.Http.Middleware;
+using Requestarr.Api.V1.System;
+using Requestarr.Http;
+using Requestarr.Http.Authentication;
+using Requestarr.Http.ClientSchema;
+using Requestarr.Http.ErrorManagement;
+using Requestarr.Http.Frontend;
+using Requestarr.Http.Middleware;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace NzbDrone.Host
@@ -52,7 +52,7 @@ namespace NzbDrone.Host
                 b.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
                 b.AddFilter("Microsoft.AspNetCore.HostFiltering", LogLevel.Information);
                 b.AddFilter("Microsoft.AspNetCore.HttpOverrides", LogLevel.Debug);
-                b.AddFilter("Prowlarr.Http.Authentication.ApiKeyAuthenticationHandler", LogLevel.Information);
+                b.AddFilter("Requestarr.Http.Authentication.ApiKeyAuthenticationHandler", LogLevel.Information);
                 b.AddFilter("Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager", LogLevel.Error);
                 b.AddNLog();
             });
@@ -97,12 +97,12 @@ namespace NzbDrone.Host
                 c.SwaggerDoc("v1", new OpenApiInfo
                 {
                     Version = "1.0.0",
-                    Title = "Prowlarr",
-                    Description = "Prowlarr API docs",
+                    Title = "Requestarr",
+                    Description = "Requestarr API docs",
                     License = new OpenApiLicense
                     {
                         Name = "GPL-3.0",
-                        Url = new Uri("https://github.com/Prowlarr/Prowlarr/blob/develop/LICENSE")
+                        Url = new Uri("https://github.com/RunemarkLabs/Requestarr/blob/main/LICENSE")
                     }
                 });
 
@@ -147,7 +147,7 @@ namespace NzbDrone.Host
                     Variables = new Dictionary<string, OpenApiServerVariable>
                     {
                         { "protocol", new OpenApiServerVariable { Default = "http", Enum = new List<string> { "http", "https" } } },
-                        { "hostpath", new OpenApiServerVariable { Default = "localhost:9696" } }
+                        { "hostpath", new OpenApiServerVariable { Default = "localhost:9797" } }
                     }
                 });
 
@@ -221,7 +221,7 @@ namespace NzbDrone.Host
                               IRuntimeInfo runtimeInfo,
                               IFirewallAdapter firewallAdapter,
                               IEventAggregator eventAggregator,
-                              ProwlarrErrorPipeline errorHandler)
+                              RequestarrErrorPipeline errorHandler)
         {
             initializeLogger.Initialize();
             appFolderFactory.Register();

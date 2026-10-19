@@ -17,10 +17,10 @@ namespace NzbDrone.Integration.Test
 
             var resultGet = Tags.All();
 
-            var logFile = "prowlarr.trace.txt";
+            var logFile = "requestarr.trace.txt";
             var logLines = Logs.GetLogFileLines(logFile);
 
-            var resultPost = Tags.InvalidPost(new Prowlarr.Api.V1.Tags.TagResource());
+            var resultPost = Tags.InvalidPost(new Requestarr.Api.V1.Tags.TagResource());
 
             // Skip 2 and 1 to ignore the logs endpoint
             logLines = Logs.GetLogFileLines(logFile).Skip(logLines.Length + 2).ToArray();

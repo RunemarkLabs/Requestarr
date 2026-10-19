@@ -75,7 +75,7 @@ namespace NzbDrone.Core.Configuration
     public class ConfigFileProvider : IConfigFileProvider
     {
         public const string CONFIG_ELEMENT_NAME = "Config";
-        public const int DEFAULT_PORT = 9696;
+        public const int DEFAULT_PORT = 9797;
         public const int DEFAULT_SSL_PORT = 6969;
 
         private readonly IEventAggregator _eventAggregator;
@@ -258,8 +258,8 @@ namespace NzbDrone.Core.Configuration
         public string PostgresHost => _postgresOptions?.Host ?? GetValue("PostgresHost", string.Empty, persist: false);
         public string PostgresUser => _postgresOptions?.User ?? GetValue("PostgresUser", string.Empty, persist: false);
         public string PostgresPassword => _postgresOptions?.Password ?? GetValue("PostgresPassword", string.Empty, persist: false);
-        public string PostgresMainDb => _postgresOptions?.MainDb ?? GetValue("PostgresMainDb", "prowlarr-main", persist: false);
-        public string PostgresLogDb => _postgresOptions?.LogDb ?? GetValue("PostgresLogDb", "prowlarr-log", persist: false);
+        public string PostgresMainDb => _postgresOptions?.MainDb ?? GetValue("PostgresMainDb", "requestarr-main", persist: false);
+        public string PostgresLogDb => _postgresOptions?.LogDb ?? GetValue("PostgresLogDb", "requestarr-log", persist: false);
         public int PostgresPort => (_postgresOptions?.Port ?? 0) != 0 ? _postgresOptions.Port : GetValueInt("PostgresPort", 5432, persist: false);
         public string PostgresMainDbConnectionString => _postgresOptions?.MainDbConnectionString ?? GetValue("PostgresMainDbConnectionString", string.Empty, persist: false);
         public string PostgresLogDbConnectionString => _postgresOptions?.LogDbConnectionString ?? GetValue("PostgresLogDbConnectionString", string.Empty, persist: false);
@@ -452,12 +452,12 @@ namespace NzbDrone.Core.Configuration
 
                         if (contents.IsNullOrWhiteSpace())
                         {
-                            throw new InvalidConfigFileException($"{_configFile} is empty. Please delete the config file and Prowlarr will recreate it.");
+                            throw new InvalidConfigFileException($"{_configFile} is empty. Please delete the config file and Requestarr will recreate it.");
                         }
 
                         if (contents.All(char.IsControl))
                         {
-                            throw new InvalidConfigFileException($"{_configFile} is corrupt. Please delete the config file and Prowlarr will recreate it.");
+                            throw new InvalidConfigFileException($"{_configFile} is corrupt. Please delete the config file and Requestarr will recreate it.");
                         }
 
                         var xDoc = XDocument.Parse(_diskProvider.ReadAllText(_configFile));
@@ -465,7 +465,7 @@ namespace NzbDrone.Core.Configuration
 
                         if (config.Count != 1)
                         {
-                            throw new InvalidConfigFileException($"{_configFile} is invalid. Please delete the config file and Prowlarr will recreate it.");
+                            throw new InvalidConfigFileException($"{_configFile} is invalid. Please delete the config file and Requestarr will recreate it.");
                         }
 
                         return xDoc;
@@ -479,7 +479,7 @@ namespace NzbDrone.Core.Configuration
             }
             catch (XmlException ex)
             {
-                throw new InvalidConfigFileException($"{_configFile} is corrupt is invalid. Please delete the config file and Prowlarr will recreate it.", ex);
+                throw new InvalidConfigFileException($"{_configFile} is corrupt is invalid. Please delete the config file and Requestarr will recreate it.", ex);
             }
         }
 

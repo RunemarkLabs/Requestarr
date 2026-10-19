@@ -19,9 +19,9 @@ namespace NzbDrone.Core.Test.Configuration
         [Test]
         public void should_split_on_comma_and_semicolon_and_trim_whitespace()
         {
-            var result = AllowedHostsParser.Parse("prowlarr.local, 192.168.1.5; myhost");
+            var result = AllowedHostsParser.Parse("requestarr.local, 192.168.1.5; myhost");
 
-            result.Should().BeEquivalentTo("prowlarr.local", "192.168.1.5", "myhost");
+            result.Should().BeEquivalentTo("requestarr.local", "192.168.1.5", "myhost");
         }
 
         [Test]
@@ -48,8 +48,8 @@ namespace NzbDrone.Core.Test.Configuration
             result.Should().BeEquivalentTo("a", "b");
         }
 
-        [TestCase("prowlarr.local")]
-        [TestCase("prowlarr.example.co.uk")]
+        [TestCase("requestarr.local")]
+        [TestCase("requestarr.example.co.uk")]
         [TestCase("my-host")]
         [TestCase("192.168.1.5")]
         [TestCase("[::1]")]
@@ -67,10 +67,10 @@ namespace NzbDrone.Core.Test.Configuration
         [TestCase(null)]
         [TestCase("")]
         [TestCase("  ")]
-        [TestCase("http://prowlarr.local")]
-        [TestCase("prowlarr.local:8989")]
-        [TestCase("prowlarr local")]
-        [TestCase("prowlarr.*")]
+        [TestCase("http://requestarr.local")]
+        [TestCase("requestarr.local:8989")]
+        [TestCase("requestarr local")]
+        [TestCase("requestarr.*")]
         [TestCase("*")]
         [TestCase("*.")]
         [TestCase("*.192.168.1.5")]

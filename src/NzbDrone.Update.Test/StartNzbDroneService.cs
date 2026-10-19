@@ -17,7 +17,7 @@ namespace NzbDrone.Update.Test
         [Test]
         public void should_start_service_if_app_type_was_serivce()
         {
-            var targetFolder = "c:\\Prowlarr\\".AsOsAgnostic();
+            var targetFolder = "c:\\Requestarr\\".AsOsAgnostic();
 
             Subject.Start(AppType.Service, targetFolder);
 
@@ -27,8 +27,8 @@ namespace NzbDrone.Update.Test
         [Test]
         public void should_start_console_if_app_type_was_service_but_start_failed_because_of_permissions()
         {
-            var targetFolder = "c:\\Prowlarr\\".AsOsAgnostic();
-            var targetProcess = "c:\\Prowlarr\\Prowlarr.Console".AsOsAgnostic().ProcessNameToExe();
+            var targetFolder = "c:\\Requestarr\\".AsOsAgnostic();
+            var targetProcess = "c:\\Requestarr\\Requestarr.Console".AsOsAgnostic().ProcessNameToExe();
 
             Mocker.GetMock<IServiceProvider>().Setup(c => c.Start(ServiceProvider.SERVICE_NAME)).Throws(new InvalidOperationException());
 

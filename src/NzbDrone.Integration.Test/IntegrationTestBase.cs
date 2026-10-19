@@ -14,9 +14,9 @@ using NzbDrone.Common.Processes;
 using NzbDrone.Integration.Test.Client;
 using NzbDrone.SignalR;
 using NzbDrone.Test.Common.Categories;
-using Prowlarr.Api.V1.Config;
-using Prowlarr.Api.V1.System.Tasks;
-using Prowlarr.Api.V1.Tags;
+using Requestarr.Api.V1.Config;
+using Requestarr.Api.V1.System.Tasks;
+using Requestarr.Api.V1.Tags;
 using RestSharp;
 using RestSharp.Serializers.SystemTextJson;
 
@@ -135,7 +135,7 @@ namespace NzbDrone.Integration.Test
         protected async Task ConnectSignalR()
         {
             _signalRReceived = new List<SignalRMessage>();
-            _signalrConnection = new HubConnectionBuilder().WithUrl("http://localhost:9696/signalr/messages").Build();
+            _signalrConnection = new HubConnectionBuilder().WithUrl("http://localhost:9797/signalr/messages").Build();
 
             var cts = new CancellationTokenSource();
 

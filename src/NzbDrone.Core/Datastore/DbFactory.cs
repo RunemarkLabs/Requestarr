@@ -121,7 +121,7 @@ namespace NzbDrone.Core.Datastore
 
                 if (OsInfo.IsOsx)
                 {
-                    throw new CorruptDatabaseException("Database file: {0} is corrupt, restore from backup if available. See: https://wiki.servarr.com/prowlarr/faq#i-use-prowlarr-on-a-mac-and-it-suddenly-stopped-working-what-happened", e, fileName);
+                    throw new CorruptDatabaseException("Database file: {0} is corrupt, restore from backup if available. See: https://wiki.servarr.com/prowlarr/faq#i-use-requestarr-on-a-mac-and-it-suddenly-stopped-working-what-happened", e, fileName);
                 }
 
                 throw new CorruptDatabaseException("Database file: {0} is corrupt, restore from backup if available. See: https://wiki.servarr.com/prowlarr/faq#i-am-getting-an-error-database-disk-image-is-malformed", e, fileName);
@@ -150,18 +150,18 @@ namespace NzbDrone.Core.Datastore
                                 continue;
                             }
 
-                            throw new ProwlarrStartupException(ex, "Error creating main database");
+                            throw new RequestarrStartupException(ex, "Error creating main database");
                         }
                     }
                 }
                 else
                 {
-                    throw new ProwlarrStartupException(e, "Error creating main database");
+                    throw new RequestarrStartupException(e, "Error creating main database");
                 }
             }
             catch (Exception e)
             {
-                throw new ProwlarrStartupException(e, "Error creating main database");
+                throw new RequestarrStartupException(e, "Error creating main database");
             }
         }
 
@@ -193,7 +193,7 @@ namespace NzbDrone.Core.Datastore
             }
             catch (Exception e)
             {
-                throw new ProwlarrStartupException(e, "Error creating log database");
+                throw new RequestarrStartupException(e, "Error creating log database");
             }
         }
     }

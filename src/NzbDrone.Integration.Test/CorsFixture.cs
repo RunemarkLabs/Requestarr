@@ -1,6 +1,6 @@
 using FluentAssertions;
 using NUnit.Framework;
-using Prowlarr.Http.Extensions;
+using Requestarr.Http.Extensions;
 using RestSharp;
 
 namespace NzbDrone.Integration.Test

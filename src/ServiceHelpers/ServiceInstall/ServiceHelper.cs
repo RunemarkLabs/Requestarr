@@ -8,7 +8,7 @@ namespace ServiceInstall
 {
     public static class ServiceHelper
     {
-        private static string ProwlarrExe => Path.Combine(new FileInfo(Assembly.GetExecutingAssembly().Location).Directory.FullName, "Prowlarr.Console.exe");
+        private static string RequestarrExe => Path.Combine(new FileInfo(Assembly.GetExecutingAssembly().Location).Directory.FullName, "Requestarr.Console.exe");
 
         private static bool IsAnAdministrator()
         {
@@ -18,9 +18,9 @@ namespace ServiceInstall
 
         public static void Run(string arg)
         {
-            if (!File.Exists(ProwlarrExe))
+            if (!File.Exists(RequestarrExe))
             {
-                Console.WriteLine("Unable to find Prowlarr.Console.exe in the current directory.");
+                Console.WriteLine("Unable to find Requestarr.Console.exe in the current directory.");
                 return;
             }
 
@@ -32,7 +32,7 @@ namespace ServiceInstall
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = ProwlarrExe,
+                FileName = RequestarrExe,
                 Arguments = arg,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

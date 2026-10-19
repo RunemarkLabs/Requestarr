@@ -25,7 +25,7 @@ namespace NzbDrone.Core.Test.SecurityTests
         [Test]
         public void should_encrypt_and_decrypt_string()
         {
-            const string plainText = "https://prowlarr.com";
+            const string plainText = "https://requestarr.com";
 
             var encrypted = Subject.Protect(plainText);
             var decrypted = Subject.UnProtect(encrypted);

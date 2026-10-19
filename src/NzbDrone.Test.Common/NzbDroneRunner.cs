@@ -27,7 +27,7 @@ namespace NzbDrone.Test.Common
         public PostgresOptions PostgresOptions { get; private set; }
         public int Port { get; private set; }
 
-        public NzbDroneRunner(Logger logger, PostgresOptions postgresOptions, int port = 9696)
+        public NzbDroneRunner(Logger logger, PostgresOptions postgresOptions, int port = 9797)
         {
             _processProvider = new ProcessProvider(logger);
             _restClient = new RestClient($"http://localhost:{port}/api/v1");
@@ -46,11 +46,11 @@ namespace NzbDrone.Test.Common
             string consoleExe;
             if (OsInfo.IsWindows)
             {
-                consoleExe = "Prowlarr.Console.exe";
+                consoleExe = "Requestarr.Console.exe";
             }
             else
             {
-                consoleExe = "Prowlarr";
+                consoleExe = "Requestarr";
             }
 
             if (BuildInfo.IsDebug)
@@ -80,11 +80,11 @@ namespace NzbDrone.Test.Common
 
                 if (statusCall.ResponseStatus == ResponseStatus.Completed)
                 {
-                    TestContext.Progress.WriteLine($"Prowlarr {Port} is started. Running Tests");
+                    TestContext.Progress.WriteLine($"Requestarr {Port} is started. Running Tests");
                     return;
                 }
 
-                TestContext.Progress.WriteLine("Waiting for Prowlarr to start. Response Status : {0}  [{1}] {2}", statusCall.ResponseStatus, statusCall.StatusDescription, statusCall.ErrorException.Message);
+                TestContext.Progress.WriteLine("Waiting for Requestarr to start. Response Status : {0}  [{1}] {2}", statusCall.ResponseStatus, statusCall.StatusDescription, statusCall.ErrorException.Message);
 
                 Thread.Sleep(500);
             }
@@ -99,7 +99,7 @@ namespace NzbDrone.Test.Common
                     _nzbDroneProcess.Refresh();
                     if (_nzbDroneProcess.HasExited)
                     {
-                        var log = File.ReadAllLines(Path.Combine(AppData, "logs", "Prowlarr.trace.txt"));
+                        var log = File.ReadAllLines(Path.Combine(AppData, "logs", "Requestarr.trace.txt"));
                         var output = log.Join(Environment.NewLine);
                         TestContext.Progress.WriteLine("Process has exited prematurely: ExitCode={0} Output:\n{1}", _nzbDroneProcess.ExitCode, output);
                     }
@@ -124,8 +124,8 @@ namespace NzbDrone.Test.Common
                     _processProvider.Kill(_nzbDroneProcess.Id);
                 }
 
-                _processProvider.KillAll(ProcessProvider.PROWLARR_CONSOLE_PROCESS_NAME);
-                _processProvider.KillAll(ProcessProvider.PROWLARR_PROCESS_NAME);
+                _processProvider.KillAll(ProcessProvider.REQUESTARR_CONSOLE_PROCESS_NAME);
+                _processProvider.KillAll(ProcessProvider.REQUESTARR_PROCESS_NAME);
             }
             catch (InvalidOperationException)
             {
@@ -135,25 +135,25 @@ namespace NzbDrone.Test.Common
             TestBase.DeleteTempFolder(AppData);
         }
 
-        private void Start(string outputProwlarrConsoleExe)
+        private void Start(string outputRequestarrConsoleExe)
         {
             StringDictionary envVars = new();
             if (PostgresOptions?.Host != null)
             {
-                envVars.Add("Prowlarr__Postgres__Host", PostgresOptions.Host);
-                envVars.Add("Prowlarr__Postgres__Port", PostgresOptions.Port.ToString());
-                envVars.Add("Prowlarr__Postgres__User", PostgresOptions.User);
-                envVars.Add("Prowlarr__Postgres__Password", PostgresOptions.Password);
-                envVars.Add("Prowlarr__Postgres__MainDb", PostgresOptions.MainDb);
-                envVars.Add("Prowlarr__Postgres__LogDb", PostgresOptions.LogDb);
+                envVars.Add("Requestarr__Postgres__Host", PostgresOptions.Host);
+                envVars.Add("Requestarr__Postgres__Port", PostgresOptions.Port.ToString());
+                envVars.Add("Requestarr__Postgres__User", PostgresOptions.User);
+                envVars.Add("Requestarr__Postgres__Password", PostgresOptions.Password);
+                envVars.Add("Requestarr__Postgres__MainDb", PostgresOptions.MainDb);
+                envVars.Add("Requestarr__Postgres__LogDb", PostgresOptions.LogDb);
 
                 TestContext.Progress.WriteLine("Using env vars:\n{0}", envVars.ToJson());
             }
 
-            TestContext.Progress.WriteLine("Starting instance from {0} on port {1}", outputProwlarrConsoleExe, Port);
+            TestContext.Progress.WriteLine("Starting instance from {0} on port {1}", outputRequestarrConsoleExe, Port);
 
             var args = "-nobrowser -nosingleinstancecheck -data=\"" + AppData + "\"";
-            _nzbDroneProcess = _processProvider.Start(outputProwlarrConsoleExe, args, envVars, OnOutputDataReceived, OnOutputDataReceived);
+            _nzbDroneProcess = _processProvider.Start(outputRequestarrConsoleExe, args, envVars, OnOutputDataReceived, OnOutputDataReceived);
         }
 
         private void OnOutputDataReceived(string data)

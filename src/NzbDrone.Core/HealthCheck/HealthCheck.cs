@@ -41,7 +41,7 @@ namespace NzbDrone.Core.HealthCheck
 
         private static HttpUri MakeWikiUrl(string fragment)
         {
-            return new HttpUri("https://wiki.servarr.com/prowlarr/system#") + new HttpUri(fragment);
+            return new HttpUri("https://github.com/RunemarkLabs/Requestarr/wiki/Health-Checks#") + new HttpUri(fragment);
         }
     }
 

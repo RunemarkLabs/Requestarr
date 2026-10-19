@@ -6,7 +6,6 @@ using NLog.Config;
 using NLog.Targets;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
-using NzbDrone.Common.Instrumentation.Sentry;
 
 namespace NzbDrone.Common.Instrumentation
 {
@@ -45,8 +44,6 @@ namespace NzbDrone.Common.Instrumentation
                 RegisterDebugger();
             }
 
-            RegisterSentry(updateApp, appFolderInfo);
-
             if (updateApp)
             {
                 RegisterUpdateFile(appFolderInfo);
@@ -64,36 +61,6 @@ namespace NzbDrone.Common.Instrumentation
             RegisterAuthLogger();
 
             LogManager.ReconfigExistingLoggers();
-        }
-
-        private static void RegisterSentry(bool updateClient, IAppFolderInfo appFolderInfo)
-        {
-            string dsn;
-
-            if (updateClient)
-            {
-                dsn = "https://67e12d21f1c745da97f89dd32c1d783e@sentry.servarr.com/29";
-            }
-            else
-            {
-                dsn = RuntimeInfo.IsProduction
-                    ? "https://a1fa00bd1d60465ebd9aca58c5a22d00@sentry.servarr.com/27"
-                    : "https://e38306161ff945999adf774a16e933c3@sentry.servarr.com/30";
-            }
-
-            var target = new SentryTarget(dsn, appFolderInfo)
-            {
-                Name = "sentryTarget",
-                Layout = "${message}"
-            };
-
-            var loggingRule = new LoggingRule("*", updateClient ? LogLevel.Trace : LogLevel.Debug, target);
-            LogManager.Configuration.AddTarget("sentryTarget", target);
-            LogManager.Configuration.LoggingRules.Add(loggingRule);
-
-            // Events logged to Sentry go only to Sentry.
-            var loggingRuleSentry = new LoggingRule("Sentry", LogLevel.Debug, target) { Final = true };
-            LogManager.Configuration.LoggingRules.Insert(0, loggingRuleSentry);
         }
 
         private static void RegisterDebugger()
@@ -116,7 +83,7 @@ namespace NzbDrone.Common.Instrumentation
 
             coloredConsoleTarget.Name = "consoleLogger";
 
-            var logFormat = Enum.TryParse<ConsoleLogFormat>(Environment.GetEnvironmentVariable("PROWLARR__LOG__CONSOLEFORMAT"), out var formatEnumValue)
+            var logFormat = Enum.TryParse<ConsoleLogFormat>(Environment.GetEnvironmentVariable("REQUESTARR__LOG__CONSOLEFORMAT"), out var formatEnumValue)
                 ? formatEnumValue
                 : ConsoleLogFormat.Standard;
 
@@ -130,9 +97,9 @@ namespace NzbDrone.Common.Instrumentation
 
         private static void RegisterAppFile(IAppFolderInfo appFolderInfo)
         {
-            RegisterAppFile(appFolderInfo, "appFileInfo", "prowlarr.txt", 50, LogLevel.Info);
-            RegisterAppFile(appFolderInfo, "appFileDebug", "prowlarr.debug.txt", 500, LogLevel.Off);
-            RegisterAppFile(appFolderInfo, "appFileTrace", "prowlarr.trace.txt", 500, LogLevel.Off);
+            RegisterAppFile(appFolderInfo, "appFileInfo", "requestarr.txt", 50, LogLevel.Info);
+            RegisterAppFile(appFolderInfo, "appFileDebug", "requestarr.debug.txt", 500, LogLevel.Off);
+            RegisterAppFile(appFolderInfo, "appFileTrace", "requestarr.trace.txt", 500, LogLevel.Off);
         }
 
         private static void RegisterAppFile(IAppFolderInfo appFolderInfo, string name, string fileName, int maxArchiveFiles, LogLevel minLogLevel)
@@ -204,7 +171,7 @@ namespace NzbDrone.Common.Instrumentation
                 c.ForLogger("Microsoft.AspNetCore.HttpOverrides*").WriteToNil(LogLevel.Debug);
                 c.ForLogger("Microsoft.Hosting.Lifetime*").WriteToNil(LogLevel.Info);
                 c.ForLogger("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware").WriteToNil(LogLevel.Fatal);
-                c.ForLogger("Prowlarr.Http.Authentication.ApiKeyAuthenticationHandler").WriteToNil(LogLevel.Info);
+                c.ForLogger("Requestarr.Http.Authentication.ApiKeyAuthenticationHandler").WriteToNil(LogLevel.Info);
             });
         }
 

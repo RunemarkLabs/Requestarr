@@ -20,7 +20,7 @@ namespace NzbDrone.Core.Datastore
                 .Build();
 
             var postgresOptions = new PostgresOptions();
-            config.GetSection("Prowlarr:Postgres").Bind(postgresOptions);
+            config.GetSection("Requestarr:Postgres").Bind(postgresOptions);
 
             return postgresOptions;
         }

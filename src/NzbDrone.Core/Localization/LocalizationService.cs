@@ -136,7 +136,7 @@ namespace NzbDrone.Core.Localization
 
         private string ReplaceTokens(string input, Dictionary<string, object> tokens)
         {
-            tokens.TryAdd("appName", "Prowlarr");
+            tokens.TryAdd("appName", "Requestarr");
 
             return TokenRegex.Replace(input, match =>
             {
