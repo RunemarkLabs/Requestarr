@@ -180,7 +180,7 @@ Add a `backends` section to `provisioning.yml`. Each type takes a list:
 ```yaml
 backends:
   radarr:
-    - name: Radarr                  # unique name, used by /user access
+    - name: Radarr                  # unique name, used by /admin user access
       url: http://radarr:7878       # as Requestarr reaches it (container name on the same Docker network)
       apiKey: ${RADARR_API_KEY}
       qualityProfile: HD-1080p      # profile name (or ID) in that Radarr
@@ -242,17 +242,17 @@ List as many instances per type as you need. Common setups:
 
 Users never pick an instance. By default every user's movie requests go to the default Radarr, and TV requests to the default Sonarr.
 
-To send one user's requests elsewhere, add `instance` to `/user access`:
+To send one user's requests elsewhere, add `instance` to `/admin user access`:
 
 ```
-/user access member:@someone type:Movies level:Auto-approve instance:Radarr 4K
+/admin user access member:@someone type:Movies level:Auto-approve instance:Radarr 4K
 ```
 
-The assignment is per user and per content type. Run `/user info` to see it.
+The assignment is per user and per content type. Run `/admin user info` to see it.
 
 ### 4.5 What happens to a request
 
-1. The user searches with `/request movie` or `/request tv` in their channel, or by ID with `/request movie-tmdb` or `/request tv-tvdb`. Results come from their instance's own search, so no extra API keys are needed.
+1. The user types `/request` in their channel and picks a type. The type list only shows types they have access to. Then they enter a title, or an ID such as `tmdb:603` (movies) or `tvdb:12345` (TV). Results come from their instance's own search, so no extra API keys are needed.
 2. They pick a title and see a card with the poster and overview. The card says if the title is:
    - already in the library
    - already requested by someone, in which case they can follow that request instead of making a second one
@@ -303,16 +303,21 @@ Requestarr checks admin status itself on every command and button click. What Di
 
 ### 5.3 Who sees which commands
 
-The admin-only commands are `/user`, `/queue`, `/approve` and `/deny`. They are registered so that only members with **Manage Server** see them, which means ordinary users never do.
+Requestarr registers exactly two commands:
 
-The commands users need stay visible to everyone: `/request`, `/requests`, `/quota` and `/mediaserver`. Their admin parts, like the `user:` filter or `/mediaserver approve`, only work for admins in the admin channel.
+- **`/request`** is visible to everyone. Its type list is filled in for each person from their own access, so someone without TV access never sees TV.
+- **`/admin`** holds every admin command: `/admin user …`, `/admin queue`, `/admin approve`, `/admin deny` and `/admin mediaserver …`. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
-**Optional:** co-admins who hold the Requestarr Admin role but not Manage Server won't see the admin commands. You can also keep admin commands out of every channel except the admin channel. As the server owner, open **Server Settings → Integrations → (your Requestarr bot) → Manage**, and under **Commands** pick each admin command (`/user`, `/queue`, `/approve`, `/deny`). For each one:
+Everything else users need is a button: on their pinned panel (5.5) or on their request cards.
 
-1. Under **Roles & Members**, add the **Requestarr Admin** role and allow it.
-2. Under **Channels**, turn off **All Channels** and allow only `#requestarr-admin`.
+**Optional:** co-admins who hold the Requestarr Admin role but not Manage Server won't see `/admin`. You can also keep `/admin` out of every channel except the admin channel. As the server owner:
 
-This is display only. Requestarr still refuses admin commands from non-admins and outside the admin channel.
+1. Open **Server Settings → Integrations → (your Requestarr bot) → Manage**.
+2. Under **Commands**, pick `/admin`.
+3. Under **Roles & Members**, add the **Requestarr Admin** role and allow it.
+4. Under **Channels**, turn off **All Channels** and allow only `#requestarr-admin`.
+
+This is display only. Requestarr still refuses `/admin` from non-admins and outside the admin channel.
 
 ### 5.4 The admin channel and request channels
 
@@ -323,14 +328,21 @@ On first start, Requestarr creates two things, or reuses them if they already ex
 
 You can rename or move the channel and category. Requestarr tracks them by ID.
 
-Admin commands work only in the admin channel. Users' commands work only in their own channel.
+The admin channel has a pinned panel with two buttons:
+
+- **Pending queue:** lists requests waiting for approval.
+- **Users:** lists everyone with their status, channel and access.
+
+Requestarr posts the panel on first start and re-posts it if it is deleted.
+
+Admin commands work only in the admin channel. Users' commands and panel buttons work only in their own channel.
 
 ### 5.5 Add your first user
 
 In `#requestarr-admin`, run:
 
 ```
-/user add member:@someone
+/admin user add member:@someone
 ```
 
 Requestarr then:
@@ -338,7 +350,12 @@ Requestarr then:
 1. Creates the Requestarr user from the member's Discord account.
 2. Creates a role just for them (`requestarr-{name}`) and gives it to them.
 3. Creates their private channel (`#requests-{name}`). Only that role, the admin role (and the owner), and the bot can see it.
-4. Posts a welcome message there listing what they may request.
+4. Posts a welcome message there, then pins the user's **panel**. The panel says what they may request and has three buttons:
+   - **My requests:** their requests and the ones they follow.
+   - **My limits:** their quota usage.
+   - **Link Plex:** a short form for their Plex username, which sends you an access request. This button disappears once an account is linked.
+
+   The panel updates itself when you change their access or link their account.
 
 By default, a new user gets:
 
@@ -347,7 +364,7 @@ By default, a new user gets:
 
 To set other levels at add time, use the optional `movie`, `tv`, and `music` options.
 
-Discord allows 250 roles per server, and every user needs one. `/user add` stops a few roles short of that limit and says so.
+Discord allows 250 roles per server, and every user needs one. `/admin user add` stops a few roles short of that limit and says so.
 
 ### 5.6 Access levels and quotas
 
@@ -362,13 +379,13 @@ There are three access levels for each content type:
 Change a level at any time:
 
 ```
-/user access member:@someone type:Movies level:Auto-approve
+/admin user access member:@someone type:Movies level:Auto-approve
 ```
 
 Quotas limit how many requests a user can make in a rolling window. To allow 5 movie requests every 7 days:
 
 ```
-/user quota member:@someone type:Movies limit:5 days:7
+/admin user quota member:@someone type:Movies limit:5 days:7
 ```
 
 `limit:0` removes the quota.
@@ -379,20 +396,20 @@ Comics and books are not offered yet.
 
 | Command | What it does |
 |---|---|
-| `/user info member:@someone` | Shows status, channel, access levels, quotas, and any linked media server account. |
-| `/user suspend member:@someone` | Locks their channel: they can read it but can't post or request. |
-| `/user unsuspend member:@someone` | Unlocks it. |
-| `/user remove member:@someone` | Archives their channel (renamed `archived-…`, visible only to admins), deletes their role, and keeps their request history. Run `/user add` to bring them back later. |
-| `/user mediaserver member:@someone service:Plex username:{plex username}` | Links their Plex account. |
-| `/user access … instance:{name}` | Sends that user's requests of that type to a specific Sonarr or Radarr (section 4.4). |
+| `/admin user info member:@someone` | Shows status, channel, access levels, quotas, and any linked media server account. |
+| `/admin user suspend member:@someone` | Locks their channel: they can read it but can't post or request. |
+| `/admin user unsuspend member:@someone` | Unlocks it. |
+| `/admin user remove member:@someone` | Archives their channel (renamed `archived-…`, visible only to admins), deletes their role, and keeps their request history. Run `/admin user add` to bring them back later. |
+| `/admin user mediaserver member:@someone service:Plex username:{plex username}` | Links their Plex account. |
+| `/admin user access … instance:{name}` | Sends that user's requests of that type to a specific Sonarr or Radarr (section 4.4). |
 
 For every command, see the [command reference](commands.md).
 
-Users can also ask for media server access themselves. In their own channel they run `/mediaserver request username:{plex username}`, and an Approve / Deny card appears in the admin channel. Approving links the account. Plex invites are sent automatically in a later release.
+Users can also ask for media server access themselves with the **Link Plex** button on their panel. An Approve / Deny card then appears in the admin channel; `/admin mediaserver approve` and `deny` do the same. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
 
 ### 5.8 When someone leaves the server
 
-If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, run `/user unsuspend`: Requestarr gives their role back and unlocks the channel.
+If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, run `/admin user unsuspend`: Requestarr gives their role back and unlocks the channel.
 
 Every action in this section, whether an admin or Requestarr did it, is recorded in Requestarr's audit log.
 
@@ -410,9 +427,11 @@ _Coming in Phase 2._
 - **The bot cannot create or assign roles:** move the bot's role higher in Server Settings → Roles.
 - **Members leaving are not detected:** Server Members Intent is off.
 - **"Only the Requestarr admin can use this command":** you are not the server owner and don't have the role set in `adminRoleId`.
-- **"Admin commands only work in the Requestarr admin channel":** run `/user …` commands in `#requestarr-admin`, not in a user's channel.
+- **"Admin commands only work in the Requestarr admin channel":** run `/admin …` commands in `#requestarr-admin`, not in a user's channel.
 - **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
-- **Users don't see /user or /queue:** that's intended; admin commands only show to members with Manage Server (see 5.3).
+- **Users don't see /admin:** that's intended; it only shows to members with Manage Server (see 5.3).
+- **The /request type list is empty:** that user has every type set to off. Change it with `/admin user access`.
+- **Discord still shows old commands after an update:** press Ctrl+R in the Discord app, or fully quit it from the system tray and reopen it.
 - **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.
 - **"Provisioning file could not be applied" under System → Status:** the message names the problem, for example an environment variable that is not set or an invalid value. Fix `provisioning.yml` or `secrets.env`, then `docker compose restart requestarr`.
 - **The container restarts or stays unhealthy:** check `docker compose logs requestarr`. A common cause is a `./config` folder the container cannot write to (see section 3.2).
