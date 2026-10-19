@@ -7,6 +7,7 @@ using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
+using Requestarr.Core.Discord;
 
 namespace Requestarr.Core.Provisioning
 {
@@ -23,18 +24,21 @@ namespace Requestarr.Core.Provisioning
         private readonly IProvisioningLoader _loader;
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IUserService _userService;
+        private readonly IDiscordSettingsStore _discordSettings;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
         public ProvisioningService(IProvisioningLoader loader,
                                    IConfigFileProvider configFileProvider,
                                    IUserService userService,
+                                   IDiscordSettingsStore discordSettings,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
             _loader = loader;
             _configFileProvider = configFileProvider;
             _userService = userService;
+            _discordSettings = discordSettings;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -142,9 +146,21 @@ namespace Requestarr.Core.Provisioning
                 applied.Add("API key");
             }
 
-            if (document.Discord != null)
+            var discord = document.Discord;
+
+            _discordSettings.Set(discord == null ? null : new DiscordSettings
             {
-                deferred.Add("discord");
+                BotToken = discord.BotToken,
+                ApplicationId = ParseId(discord.ApplicationId) ?? 0,
+                GuildId = ParseId(discord.GuildId) ?? 0,
+                AdminRoleId = ParseId(discord.AdminRoleId),
+                AdminChannelId = ParseId(discord.AdminChannelId),
+                RequestCategoryId = ParseId(discord.RequestCategoryIds?.FirstOrDefault())
+            });
+
+            if (discord != null)
+            {
+                applied.Add(_discordSettings.Current.IsConfigured ? "discord bot" : "discord (no bot token, bot not started)");
             }
 
             if (document.Backends != null)
@@ -168,6 +184,8 @@ namespace Requestarr.Core.Provisioning
 
             return ProvisioningResult.Succeeded(path, applied, deferred);
         }
+
+        private static ulong? ParseId(string value) => ulong.TryParse(value, out var id) ? id : null;
 
         private static void AddIfSet(Dictionary<string, object> config, string key, string value)
         {
