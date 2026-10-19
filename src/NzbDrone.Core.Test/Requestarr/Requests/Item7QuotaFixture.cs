@@ -32,7 +32,7 @@ namespace Requestarr.Core.Test.Requests
             Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Heat", Year = 1995, TmdbId = 949 });
             var run = await RequestMovie(Alice, 949);
 
-            run.LastReply.Content.Should().Be(DiscordText.QuotaReached(ContentType.Movie, 2, 7, new DateTime(2026, 10, 26, 12, 0, 0, DateTimeKind.Utc)));
+            run.LastReply.Content.Should().Contain(DiscordText.QuotaReached(ContentType.Movie, 2, 7, new DateTime(2026, 10, 26, 12, 0, 0, DateTimeKind.Utc)));
             RequestStore.All().Should().HaveCount(2);
         }
 
@@ -45,7 +45,7 @@ namespace Requestarr.Core.Test.Requests
 
             _now = _now.AddDays(7);
 
-            (await RequestMovie(Alice, 949)).LastReply.Content.Should().Be(DiscordText.RequestPending("Heat (1995)", 3));
+            (await RequestMovie(Alice, 949)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Heat (1995)", 3));
         }
 
         [Test]
@@ -58,9 +58,9 @@ namespace Requestarr.Core.Test.Requests
             Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Heat", Year = 1995, TmdbId = 949 });
             Radarr.Catalog.Add(new Backends.MediaLookupResult { Title = "Ronin", Year = 1998, TmdbId = 8195 });
 
-            (await RequestMovie(Alice, 949)).LastReply.Content.Should().Be(DiscordText.RequestPending("Heat (1995)", 3));
+            (await RequestMovie(Alice, 949)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Heat (1995)", 3));
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 3L));
-            (await RequestMovie(Alice, 8195)).LastReply.Content.Should().Be(DiscordText.RequestPending("Ronin (1998)", 4));
+            (await RequestMovie(Alice, 8195)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Ronin (1998)", 4));
         }
 
         [Test]

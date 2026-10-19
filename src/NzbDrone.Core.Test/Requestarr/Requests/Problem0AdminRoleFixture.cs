@@ -92,7 +92,7 @@ namespace Requestarr.Core.Test.Requests
         {
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToDictionary(c => c.Name.Value);
 
-            commands.Keys.Should().BeEquivalentTo("admin", "request");
+            commands.Keys.Should().BeEquivalentTo("admin", "help", "request");
             commands["admin"].DefaultMemberPermissions.Value.Should().Be(GuildPermission.ManageGuild);
             commands["request"].DefaultMemberPermissions.IsSpecified.Should().BeFalse();
         }

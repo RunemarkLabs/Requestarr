@@ -62,9 +62,9 @@ namespace Requestarr.Core.Test.Discord
             // Discord.Net validates names, descriptions (100), choice counts (25) on Build().
             var commands = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().ToList();
 
-            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("request", "admin");
+            commands.Select(c => c.Name.Value).Should().BeEquivalentTo("request", "help", "admin");
 
-            foreach (var option in commands.SelectMany(c => Flatten(c.Options.Value)))
+            foreach (var option in commands.SelectMany(c => Flatten(c.Options.IsSpecified ? c.Options.Value : null)))
             {
                 (option.Choices?.Count ?? 0).Should().BeLessThanOrEqualTo(DiscordLimits.ChoicesPerMenu);
                 option.Description.Length.Should().BeLessThanOrEqualTo(DiscordLimits.OptionLabelLength);

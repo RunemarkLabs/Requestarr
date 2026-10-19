@@ -47,6 +47,13 @@ namespace Requestarr.Core.Discord.Interactions
         public string Description { get; init; }
         public string Url { get; init; }
         public string ThumbnailUrl { get; init; }
+
+        // Large image under the fields (the poster on a request card).
+        public string ImageUrl { get; init; }
+
+        // Side colour as 0xRRGGBB, so separate requests stand apart in the channel.
+        public uint? Color { get; init; }
+        public string Footer { get; init; }
         public List<KeyValuePair<string, string>> Fields { get; init; } = new();
     }
 

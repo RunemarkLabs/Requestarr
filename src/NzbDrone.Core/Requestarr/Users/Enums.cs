@@ -33,6 +33,9 @@ namespace Requestarr.Core.Users
 
         public static readonly IReadOnlyList<ContentType> Offered = new[] { ContentType.Movie, ContentType.Tv, ContentType.Music };
 
+        // What users can request today, and what their panel and help list. Music joins once Lidarr exists.
+        public static readonly IReadOnlyList<ContentType> Requestable = new[] { ContentType.Movie, ContentType.Tv };
+
         public static bool IsOffered(ContentType type) => type == ContentType.Movie || type == ContentType.Tv || type == ContentType.Music;
     }
 }

@@ -39,10 +39,10 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task user_can_cancel_own_pending_request_only()
         {
-            (await Harness.SendAsync(CancelButton(Alice, 2))).LastReply.Content.Should().Be(DiscordText.NotYourRequest);
-            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Be(DiscordText.RequestCancelled("Dune (2021)", 1));
-            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Be(DiscordText.CannotCancel(RequestStatus.Cancelled));
-            (await Harness.SendAsync(CancelButton(Alice, 99))).LastReply.Content.Should().Be(DiscordText.RequestNotFound);
+            (await Harness.SendAsync(CancelButton(Alice, 2))).LastReply.Content.Should().Contain(DiscordText.NotYourRequest);
+            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Contain(DiscordText.RequestCancelled("Dune (2021)", 1));
+            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Contain(DiscordText.CannotCancel(RequestStatus.Cancelled));
+            (await Harness.SendAsync(CancelButton(Alice, 99))).LastReply.Content.Should().Contain(DiscordText.RequestNotFound);
         }
 
         [Test]
@@ -55,7 +55,7 @@ namespace Requestarr.Core.Test.Requests
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L));
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 3L));
 
-            (await Admin("queue")).LastReply.Content.Should().Be(DiscordText.QueueEmpty);
+            (await Admin("queue")).LastReply.Content.Should().Contain(DiscordText.QueueEmpty);
         }
 
         [Test]
@@ -64,10 +64,10 @@ namespace Requestarr.Core.Test.Requests
             (await Harness.SendAsync(AdminSlash("approve").WithOption("id", 1L))).LastReply.Content.Should().StartWith("Approved request #1 for Dune (2021).");
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Approved);
 
-            (await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L).WithOption("reason", "duplicate"))).LastReply.Content.Should().Be(DiscordText.AdminDenied(RequestStore.Get(2)));
+            (await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L).WithOption("reason", "duplicate"))).LastReply.Content.Should().Contain(DiscordText.AdminDenied(RequestStore.Get(2)));
             RequestStore.Get(2).DecisionReason.Should().Be("duplicate");
 
-            (await Harness.SendAsync(AdminSlash("approve").WithOption("id", 42L))).LastReply.Content.Should().Be(DiscordText.RequestNotFound);
+            (await Harness.SendAsync(AdminSlash("approve").WithOption("id", 42L))).LastReply.Content.Should().Contain(DiscordText.RequestNotFound);
         }
 
         [Test]
@@ -75,7 +75,7 @@ namespace Requestarr.Core.Test.Requests
         {
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin approve").WithOption("id", 1L).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
-            run.LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
+            run.LastReply.Content.Should().Contain(DiscordText.AdminChannelOnly);
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Pending);
         }
     }

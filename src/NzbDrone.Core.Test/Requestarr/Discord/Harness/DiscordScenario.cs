@@ -9,6 +9,7 @@ using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
 using Requestarr.Core.Discord.Handlers;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Metadata;
 using Requestarr.Core.Provisioning;
 using Requestarr.Core.Requests;
 using Requestarr.Core.Users;
@@ -27,6 +28,8 @@ namespace Requestarr.Core.Test.Discord.Harness
         protected FakeDiscordGuild Discord { get; private set; }
         protected FakeRadarr Radarr { get; private set; }
         protected FakeSonarr Sonarr { get; private set; }
+        protected FakeTmdb Tmdb { get; private set; }
+        protected TmdbSettingsStore TmdbKey { get; private set; }
         protected InteractionHarness Harness { get; private set; }
         protected DiscordGuildConfig Config => Mocker.Resolve<IGuildSetupService>().GetConfig();
         protected ulong AdminChannel => ulong.Parse(Config.AdminChannelId);
@@ -57,6 +60,11 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
             UseBackends();
+            Tmdb = new FakeTmdb();
+            TmdbKey = new TmdbSettingsStore();
+            Mocker.SetConstant<ITmdbSettingsStore>(TmdbKey);
+            Mocker.SetConstant<ITmdbClient>(Tmdb);
+            Mocker.SetConstant<IMetadataService>(Mocker.Resolve<MetadataService>());
             Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
@@ -70,7 +78,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<MediaServerHandler>(),
                 Mocker.Resolve<RequestHandler>(),
                 Mocker.Resolve<ApprovalHandler>(),
-                Mocker.Resolve<PanelHandler>());
+                Mocker.Resolve<PanelHandler>(),
+                Mocker.Resolve<HelpHandler>());
         }
 
         // Fake Radarr / Sonarr by default; live fixtures override with the real APIs.

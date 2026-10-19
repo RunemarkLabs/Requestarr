@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
@@ -11,20 +12,35 @@ namespace Requestarr.Core.Requests
     public static class RequestRoutes
     {
         public const string Pick = "req-pick";
+        public const string Results = "req-res";
         public const string Make = "req-make";
-        public const string Seasons = "req-seasons";
+        public const string TvAll = "req-tv-all";
+        public const string TvChoose = "req-tv-choose";
+        public const string TvPick = "req-tv-pick";
+        public const string TvConfirm = "req-tv-ok";
+        public const string TvBack = "req-tv-back";
         public const string Cancel = "req-cancel";
         public const string Approve = "req-approve";
         public const string Deny = "req-deny";
         public const string DenyReason = "req-deny-reason";
         public const string ReasonField = "reason";
+
+        // Season picker on cards posted before the two-path season flow; still handled.
+        public const string Seasons = "req-seasons";
     }
 
-    // Discord messages for requesting, kept within Discord's limits (25 options, 100-character labels).
+    // One request is one Discord message that changes in place: results, details, seasons,
+    // confirmation, then a final status. Kept within Discord's limits (25 options, 100-character
+    // labels and custom IDs).
     public static class RequestCards
     {
-        public const int OverviewLength = 600;
-        public const int MaxSeasonOptions = DiscordLimits.ChoicesPerMenu - 2;
+        public const int OverviewLength = 700;
+
+        public const uint DetailColor = 0x5865F2;
+        public const uint SentColor = 0x2ECC71;
+        public const uint PendingColor = 0xF1C40F;
+        public const uint FollowingColor = 0x3498DB;
+        public const uint RefusedColor = 0xE74C3C;
 
         public static string TypeKey(ContentType type) => type == ContentType.Tv ? "tv" : "movie";
 
@@ -35,40 +51,85 @@ namespace Requestarr.Core.Requests
             _ => null
         };
 
-        public static InteractionReply SearchResults(ContentType type, string query, IReadOnlyList<MediaLookupResult> results)
+        public static InteractionReply SearchResults(ContentType type, string query, IReadOnlyList<MediaLookupResult> results, bool castFromTmdb)
         {
+            var hasCast = castFromTmdb && results.Any(r => r.Cast.Any());
+            var content = DiscordText.SearchResults(type, query, results.Count) + (hasCast ? "\n" + DiscordText.TmdbSubtext : string.Empty);
+
             return new InteractionReply
             {
-                Content = DiscordText.SearchResults(type, query, results.Count),
+                Content = content,
                 SelectMenu = new InteractionSelectMenu
                 {
-                    CustomId = $"{RequestRoutes.Pick}:{TypeKey(type)}",
+                    CustomId = PickId(type, query),
                     Placeholder = DiscordText.SearchPlaceholder,
                     Options = results.Take(DiscordLimits.ChoicesPerMenu).Select(r => new InteractionSelectOption(
-                        DiscordLimits.Truncate(r.Year.HasValue ? $"{r.Title} ({r.Year})" : r.Title, DiscordLimits.OptionLabelLength),
+                        DiscordLimits.Truncate(Titles.WithYear(r.Title, r.Year), DiscordLimits.OptionLabelLength),
                         r.ExternalId(type).ToString(),
-                        r.LibraryId.HasValue ? DiscordText.StateInLibrary : DiscordLimits.Truncate(r.Overview, DiscordLimits.OptionLabelLength))).ToList()
+                        ResultLine(r))).ToList()
                 }
             };
         }
 
-        public static InteractionReply Detail(ContentType type, TitleState state)
+        // The query rides along (when it fits) so the details step can offer "Back to results".
+        public static string PickId(ContentType type, string query)
         {
-            var item = state.Item;
-            var externalId = item.ExternalId(type);
-            string stateLine = null;
-            var buttons = new List<InteractionButton>();
-            InteractionSelectMenu seasons = null;
+            var withQuery = $"{RequestRoutes.Pick}:{TypeKey(type)}:{query}";
+            return query != null && withQuery.Length <= DiscordLimits.CustomIdLength ? withQuery : $"{RequestRoutes.Pick}:{TypeKey(type)}";
+        }
+
+        // "2024 · Apple TV+ · Joel Edgerton, Jennifer Connelly, Alice Braga", or with no cast
+        // "2024 · Apple TV+ · Drama". Cast names are dropped from the end to fit 100 characters.
+        public static string ResultLine(MediaLookupResult item)
+        {
+            var lead = new List<string>();
 
             if (item.LibraryId.HasValue)
             {
-                stateLine = DiscordText.StateInLibrary;
+                lead.Add(DiscordText.InLibraryShort);
+            }
+
+            if (item.Year.HasValue)
+            {
+                lead.Add(item.Year.Value.ToString(CultureInfo.InvariantCulture));
+            }
+
+            if (item.Maker != null)
+            {
+                lead.Add(item.Maker);
+            }
+
+            for (var names = item.Cast.Count; names > 0; names--)
+            {
+                var line = string.Join(DiscordText.Dot, lead.Append(string.Join(", ", item.Cast.Take(names))));
+
+                if (line.Length <= DiscordLimits.OptionLabelLength)
+                {
+                    return line;
+                }
+            }
+
+            var withGenre = item.Genres.Any() ? lead.Append(item.Genres.First()) : lead;
+
+            return DiscordLimits.Truncate(string.Join(DiscordText.Dot, withGenre), DiscordLimits.OptionLabelLength);
+        }
+
+        public static InteractionReply Detail(ContentType type, TitleState state, string query = null)
+        {
+            var item = state.Item;
+            var externalId = item.ExternalId(type).Value;
+            var lines = new List<string> { DiscordText.BlockHeader(type, DiscordText.StepDetails) };
+            var buttons = new List<InteractionButton>();
+
+            if (item.LibraryId.HasValue)
+            {
+                lines.Add(DiscordText.StateInLibrary);
             }
             else if (state.Active != null)
             {
-                stateLine = state.CallerOwnsActive ? DiscordText.StateYours(state.Active.Status, state.Active.Id)
+                lines.Add(state.CallerOwnsActive ? DiscordText.StateYours(state.Active.Status, state.Active.Id)
                     : state.CallerFollows ? DiscordText.StateFollowing(state.Active.Id)
-                    : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id);
+                    : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id));
 
                 if (state.CallerOwnsActive && state.Active.Status == RequestStatus.Pending)
                 {
@@ -84,12 +145,13 @@ namespace Requestarr.Core.Requests
             {
                 if (state.LastDenied != null)
                 {
-                    stateLine = DiscordText.StatePreviouslyDenied(state.LastDenied.DecisionReason);
+                    lines.Add(DiscordText.StatePreviouslyDenied(state.LastDenied.DecisionReason));
                 }
 
                 if (type == ContentType.Tv)
                 {
-                    seasons = SeasonPicker(externalId.Value, item);
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvAll}:{externalId}", Label = DiscordText.AllSeasons, Style = ButtonStyle.Success });
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvChoose}:{externalId}", Label = DiscordText.ChooseSeasonsLabel, Style = ButtonStyle.Primary });
                 }
                 else
                 {
@@ -97,38 +159,181 @@ namespace Requestarr.Core.Requests
                 }
             }
 
+            var back = ResultsButton(type, query);
+
+            if (back != null)
+            {
+                buttons.Add(back);
+            }
+
             return new InteractionReply
             {
-                Content = stateLine,
-                Embeds = new List<InteractionEmbed> { Embed(item, state.Instance?.Name) },
-                Buttons = buttons,
-                SelectMenu = seasons
+                Content = string.Join("\n", lines),
+                Embeds = new List<InteractionEmbed> { Card(type, item, state.Instance?.Name, DetailColor) },
+                Buttons = buttons
             };
         }
 
-        // "All seasons", "Future seasons", and the most recent seasons (25-option limit).
-        public static InteractionSelectMenu SeasonPicker(int tvdbId, MediaLookupResult item)
+        // "Choose seasons": specials (only when picked), each season, and "also new seasons".
+        public static InteractionReply SeasonMenu(TitleState state)
         {
-            var options = new List<InteractionSelectOption> { new(DiscordText.AllSeasons, "all") };
-            options.AddRange(item.Seasons.OrderByDescending(s => s).Take(MaxSeasonOptions).OrderBy(s => s).Select(s => new InteractionSelectOption($"Season {s}", $"s{s}")));
-            options.Add(new InteractionSelectOption(DiscordText.FutureSeasons, "future", DiscordText.FutureSeasonsHint));
+            var item = state.Item;
+            var tvdbId = item.TvdbId.Value;
+            var options = new List<InteractionSelectOption>();
 
-            return new InteractionSelectMenu
+            if (item.HasSpecials)
             {
-                CustomId = $"{RequestRoutes.Seasons}:{tvdbId}",
-                Placeholder = DiscordText.SeasonsPlaceholder,
-                MinValues = 1,
-                MaxValues = options.Count,
-                Options = options
+                options.Add(new InteractionSelectOption(DiscordText.Specials, "s0", DiscordText.SpecialsHint));
+            }
+
+            options.AddRange(item.Seasons.OrderByDescending(s => s).Take(DiscordLimits.ChoicesPerMenu - 1 - options.Count).OrderBy(s => s)
+                .Select(s => new InteractionSelectOption(DiscordText.SeasonLabel(s), $"s{s}")));
+            options.Add(new InteractionSelectOption(DiscordText.AlsoFutureSeasons, "future", DiscordText.AlsoFutureSeasonsHint));
+
+            return new InteractionReply
+            {
+                Content = DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepSeasons) + "\n" + DiscordText.ChooseSeasonsPrompt,
+                Embeds = new List<InteractionEmbed> { Card(ContentType.Tv, item, state.Instance?.Name, DetailColor) },
+                SelectMenu = new InteractionSelectMenu
+                {
+                    CustomId = $"{RequestRoutes.TvPick}:{tvdbId}",
+                    Placeholder = DiscordText.SeasonsPlaceholder,
+                    MinValues = 1,
+                    MaxValues = options.Count,
+                    Options = options
+                },
+                Buttons = new List<InteractionButton> { BackButton(tvdbId) }
             };
         }
 
+        // The choice restated in plain words, with Request and Back.
+        public static InteractionReply Confirm(TitleState state, SeasonChoice choice)
+        {
+            var tvdbId = state.Item.TvdbId.Value;
+
+            return new InteractionReply
+            {
+                Content = DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepConfirm) + "\n" + DiscordText.YouChose(DiscordText.SeasonChoiceText(choice, state.Item.Seasons)),
+                Embeds = new List<InteractionEmbed> { Card(ContentType.Tv, state.Item, state.Instance?.Name, DetailColor) },
+                Buttons = new List<InteractionButton>
+                {
+                    new() { CustomId = $"{RequestRoutes.TvConfirm}:{tvdbId}:{EncodeSeasons(choice)}", Label = DiscordText.RequestLabel, Style = ButtonStyle.Success },
+                    BackButton(tvdbId)
+                }
+            };
+        }
+
+        // The end of a request block: an unmistakable status, the card kept for context.
+        public static InteractionReply Final(ContentType type, RequestResult result, string seasonsText = null)
+        {
+            var (status, color) = result.Outcome switch
+            {
+                RequestOutcome.Sent => (DiscordText.FinalSent, SentColor),
+                RequestOutcome.Pending => (DiscordText.FinalPending, PendingColor),
+                RequestOutcome.Following => (DiscordText.FinalFollowing, FollowingColor),
+                RequestOutcome.AlreadyAvailable => (DiscordText.FinalAvailable, SentColor),
+                RequestOutcome.Failed => (DiscordText.FinalFailed, RefusedColor),
+                _ => (DiscordText.FinalRefused, RefusedColor)
+            };
+
+            var lines = new List<string> { $"{status}{DiscordText.Dot}{result.Message}" };
+
+            if (type == ContentType.Tv && seasonsText != null && (result.Outcome == RequestOutcome.Sent || result.Outcome == RequestOutcome.Pending))
+            {
+                lines.Add(DiscordText.SeasonsLine(seasonsText));
+            }
+
+            var reply = new InteractionReply
+            {
+                Content = DiscordLimits.Truncate(string.Join("\n", lines), DiscordLimits.MessageLength),
+                Embeds = result.Item == null ? new List<InteractionEmbed>() : new List<InteractionEmbed> { Card(type, result.Item, null, color) }
+            };
+
+            if (result.Outcome == RequestOutcome.Pending && result.Request != null)
+            {
+                reply.Buttons.Add(CancelButton(result.Request.Id));
+            }
+
+            return reply;
+        }
+
+        // A step that ends the block early (nothing found, backend down, access off).
+        public static InteractionReply Stopped(ContentType? type, string message) => new()
+        {
+            Content = $"{(type.HasValue ? DiscordText.BlockHeader(type.Value, DiscordText.StepStopped) + "\n" : string.Empty)}{DiscordText.FinalRefused}{DiscordText.Dot}{message}"
+        };
+
+        public static string EncodeSeasons(SeasonChoice choice)
+        {
+            if (choice.All)
+            {
+                return "all";
+            }
+
+            var ranges = new List<string>();
+            var sorted = choice.Seasons.Distinct().OrderBy(s => s).ToList();
+
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var start = sorted[i];
+
+                while (i + 1 < sorted.Count && sorted[i + 1] == sorted[i] + 1)
+                {
+                    i++;
+                }
+
+                ranges.Add(start == sorted[i] ? $"{start}" : $"{start}-{sorted[i]}");
+            }
+
+            return string.Join(".", ranges) + (choice.Future ? "f" : string.Empty);
+        }
+
+        public static SeasonChoice DecodeSeasons(string spec)
+        {
+            if (string.IsNullOrEmpty(spec))
+            {
+                return null;
+            }
+
+            if (spec == "all")
+            {
+                return SeasonChoice.Everything;
+            }
+
+            var future = spec.EndsWith("f");
+            var seasons = new List<int>();
+
+            foreach (var part in spec.TrimEnd('f').Split('.', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var bounds = part.Split('-');
+
+                if (!int.TryParse(bounds[0], out var from) || !int.TryParse(bounds[^1], out var to) || from < 0 || to < from || to - from > 500)
+                {
+                    return null;
+                }
+
+                seasons.AddRange(Enumerable.Range(from, to - from + 1));
+            }
+
+            return seasons.Any() || future ? new SeasonChoice(false, seasons, future) : null;
+        }
+
+        // Values from the "Choose seasons" menu: s{n} and "future". "All" can't be picked there.
+        public static SeasonChoice FromMenu(IEnumerable<string> values)
+        {
+            var list = values.ToList();
+            var seasons = list.Where(v => v.StartsWith("s") && int.TryParse(v.AsSpan(1), out _)).Select(v => int.Parse(v.AsSpan(1))).ToList();
+
+            return new SeasonChoice(false, seasons, list.Contains("future"));
+        }
+
+        // Values from the old single season picker ("all", s{n}, "future"); "all" wins over picks.
         public static SeasonChoice ParseSeasons(IEnumerable<string> values)
         {
             var list = values.ToList();
             var seasons = list.Where(v => v.StartsWith("s") && int.TryParse(v.AsSpan(1), out _)).Select(v => int.Parse(v.AsSpan(1))).ToList();
 
-            return new SeasonChoice(list.Contains("all"), seasons, list.Contains("future"));
+            return new SeasonChoice(list.Contains("all"), list.Contains("all") ? Array.Empty<int>() : seasons, list.Contains("future"));
         }
 
         public static InteractionReply Approval(Request request, string ownerName, string instanceName, MediaLookupResult item)
@@ -136,7 +341,7 @@ namespace Requestarr.Core.Requests
             return new InteractionReply
             {
                 Content = DiscordText.ApprovalCard(request, ownerName, instanceName),
-                Embeds = item == null ? new List<InteractionEmbed>() : new List<InteractionEmbed> { Embed(item, null) },
+                Embeds = item == null ? new List<InteractionEmbed>() : new List<InteractionEmbed> { Card(request.ContentType, item, null, PendingColor, compact: true) },
                 Buttons = new List<InteractionButton>
                 {
                     new() { CustomId = $"{RequestRoutes.Approve}:{request.Id}", Label = DiscordText.ApproveLabel, Style = ButtonStyle.Success },
@@ -148,12 +353,12 @@ namespace Requestarr.Core.Requests
         public static InteractionButton CancelButton(int requestId) =>
             new() { CustomId = $"{RequestRoutes.Cancel}:{requestId}", Label = DiscordText.CancelLabel, Style = ButtonStyle.Danger };
 
-        // The reply to a request; pending ones the user owns get a Cancel button.
+        // The reply to a request outside a block (old cards); pending ones the user owns get a Cancel button.
         public static InteractionReply Outcome(Users.ServiceResult result)
         {
             var reply = new InteractionReply { Content = DiscordLimits.Truncate(result.Message, DiscordLimits.MessageLength), Ephemeral = !result.Success };
 
-            if (result is RequestResult { Request: { Status: RequestStatus.Pending } pending })
+            if (result is RequestResult { Request: { Status: RequestStatus.Pending } pending, Outcome: RequestOutcome.Pending })
             {
                 reply.Buttons.Add(CancelButton(pending.Id));
             }
@@ -178,26 +383,64 @@ namespace Requestarr.Core.Requests
             };
         }
 
-        private static InteractionEmbed Embed(MediaLookupResult item, string instance)
+        public static InteractionButton ResultsButton(ContentType type, string query)
+        {
+            var customId = query == null ? null : $"{RequestRoutes.Results}:{TypeKey(type)}:{query}";
+
+            return customId == null || customId.Length > DiscordLimits.CustomIdLength
+                ? null
+                : new InteractionButton { CustomId = customId, Label = DiscordText.BackToResults, Style = ButtonStyle.Secondary };
+        }
+
+        private static InteractionButton BackButton(int tvdbId) =>
+            new() { CustomId = $"{RequestRoutes.TvBack}:{tvdbId}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary };
+
+        // The detail card: large poster, every field the backend returns, cast when available.
+        public static InteractionEmbed Card(ContentType type, MediaLookupResult item, string instance, uint color, bool compact = false)
         {
             var fields = new List<KeyValuePair<string, string>>();
 
-            if (item.Seasons.Any())
+            void Add(string name, string value)
             {
-                fields.Add(new KeyValuePair<string, string>("Seasons", item.Seasons.Count.ToString()));
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    fields.Add(new KeyValuePair<string, string>(name, value));
+                }
             }
 
-            if (instance != null)
+            Add(DiscordText.FieldGenres, item.Genres.Any() ? string.Join(", ", item.Genres.Take(4)) : null);
+            Add(DiscordText.FieldRating, DiscordText.Rating(item));
+            Add(DiscordText.FieldCertification, item.Certification);
+            Add(DiscordText.FieldRuntime, item.Runtime.HasValue ? DiscordText.Runtime(item.Runtime.Value, type == ContentType.Tv) : null);
+
+            if (type == ContentType.Tv)
             {
-                fields.Add(new KeyValuePair<string, string>("Goes to", instance));
+                Add(DiscordText.FieldNetwork, item.Network);
+                Add(DiscordText.FieldStatus, DiscordText.Capitalize(item.Status));
+                Add(DiscordText.FieldSeasons, DiscordText.SeasonCount(item.Seasons.Count, item.HasSpecials));
+                Add(DiscordText.FieldEpisodes, item.EpisodeCount?.ToString(CultureInfo.InvariantCulture));
+                Add(DiscordText.FieldAired, DiscordText.Aired(item.FirstAired, item.LastAired, item.Continuing));
             }
+            else
+            {
+                Add(DiscordText.FieldStudio, item.Studio);
+                Add(DiscordText.FieldStatus, DiscordText.Capitalize(item.Status));
+                Add(DiscordText.FieldReleased, DiscordText.Released(item.InCinemas, item.DigitalRelease, item.PhysicalRelease));
+            }
+
+            Add(DiscordText.FieldCast, item.Cast.Any() ? string.Join(", ", item.Cast) : null);
+            Add(DiscordText.FieldGoesTo, instance);
 
             return new InteractionEmbed
             {
-                Title = item.Year.HasValue ? $"{item.Title} ({item.Year})" : item.Title,
-                Description = DiscordLimits.Truncate(item.Overview, OverviewLength),
-                ThumbnailUrl = item.PosterUrl,
-                Fields = fields
+                Title = Titles.WithYear(item.Title, item.Year),
+                Url = item.ImdbId != null ? $"https://www.imdb.com/title/{item.ImdbId}/" : null,
+                Description = DiscordLimits.Truncate(item.Overview, compact ? 300 : OverviewLength),
+                ImageUrl = compact ? null : item.PosterUrl,
+                ThumbnailUrl = compact ? item.PosterUrl : null,
+                Color = color,
+                Fields = compact ? fields.Take(4).ToList() : fields,
+                Footer = item.Cast.Any() ? DiscordText.TmdbAttribution : null
             };
         }
     }

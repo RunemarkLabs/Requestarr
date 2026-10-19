@@ -18,14 +18,42 @@ namespace Requestarr.Core.Backends
         public int? Year { get; set; }
         public string Overview { get; set; }
         public string PosterUrl { get; set; }
+
+        // Movies: the request ID. TV: Sonarr's link to The Movie Database (cast lookups only).
         public int? TmdbId { get; set; }
         public int? TvdbId { get; set; }
+        public string ImdbId { get; set; }
 
         // Set when the title is already in the instance's library.
         public int? LibraryId { get; set; }
         public bool HasFile { get; set; }
+
+        // Regular seasons (1 and up); season 0 is specials, only monitored when picked explicitly.
         public List<int> Seasons { get; set; } = new();
+        public bool HasSpecials { get; set; }
         public bool Continuing { get; set; }
+
+        // Card details, as the backend returns them.
+        public List<string> Genres { get; set; } = new();
+        public string Certification { get; set; }
+        public int? Runtime { get; set; }
+        public string Studio { get; set; }
+        public string Network { get; set; }
+        public string Status { get; set; }
+        public List<(string Source, double Value)> Ratings { get; set; } = new();
+        public long? Votes { get; set; }
+        public DateTime? FirstAired { get; set; }
+        public DateTime? LastAired { get; set; }
+        public DateTime? InCinemas { get; set; }
+        public DateTime? DigitalRelease { get; set; }
+        public DateTime? PhysicalRelease { get; set; }
+
+        // From The Movie Database when a key is configured; otherwise empty / null.
+        public List<string> Cast { get; set; } = new();
+        public int? EpisodeCount { get; set; }
+
+        // Studio for movies, network for TV.
+        public string Maker => Studio ?? Network;
 
         // Raw lookup JSON, posted back when adding (backends expect their own lookup shape).
         public string Raw { get; set; }
@@ -140,6 +168,19 @@ namespace Requestarr.Core.Backends
 
         private static string Truncate(string value) => value == null || value.Length <= 300 ? value : value.Substring(0, 300);
 
+        protected static string Text(Newtonsoft.Json.Linq.JToken token)
+        {
+            var value = token?.Type == Newtonsoft.Json.Linq.JTokenType.String ? (string)token : null;
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        protected static DateTime? Date(Newtonsoft.Json.Linq.JToken token) =>
+            token != null && token.Type == Newtonsoft.Json.Linq.JTokenType.Date ? ((DateTime)token).ToUniversalTime()
+            : DateTime.TryParse(Text(token), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
+
+        protected static List<string> Genres(Newtonsoft.Json.Linq.JObject json) =>
+            json["genres"]?.Select(g => (string)g).Where(g => !string.IsNullOrWhiteSpace(g)).ToList() ?? new List<string>();
+
         protected static string Poster(List<ImageResource> images, string remotePoster = null)
         {
             return remotePoster ?? images?.FirstOrDefault(i => i.CoverType == "poster")?.RemoteUrl;
@@ -207,8 +248,19 @@ namespace Requestarr.Core.Backends
                 Overview = (string)json["overview"],
                 PosterUrl = Poster(images, (string)json["remotePoster"]),
                 TmdbId = (int?)json["tmdbId"],
+                ImdbId = Text(json["imdbId"]),
                 LibraryId = id is > 0 ? id : null,
                 HasFile = (bool?)json["hasFile"] ?? false,
+                Genres = Genres(json),
+                Certification = Text(json["certification"]),
+                Runtime = (int?)json["runtime"] is > 0 ? (int?)json["runtime"] : null,
+                Studio = Text(json["studio"]),
+                Status = Text(json["status"]),
+                Ratings = new[] { ("IMDb", json["ratings"]?["imdb"]?["value"]), ("TMDB", json["ratings"]?["tmdb"]?["value"]), ("Rotten Tomatoes", json["ratings"]?["rottenTomatoes"]?["value"]) }
+                    .Where(r => (double?)r.Item2 is > 0).Select(r => (r.Item1, (double)r.Item2)).ToList(),
+                InCinemas = Date(json["inCinemas"]),
+                DigitalRelease = Date(json["digitalRelease"]),
+                PhysicalRelease = Date(json["physicalRelease"]),
                 Raw = json.ToString(Newtonsoft.Json.Formatting.None)
             };
         }
@@ -244,7 +296,7 @@ namespace Requestarr.Core.Backends
 
             var seasonArray = new Newtonsoft.Json.Linq.JArray();
 
-            foreach (var number in series.Seasons)
+            foreach (var number in (series.HasSpecials ? new[] { 0 } : Array.Empty<int>()).Concat(series.Seasons))
             {
                 seasonArray.Add(Newtonsoft.Json.Linq.JObject.FromObject(new { seasonNumber = number, monitored = seasons.Contains(number) }));
             }
@@ -262,7 +314,9 @@ namespace Requestarr.Core.Backends
         {
             var images = json["images"]?.ToObject<List<ImageResource>>();
             var id = (int?)json["id"];
-            var seasons = json["seasons"]?.Select(s => (int)s["seasonNumber"]).Where(n => n > 0).OrderBy(n => n).ToList() ?? new List<int>();
+            var numbers = json["seasons"]?.Select(s => (int)s["seasonNumber"]).ToList() ?? new List<int>();
+            var seasons = numbers.Where(n => n > 0).OrderBy(n => n).ToList();
+            var tmdbId = (int?)json["tmdbId"];
 
             return new MediaLookupResult
             {
@@ -271,9 +325,22 @@ namespace Requestarr.Core.Backends
                 Overview = (string)json["overview"],
                 PosterUrl = Poster(images, (string)json["remotePoster"]),
                 TvdbId = (int?)json["tvdbId"],
+                TmdbId = tmdbId is > 0 ? tmdbId : null,
+                ImdbId = Text(json["imdbId"]),
                 LibraryId = id is > 0 ? id : null,
                 Seasons = seasons,
+                HasSpecials = numbers.Contains(0),
                 Continuing = string.Equals((string)json["status"], "continuing", StringComparison.OrdinalIgnoreCase),
+                Genres = Genres(json),
+                Certification = Text(json["certification"]),
+                Runtime = (int?)json["runtime"] is > 0 ? (int?)json["runtime"] : null,
+                Network = Text(json["network"]),
+                Status = Text(json["status"]),
+                Ratings = (double?)json["ratings"]?["value"] is > 0 ? new List<(string, double)> { ("Rating", (double)json["ratings"]["value"]) } : new List<(string, double)>(),
+                Votes = (long?)json["ratings"]?["votes"] is > 0 ? (long?)json["ratings"]["votes"] : null,
+                FirstAired = Date(json["firstAired"]),
+                LastAired = Date(json["lastAired"]),
+                EpisodeCount = (int?)json["statistics"]?["totalEpisodeCount"] is > 0 ? (int?)json["statistics"]["totalEpisodeCount"] : null,
                 Raw = json.ToString(Newtonsoft.Json.Formatting.None)
             };
         }

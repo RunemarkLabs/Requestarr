@@ -26,7 +26,8 @@ namespace Requestarr.Core.Test.CommandSurface
             AdminRoom.Pinned.Should().ContainSingle();
             AdminRoom.PinnedMessage.Buttons.Select(b => (b.Label, b.CustomId)).Should().Equal(
                 (DiscordText.PanelPendingQueue, PanelRoutes.AdminQueue),
-                (DiscordText.PanelUsers, PanelRoutes.AdminUsers));
+                (DiscordText.PanelUsers, PanelRoutes.AdminUsers),
+                (DiscordText.PanelHelp, PanelRoutes.AdminHelp));
             Config.AdminPanelMessageId.Should().Be(AdminRoom.Pinned.Single().ToString());
         }
 

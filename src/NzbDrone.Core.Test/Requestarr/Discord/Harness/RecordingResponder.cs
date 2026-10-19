@@ -12,6 +12,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         Response,
         Followup,
         MessageUpdate,
+        Edit,
         Modal,
         Suggestions
     }
@@ -61,6 +62,17 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             EnsureFirstResponse("update the message");
             _responses.Add(new RecordedResponse(ResponseKind.MessageUpdate, reply, false));
+            return Task.CompletedTask;
+        }
+
+        public Task EditAsync(InteractionReply reply)
+        {
+            if (!HasResponded)
+            {
+                throw new InvalidOperationException("Discord has no original response to edit before the interaction is deferred");
+            }
+
+            _responses.Add(new RecordedResponse(ResponseKind.Edit, reply, false));
             return Task.CompletedTask;
         }
 

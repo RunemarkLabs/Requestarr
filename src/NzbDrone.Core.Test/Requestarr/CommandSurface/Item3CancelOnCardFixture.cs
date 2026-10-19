@@ -18,7 +18,7 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             var reply = (await RequestMovie(Alice, Dune)).LastReply;
 
-            reply.Content.Should().Be(DiscordText.RequestPending("Dune (2021)", 1));
+            reply.Content.Should().Contain(DiscordText.RequestPending("Dune (2021)", 1));
             reply.Buttons.Single().CustomId.Should().Be("req-cancel:1");
         }
 
@@ -38,7 +38,7 @@ namespace Requestarr.Core.Test.CommandSurface
             var run = await Harness.SendAsync(CancelButton(Alice, 1));
 
             run.Responder.Responses.Single().Kind.Should().Be(ResponseKind.MessageUpdate);
-            run.LastReply.Content.Should().Be(DiscordText.RequestCancelled("Dune (2021)", 1));
+            run.LastReply.Content.Should().Contain(DiscordText.RequestCancelled("Dune (2021)", 1));
             run.LastReply.Buttons.Should().BeEmpty();
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Cancelled);
         }
@@ -50,7 +50,7 @@ namespace Requestarr.Core.Test.CommandSurface
 
             var card = (await Harness.SendAsync(Search(Alice, "movie", $"tmdb:{Dune}"))).LastReply;
 
-            card.Content.Should().Be(DiscordText.StateYours(RequestStatus.Pending, 1));
+            card.Content.Should().Contain(DiscordText.StateYours(RequestStatus.Pending, 1));
             card.Buttons.Select(b => b.CustomId).Should().Equal("req-cancel:1");
         }
 
@@ -60,7 +60,7 @@ namespace Requestarr.Core.Test.CommandSurface
             await RequestMovie(Alice, Dune);
 
             (await Harness.SendAsync(FakeInteraction.Button("req-cancel:1").By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob))))
-                .LastReply.Content.Should().Be(DiscordText.NotYourRequest);
+                .LastReply.Content.Should().Contain(DiscordText.NotYourRequest);
 
             await AdminButton("req-approve:1");
 

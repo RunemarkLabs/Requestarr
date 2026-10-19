@@ -1,11 +1,13 @@
 using System.Collections.Generic;
+using System.Linq;
 using Discord;
 
 namespace Requestarr.Core.Discord.Gateway
 {
-    // Exactly two commands, registered on the one configured server (registering replaces
+    // Exactly three commands, registered on the one configured server (registering replaces
     // everything, so older commands disappear):
     //   /request {type} {query}  for everyone; type is autocompleted from the caller's access.
+    //   /help                    user help, for everyone.
     //   /admin ...               Manage Server default permission, so non-admins never see it.
     // Visibility is cosmetic: Requestarr re-checks admin and channel on every use.
     public static class DiscordCommandDefinitions
@@ -22,6 +24,11 @@ namespace Requestarr.Core.Discord.Gateway
                     .WithType(ApplicationCommandOptionType.String).WithRequired(true).WithAutocomplete(true))
                 .AddOption(new SlashCommandOptionBuilder().WithName("query").WithDescription(DiscordText.Commands.OptionRequestQuery)
                     .WithType(ApplicationCommandOptionType.String).WithRequired(true).WithMaxLength(100));
+
+            var help = new SlashCommandBuilder()
+                .WithName("help")
+                .WithDescription(DiscordText.Commands.Help)
+                .WithContextTypes(InteractionContextType.Guild);
 
             var admin = new SlashCommandBuilder()
                 .WithName("admin")
@@ -57,6 +64,7 @@ namespace Requestarr.Core.Discord.Gateway
                             .WithType(ApplicationCommandOptionType.String).WithRequired(true).AddChoice("Plex", "plex"))
                         .AddOption(new SlashCommandOptionBuilder().WithName("username").WithDescription(DiscordText.Commands.OptionUsername)
                             .WithType(ApplicationCommandOptionType.String).WithRequired(true).WithMaxLength(100))))
+                .AddOption(Sub("help", DiscordText.Commands.AdminHelp))
                 .AddOption(Sub("queue", DiscordText.Commands.Queue)
                     .AddOption(new SlashCommandOptionBuilder().WithName("user").WithDescription(DiscordText.Commands.OptionUserFilter)
                         .WithType(ApplicationCommandOptionType.User).WithRequired(false))
@@ -70,7 +78,43 @@ namespace Requestarr.Core.Discord.Gateway
                     .AddOption(Sub("approve", DiscordText.Commands.MediaServerApprove).AddOption(RequestId()))
                     .AddOption(Sub("deny", DiscordText.Commands.MediaServerDeny).AddOption(RequestId())));
 
-            return new ApplicationCommandProperties[] { request.Build(), admin.Build() };
+            return new ApplicationCommandProperties[] { request.Build(), help.Build(), admin.Build() };
+        }
+
+        public record CommandLeaf(string Path, string Description, IReadOnlyList<(string Name, bool Required)> Options)
+        {
+            // "/admin user quota member type limit [days]"
+            public string Usage => "/" + Path + string.Concat(Options.Select(o => o.Required ? $" {o.Name}" : $" [{o.Name}]"));
+        }
+
+        // Every command and subcommand a user can run, as "request", "admin user add", ...
+        public static IReadOnlyList<CommandLeaf> Leaves()
+        {
+            var leaves = new List<CommandLeaf>();
+
+            foreach (var command in Build().OfType<SlashCommandProperties>())
+            {
+                Walk(command.Name.Value, command.Description.Value, command.Options.IsSpecified ? command.Options.Value : null, leaves);
+            }
+
+            return leaves;
+        }
+
+        private static void Walk(string path, string description, IEnumerable<ApplicationCommandOptionProperties> options, List<CommandLeaf> leaves)
+        {
+            var list = options?.ToList() ?? new List<ApplicationCommandOptionProperties>();
+            var nested = list.Where(o => o.Type == ApplicationCommandOptionType.SubCommand || o.Type == ApplicationCommandOptionType.SubCommandGroup).ToList();
+
+            if (!nested.Any())
+            {
+                leaves.Add(new CommandLeaf(path, description, list.Select(o => (o.Name, o.IsRequired ?? false)).ToList()));
+                return;
+            }
+
+            foreach (var option in nested)
+            {
+                Walk($"{path} {option.Name}", option.Description, option.Options, leaves);
+            }
         }
 
         private static SlashCommandOptionBuilder Group(string name, string description) =>

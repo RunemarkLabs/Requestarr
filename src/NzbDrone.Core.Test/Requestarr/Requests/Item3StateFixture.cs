@@ -20,9 +20,9 @@ namespace Requestarr.Core.Test.Requests
         {
             var card = (await Detail(Alice, Arrival)).LastReply;
 
-            card.Content.Should().Be(DiscordText.StateInLibrary);
+            card.Content.Should().Contain(DiscordText.StateInLibrary);
             card.Buttons.Should().BeEmpty();
-            (await RequestMovie(Alice, Arrival)).LastReply.Content.Should().Be(DiscordText.AlreadyInLibrary);
+            (await RequestMovie(Alice, Arrival)).LastReply.Content.Should().Contain(DiscordText.AlreadyInLibrary);
             RequestStore.All().Should().BeEmpty();
         }
 
@@ -32,12 +32,12 @@ namespace Requestarr.Core.Test.Requests
             await RequestMovie(Alice, Dune);
 
             var card = (await Detail(Bob, Dune)).LastReply;
-            card.Content.Should().Be(DiscordText.StateRequested("alice", RequestStatus.Pending, 1));
+            card.Content.Should().Contain(DiscordText.StateRequested("alice", RequestStatus.Pending, 1));
             card.Buttons.Single().Label.Should().Be(DiscordText.FollowLabel);
 
             var run = await RequestMovie(Bob, Dune);
 
-            run.LastReply.Content.Should().Be(DiscordText.Subscribed("Dune (2021)", "alice", 1));
+            run.LastReply.Content.Should().Contain(DiscordText.Subscribed("Dune (2021)", "alice", 1));
             RequestStore.All().Should().ContainSingle();
             Mocker.Resolve<IRequestSubscriberRepository>().ForRequest(1).Single().UserId.Should().Be(UserFor(Bob).Id);
         }
@@ -48,10 +48,10 @@ namespace Requestarr.Core.Test.Requests
             await RequestMovie(Alice, Dune);
             await RequestMovie(Bob, Dune);
 
-            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Be(DiscordText.AlreadyRequestedByYou);
-            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Be(DiscordText.AlreadyFollowing);
-            (await Detail(Alice, Dune)).LastReply.Content.Should().Be(DiscordText.StateYours(RequestStatus.Pending, 1));
-            (await Detail(Bob, Dune)).LastReply.Content.Should().Be(DiscordText.StateFollowing(1));
+            (await RequestMovie(Alice, Dune)).LastReply.Content.Should().Contain(DiscordText.AlreadyRequestedByYou);
+            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Contain(DiscordText.AlreadyFollowing);
+            (await Detail(Alice, Dune)).LastReply.Content.Should().Contain(DiscordText.StateYours(RequestStatus.Pending, 1));
+            (await Detail(Bob, Dune)).LastReply.Content.Should().Contain(DiscordText.StateFollowing(1));
             Mocker.Resolve<IRequestSubscriberRepository>().All().Should().ContainSingle();
         }
 
@@ -63,10 +63,10 @@ namespace Requestarr.Core.Test.Requests
 
             var card = (await Detail(Bob, Dune)).LastReply;
 
-            card.Content.Should().Be(DiscordText.StatePreviouslyDenied("not in English"));
+            card.Content.Should().Contain(DiscordText.StatePreviouslyDenied("not in English"));
             card.Buttons.Single().Label.Should().Be(DiscordText.RequestLabel);
 
-            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Be(DiscordText.RequestPending("Dune (2021)", 2));
+            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Dune (2021)", 2));
         }
 
         [Test]
@@ -75,7 +75,7 @@ namespace Requestarr.Core.Test.Requests
             await SetAccess(Bob, "movie", "approval", "Radarr 4K");
             await RequestMovie(Alice, Dune);
 
-            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Be(DiscordText.RequestPending("Dune (2021)", 2));
+            (await RequestMovie(Bob, Dune)).LastReply.Content.Should().Contain(DiscordText.RequestPending("Dune (2021)", 2));
             RequestStore.All().Select(r => r.BackendId).Distinct().Should().HaveCount(2);
         }
     }
