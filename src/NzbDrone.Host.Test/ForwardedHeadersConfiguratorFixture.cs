@@ -26,7 +26,7 @@ namespace NzbDrone.App.Test
 
         private static string[] GetKnownNetworks(ForwardedHeadersOptions options)
         {
-            return options.KnownNetworks.Select(n => $"{n.Prefix}/{n.PrefixLength}").ToArray();
+            return options.KnownIPNetworks.Select(n => $"{n.BaseAddress}/{n.PrefixLength}").ToArray();
         }
 
         [Test]
@@ -42,7 +42,7 @@ namespace NzbDrone.App.Test
         [TestCase("   ")]
         public void should_only_trust_loopback_when_no_networks_are_configured(string trustedNetworks)
         {
-            GetKnownNetworks(GetOptions(trustedNetworks)).Should().BeEquivalentTo("127.0.0.1/8");
+            GetKnownNetworks(GetOptions(trustedNetworks)).Should().BeEquivalentTo("127.0.0.0/8");
         }
 
         [Test]
@@ -50,7 +50,7 @@ namespace NzbDrone.App.Test
         {
             GetKnownNetworks(GetOptions("10.0.0.0/8, 172.17.0.1,fc00::/7"))
                 .Should()
-                .BeEquivalentTo("127.0.0.1/8", "10.0.0.0/8", "172.17.0.1/32", "fc00::/7");
+                .BeEquivalentTo("127.0.0.0/8", "10.0.0.0/8", "172.17.0.1/32", "fc00::/7");
         }
 
         [Test]
@@ -58,7 +58,7 @@ namespace NzbDrone.App.Test
         {
             GetKnownNetworks(GetOptions("10.0.0.0/8,not-an-address,10.1.2.3/8,0.0.0.0/0,192.168.0.0/16"))
                 .Should()
-                .BeEquivalentTo("127.0.0.1/8", "10.0.0.0/8", "192.168.0.0/16");
+                .BeEquivalentTo("127.0.0.0/8", "10.0.0.0/8", "192.168.0.0/16");
         }
 
         [Test]
@@ -66,7 +66,7 @@ namespace NzbDrone.App.Test
         {
             GetKnownNetworks(GetOptions("10.0.0.0/8,, ,192.168.0.0/16,"))
                 .Should()
-                .BeEquivalentTo("127.0.0.1/8", "10.0.0.0/8", "192.168.0.0/16");
+                .BeEquivalentTo("127.0.0.0/8", "10.0.0.0/8", "192.168.0.0/16");
         }
     }
 }

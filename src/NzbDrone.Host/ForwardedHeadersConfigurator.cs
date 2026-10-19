@@ -33,7 +33,7 @@ namespace NzbDrone.Host
 
                 if (IPNetworkParser.TryParse(entry, out var address, out var prefixLength))
                 {
-                    options.KnownNetworks.Add(new IPNetwork(address, prefixLength));
+                    options.KnownIPNetworks.Add(new System.Net.IPNetwork(address, prefixLength));
 
                     Logger.Info("Trusting forwarded headers from {0}/{1}", address, prefixLength);
                 }
