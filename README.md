@@ -40,8 +40,12 @@ Multiple instances of each service are supported (for example, a separate 4K Rad
 ## Architecture
 
 - Built on the Servarr foundation, derived from [Prowlarr](https://github.com/Prowlarr/Prowlarr)
-- .NET backend, React web portal, SQLite storage
+- .NET 10 backend, React web portal, SQLite storage
 - Discord integration via [Discord.Net](https://github.com/discord-net/Discord.Net)
+
+## Getting started
+
+Follow the [setup guide](docs/setup-guide.md) to create your Discord bot and install Requestarr with Docker Compose.
 
 ## Development
 
