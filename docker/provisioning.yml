@@ -16,12 +16,14 @@ auth:
   password: ${REQUESTARR_ADMIN_PASSWORD}
   apiKey: ${REQUESTARR_API_KEY}
 
-# Phase 1 sections below are validated now and applied once each feature lands.
+# backends and mediaServers are validated now and applied once each feature lands.
 
 discord:
   botToken: ${DISCORD_BOT_TOKEN:-}
   applicationId: ${DISCORD_APPLICATION_ID:-}
   guildId: ${DISCORD_TEST_GUILD_ID:-}
+  # Optional: members with this role are admins too (the server owner always is).
+  adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}
 
 # Any number of instances per type; names must be unique.
 backends:

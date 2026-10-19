@@ -6,6 +6,7 @@ using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
+using Requestarr.Core.Discord;
 using Requestarr.Core.Provisioning;
 
 namespace Requestarr.Core.Test.Provisioning
@@ -14,6 +15,12 @@ namespace Requestarr.Core.Test.Provisioning
     public class ProvisioningServiceFixture : CoreTest<ProvisioningService>
     {
         private const string Path = "/config/provisioning.yml";
+
+        [SetUp]
+        public void Setup()
+        {
+            Mocker.SetConstant<IDiscordSettingsStore>(new DiscordSettingsStore());
+        }
 
         private void GivenDocument(ProvisioningDocument document)
         {
@@ -76,7 +83,7 @@ namespace Requestarr.Core.Test.Provisioning
         }
 
         [Test]
-        public void should_report_phase_one_sections_as_deferred()
+        public void should_report_unbuilt_sections_as_deferred()
         {
             GivenDocument(new ProvisioningDocument
             {
@@ -91,7 +98,8 @@ namespace Requestarr.Core.Test.Provisioning
 
             var result = Subject.Apply();
 
-            result.Deferred.Should().BeEquivalentTo("discord", "backends (sonarr x2, radarr x1)", "mediaServers");
+            result.Deferred.Should().BeEquivalentTo("backends (sonarr x2, radarr x1)", "mediaServers");
+            result.Applied.Should().Contain("discord (no bot token, bot not started)");
         }
 
         [Test]

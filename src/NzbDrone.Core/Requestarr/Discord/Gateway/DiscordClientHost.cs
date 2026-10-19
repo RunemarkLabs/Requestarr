@@ -44,6 +44,9 @@ namespace Requestarr.Core.Discord.Gateway
                                      IHandleAsync<ProvisioningCompletedEvent>,
                                      IHandle<ApplicationShutdownRequested>
     {
+        // Only what Requestarr needs: server structure and member join/leave.
+        public static readonly GatewayIntents Intents = GatewayIntents.Guilds | GatewayIntents.GuildMembers;
+
         private static readonly TimeSpan WatchdogInterval = TimeSpan.FromSeconds(30);
 
         private readonly IDiscordSettingsStore _settings;
@@ -118,8 +121,7 @@ namespace Requestarr.Core.Discord.Gateway
 
                 Client = new DiscordSocketClient(new DiscordSocketConfig
                 {
-                    // Only what Requestarr needs: server structure and member join/leave.
-                    GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMembers,
+                    GatewayIntents = Intents,
                     AlwaysDownloadUsers = false,
                     LogLevel = LogSeverity.Info
                 });
