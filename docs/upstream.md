@@ -7,7 +7,7 @@ Requestarr's foundation is copied from [Prowlarr](https://github.com/Prowlarr/Pr
 | Source | https://github.com/Prowlarr/Prowlarr, `develop` branch |
 | Commit | `26a605e41f6156b959bc8f3ae5db4bec252106c5` (2026-10-18) |
 | Imported in | commit `cb5838d` ("Import Prowlarr foundation at 26a605e…"). This is an unmodified copy, so `git diff cb5838d -- <path>` shows every Requestarr change to an upstream file. |
-| .NET | net8.0, as Prowlarr targets at that commit. `global.json` pins SDK 8.0.421 with `rollForward: latestMajor`. |
+| .NET | Imported on net8.0 (Prowlarr's target at that commit). Requestarr moved to **net10.0** on 2026-10-19 and now diverges from upstream's target framework (see below). |
 
 ## What was kept
 
@@ -50,6 +50,19 @@ Small upstream-file changes worth knowing when merging:
 - `AppFolderFactory.Register` creates the app data folder before the legacy DB migration (it failed on fresh installs)
 - `HealthCheckReason.ProvisioningFailed`
 - `TagService` and `CleanupUnusedTags` only consider the `Backends` table
+
+## Target framework divergence (.NET 10)
+
+On 2026-10-19, Requestarr moved from net8.0 to net10.0 because .NET 8 support ends 2026-11-10. Upstream Prowlarr was still on net8.0 at the import commit. Expect these differences when merging upstream changes:
+
+- Every `TargetFrameworks` is `net10.0` (`net10.0-windows` for the tray app), and `build.sh` packages `net10.0`. Keep Requestarr's value when an upstream hunk touches these lines.
+- `global.json` targets SDK 10.0.100 with `rollForward: latestFeature`.
+- Microsoft.* and System.* packages are on 10.0.x. These references were removed because .NET 10 includes them in the framework (NU1510): System.Text.Json, System.Text.Encoding.CodePages, System.Resources.Extensions, System.Private.Uri, System.Runtime.Loader, System.Security.Principal.Windows. Drop them again if an upstream change re-adds them.
+- APIs obsolete in .NET 10 were replaced:
+  - SSL certificate loading uses `X509CertificateLoader.LoadPkcs12FromFile` (Bootstrap and CertificateValidator).
+  - Trusted proxies use `KnownIPNetworks` with `System.Net.IPNetwork` (ForwardedHeadersConfigurator).
+  - The tray app overrides `OnFormClosing`.
+- Third-party packages were not changed. All of them restore and build for net10.0 with no compatibility warnings (no NU1701), so none are held back.
 
 ## Pulling an upstream fix
 

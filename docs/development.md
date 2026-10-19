@@ -2,18 +2,16 @@
 
 ## Local build
 
-Prerequisites: .NET SDK 8 or later, and Node 20 or later. There is no global yarn; `npx yarn@1.22.22` works.
+Prerequisites: .NET SDK 10 (`global.json` accepts 10.0.100 or any later 10.0 feature band), and Node 20 or later. There is no global yarn; `npx yarn@1.22.22` works.
 
 ```bash
 npx --yes yarn@1.22.22 install --frozen-lockfile
 npx --yes yarn@1.22.22 build --env production          # web UI -> _output/UI
-dotnet build src/Requestarr.sln -c Debug -p:Platform=Windows -p:TargetLatestRuntimePatch=false
-_output/net8.0/Requestarr.Console.exe -nobrowser -data=C:\path\to\data
+dotnet build src/Requestarr.sln -c Debug -p:Platform=Windows
+_output/net10.0/Requestarr.Console.exe -nobrowser -data=C:\path\to\data
 ```
 
-On Linux or macOS, use `-p:Platform=Posix` and run `_output/net8.0/Requestarr`.
-
-`TargetLatestRuntimePatch=false` lets local builds run on whichever .NET 8 runtime is installed. The default pins the newest 8.0 patch the SDK knows, which may not be installed locally. Release and Docker builds keep the default.
+On Linux or macOS, use `-p:Platform=Posix` and run `_output/net10.0/Requestarr`.
 
 The app listens on http://localhost:9797.
 
@@ -22,13 +20,31 @@ The app listens on http://localhost:9797.
 The Servarr suites run like `test.sh` does, minus integration and automation tests:
 
 ```bash
-cd _tests/net8.0
+cd _tests/net10.0
 dotnet test Requestarr.Api.V1.Test.dll Requestarr.Common.Test.dll Requestarr.Core.Test.dll Requestarr.Host.Test.dll \
   Requestarr.Libraries.Test.dll Requestarr.Update.Test.dll Requestarr.Windows.Test.dll \
   "--filter:Category!=ManualTest&Category!=LINUX&Category!=IntegrationTest&Category!=AutomationTest"
 ```
 
 On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and `LINUX` for `WINDOWS`.
+
+## Continuous integration
+
+`.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `main`, which accepts changes only through a pull request with this check passing.
+
+| Job | Runs |
+|---|---|
+| Backend (Linux) | solution build (`Platform=Posix`); test suites Api.V1, Common, Core, Host, Libraries, Mono, Update, excluding categories ManualTest, IntegrationTest, AutomationTest, WINDOWS |
+| Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
+| Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
+| Docker image | full `docker/Dockerfile` build (not pushed) |
+
+Not run in CI:
+
+- `Requestarr.Integration.Test`: needs a packaged app layout started as a separate process.
+- `Requestarr.Automation.Test`: needs Selenium and a browser against a running app.
+- `Requestarr.Benchmark.Test`: performance measurements, not pass or fail.
+- Tests tagged `ManualTest`: these call live third-party services.
 
 ## Docker stack
 
