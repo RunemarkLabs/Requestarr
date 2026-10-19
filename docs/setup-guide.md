@@ -162,7 +162,109 @@ Requestarr never updates itself inside the container.
 
 ## 4. Connect Sonarr and Radarr
 
-_Coming in Phase 1:_ API keys, multiple instances, automatic webhook registration, the polling-only option, and series type per Sonarr instance.
+Requestarr sends movie requests to Radarr and TV requests to Sonarr. Supported versions are **Radarr 5 or later** and **Sonarr 4 or later**. Older versions are refused, with a clear message under **System → Status**.
+
+### 4.1 API keys
+
+In each Sonarr and Radarr, open **Settings → General → Security** and copy the **API Key**. Put it in `secrets.env`, never in `provisioning.yml`:
+
+```ini
+RADARR_API_KEY=paste-radarr-key
+SONARR_API_KEY=paste-sonarr-key
+```
+
+### 4.2 Provisioning entries
+
+Add a `backends` section to `provisioning.yml`. Each type takes a list:
+
+```yaml
+backends:
+  radarr:
+    - name: Radarr                  # unique name, used by /user access
+      url: http://radarr:7878       # as Requestarr reaches it (container name on the same Docker network)
+      apiKey: ${RADARR_API_KEY}
+      qualityProfile: HD-1080p      # profile name (or ID) in that Radarr
+      rootFolder: /movies           # must already exist as a root folder in that Radarr
+      default: true                 # used for users without an assigned instance
+  sonarr:
+    - name: Sonarr
+      url: http://sonarr:8989
+      apiKey: ${SONARR_API_KEY}
+      qualityProfile: HD-1080p
+      rootFolder: /tv
+      seriesType: standard          # standard | anime | daily
+      default: true
+```
+
+| Setting | Required | Notes |
+|---|---|---|
+| `name` | yes | Unique across all instances. |
+| `url` | yes | Base URL, without `/api`. |
+| `apiKey` | yes | Use a `${VAR}` reference to `secrets.env`. |
+| `qualityProfile` | no | Defaults to the instance's first profile. |
+| `rootFolder` | no | Defaults to the instance's first root folder. |
+| `seriesType` | no | Sonarr only. Applied to every series this instance gets from Requestarr. |
+| `default` | no | One per type. Without it, the first listed instance is the default. |
+| `enabled` | no | `false` keeps the instance but stops using it. |
+
+On every start, Requestarr checks each instance:
+
+- it can connect
+- the app and version are supported
+- the quality profile exists
+- the root folder exists
+
+Problems show as a health error under **System → Status**, naming the instance and the cause.
+
+The file is the source of truth. An instance removed from the file is disabled, not deleted, so existing requests keep their history.
+
+### 4.3 Several instances of one type
+
+List as many instances per type as you need. Common setups:
+
+- a separate Radarr for 4K
+- a separate Sonarr for anime with `seriesType: anime`
+
+```yaml
+  radarr:
+    - name: Radarr
+      url: http://radarr:7878
+      apiKey: ${RADARR_API_KEY}
+      default: true
+    - name: Radarr 4K
+      url: http://radarr4k:7878
+      apiKey: ${RADARR_4K_API_KEY}
+      qualityProfile: Ultra-HD
+      rootFolder: /movies-4k
+```
+
+### 4.4 Which instance a user's requests go to
+
+Users never pick an instance. By default every user's movie requests go to the default Radarr, and TV requests to the default Sonarr.
+
+To send one user's requests elsewhere, add `instance` to `/user access`:
+
+```
+/user access member:@someone type:Movies level:Auto-approve instance:Radarr 4K
+```
+
+The assignment is per user and per content type. Run `/user info` to see it.
+
+### 4.5 What happens to a request
+
+1. The user searches with `/request movie` or `/request tv` in their channel, or by ID with `/request movie-tmdb` or `/request tv-tvdb`. Results come from their instance's own search, so no extra API keys are needed.
+2. They pick a title and see a card with the poster and overview. The card says if the title is:
+   - already in the library
+   - already requested by someone, in which case they can follow that request instead of making a second one
+   - previously denied, and why
+3. For TV, they pick specific seasons, all seasons, and optionally **Future seasons**, which keeps monitoring new seasons as they air.
+4. What happens next depends on their access level:
+   - **off:** refused
+   - **needs approval:** an Approve / Deny card appears in `#requestarr-admin`; Deny asks for a reason
+   - **auto-approve:** sent straight away
+5. When a request is approved, Requestarr adds it to the instance with the instance's quality profile, root folder and series type, monitored, and starts a search. The user is told the outcome in their channel.
+
+Quotas (section 5.6) count requests a user makes over a rolling window. Following someone else's request doesn't count. When a user hits the limit, Requestarr tells them when their next request frees up.
 
 ## 5. Admin setup in Discord
 
@@ -175,7 +277,8 @@ discord:
   botToken: ${DISCORD_BOT_TOKEN}
   applicationId: ${DISCORD_APPLICATION_ID}   # Developer Portal → General Information
   guildId: ${DISCORD_GUILD_ID}               # your server's ID
-  adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}    # optional, see 5.2
+  # adminRoleName: Requestarr Admin          # optional, see 5.2
+  # adminRoleId: 123456789012345678          # optional: use an existing role instead
 ```
 
 To copy IDs, turn on Developer Mode in Discord (User Settings → Advanced). Then right-click the server or role and choose **Copy ID**.
@@ -184,23 +287,45 @@ Restart Requestarr. The bot comes online, and **System → Status** in the web p
 
 ### 5.2 Who is an admin
 
-- **The server owner** is always a Requestarr admin.
-- **Optionally, members of one role:** put that role's ID in `adminRoleId`. This lets moderators manage Requestarr without owning the server.
+- **The server owner** is always a Requestarr admin and never needs a role.
+- **Anyone holding the "Requestarr Admin" role** is an admin too. Requestarr creates this role on first start if it doesn't exist. It is placed below the bot's own role and has no Discord permissions of its own.
 
-Requestarr checks admin status itself on every command and button click. Hiding commands in Discord's settings changes nothing.
+To make someone a co-admin, give them the role in **Server Settings → Roles** or from their member profile. To remove admin, take the role away.
 
-### 5.3 The admin channel and request channels
+Anyone who can manage roles in your server can hand out this role. Discord doesn't let Requestarr see who granted it, so keep Manage Roles to people you trust.
+
+Two optional settings in `provisioning.yml` change which role counts:
+
+- **`adminRoleName`:** a different name. An existing role with that name is reused.
+- **`adminRoleId`:** a specific role you already have, used instead of creating one.
+
+Requestarr checks admin status itself on every command and button click. What Discord shows or hides changes nothing about who may act.
+
+### 5.3 Who sees which commands
+
+The admin-only commands are `/user`, `/queue`, `/approve` and `/deny`. They are registered so that only members with **Manage Server** see them, which means ordinary users never do.
+
+The commands users need stay visible to everyone: `/request`, `/requests`, `/quota` and `/mediaserver`. Their admin parts, like the `user:` filter or `/mediaserver approve`, only work for admins in the admin channel.
+
+**Optional:** co-admins who hold the Requestarr Admin role but not Manage Server won't see the admin commands. You can also keep admin commands out of every channel except the admin channel. As the server owner, open **Server Settings → Integrations → (your Requestarr bot) → Manage**, and under **Commands** pick each admin command (`/user`, `/queue`, `/approve`, `/deny`). For each one:
+
+1. Under **Roles & Members**, add the **Requestarr Admin** role and allow it.
+2. Under **Channels**, turn off **All Channels** and allow only `#requestarr-admin`.
+
+This is display only. Requestarr still refuses admin commands from non-admins and outside the admin channel.
+
+### 5.4 The admin channel and request channels
 
 On first start, Requestarr creates two things, or reuses them if they already exist:
 
-- **`#requestarr-admin`:** run admin commands here. Approval cards (for example media server access requests) also appear here. Only the admin role, the owner, and the bot can see it.
+- **`#requestarr-admin`:** run admin commands here. Approval cards for requests and media server access also appear here. Only the Requestarr Admin role, the owner, and the bot can see it. Admins can also make their own requests here; those go straight through.
 - **A "Requestarr Requests" category:** each user's private request channel goes here. When a category reaches Discord's limit of 50 channels, Requestarr starts "Requestarr Requests 2", and so on.
 
 You can rename or move the channel and category. Requestarr tracks them by ID.
 
 Admin commands work only in the admin channel. Users' commands work only in their own channel.
 
-### 5.4 Add your first user
+### 5.5 Add your first user
 
 In `#requestarr-admin`, run:
 
@@ -224,7 +349,7 @@ To set other levels at add time, use the optional `movie`, `tv`, and `music` opt
 
 Discord allows 250 roles per server, and every user needs one. `/user add` stops a few roles short of that limit and says so.
 
-### 5.5 Access levels and quotas
+### 5.6 Access levels and quotas
 
 There are three access levels for each content type:
 
@@ -250,7 +375,7 @@ Quotas limit how many requests a user can make in a rolling window. To allow 5 m
 
 Comics and books are not offered yet.
 
-### 5.6 Other user commands
+### 5.7 Other user commands
 
 | Command | What it does |
 |---|---|
@@ -259,10 +384,13 @@ Comics and books are not offered yet.
 | `/user unsuspend member:@someone` | Unlocks it. |
 | `/user remove member:@someone` | Archives their channel (renamed `archived-…`, visible only to admins), deletes their role, and keeps their request history. Run `/user add` to bring them back later. |
 | `/user mediaserver member:@someone service:Plex username:{plex username}` | Links their Plex account. |
+| `/user access … instance:{name}` | Sends that user's requests of that type to a specific Sonarr or Radarr (section 4.4). |
+
+For every command, see the [command reference](commands.md).
 
 Users can also ask for media server access themselves. In their own channel they run `/mediaserver request username:{plex username}`, and an Approve / Deny card appears in the admin channel. Approving links the account. Plex invites are sent automatically in a later release.
 
-### 5.7 When someone leaves the server
+### 5.8 When someone leaves the server
 
 If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, run `/user unsuspend`: Requestarr gives their role back and unlocks the channel.
 
@@ -283,6 +411,8 @@ _Coming in Phase 2._
 - **Members leaving are not detected:** Server Members Intent is off.
 - **"Only the Requestarr admin can use this command":** you are not the server owner and don't have the role set in `adminRoleId`.
 - **"Admin commands only work in the Requestarr admin channel":** run `/user …` commands in `#requestarr-admin`, not in a user's channel.
+- **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
+- **Users don't see /user or /queue:** that's intended; admin commands only show to members with Manage Server (see 5.3).
 - **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.
 - **"Provisioning file could not be applied" under System → Status:** the message names the problem, for example an environment variable that is not set or an invalid value. Fix `provisioning.yml` or `secrets.env`, then `docker compose restart requestarr`.
 - **The container restarts or stays unhealthy:** check `docker compose logs requestarr`. A common cause is a `./config` folder the container cannot write to (see section 3.2).

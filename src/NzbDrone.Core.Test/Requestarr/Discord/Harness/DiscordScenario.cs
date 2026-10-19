@@ -56,6 +56,24 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IBackendRepository>(Mocker.Resolve<BackendRepository>());
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
+            UseBackends();
+            Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
+            Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
+            Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
+
+            Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
+
+            Harness = new InteractionHarness(
+                Mocker.Resolve<UserCommandHandler>(),
+                Mocker.Resolve<MediaServerHandler>(),
+                Mocker.Resolve<RequestHandler>(),
+                Mocker.Resolve<ApprovalHandler>());
+        }
+
+        // Fake Radarr / Sonarr by default; live fixtures override with the real APIs.
+        protected virtual void UseBackends()
+        {
             Radarr = new FakeRadarr();
             Sonarr = new FakeSonarr();
             Mocker.SetConstant<IRadarrApi>(Radarr);
@@ -73,18 +91,6 @@ namespace Requestarr.Core.Test.Discord.Harness
                     new() { Name = "Sonarr", Url = "http://sonarr-test:8989", ApiKey = "k", QualityProfile = "HD-1080p", RootFolder = "/data/media", SeriesType = "anime" }
                 }
             });
-            Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
-            Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
-            Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
-            Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
-
-            Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
-
-            Harness = new InteractionHarness(
-                Mocker.Resolve<UserCommandHandler>(),
-                Mocker.Resolve<MediaServerHandler>(),
-                Mocker.Resolve<RequestHandler>(),
-                Mocker.Resolve<ApprovalHandler>());
         }
 
         protected IUserManagementService Users => Mocker.Resolve<IUserManagementService>();

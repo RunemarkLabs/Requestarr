@@ -16,13 +16,14 @@ auth:
   password: ${REQUESTARR_ADMIN_PASSWORD}
   apiKey: ${REQUESTARR_API_KEY}
 
-# backends and mediaServers are validated now and applied once each feature lands.
+# mediaServers is validated now and applied once that feature lands.
 
 discord:
   botToken: ${DISCORD_BOT_TOKEN:-}
   applicationId: ${DISCORD_APPLICATION_ID:-}
   guildId: ${DISCORD_TEST_GUILD_ID:-}
-  # Optional: members with this role are admins too (the server owner always is).
+  # Requestarr creates a "Requestarr Admin" role on first start; holders are admins
+  # (the server owner always is). Optionally use an existing role instead:
   adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}
 
 # Any number of instances per type; names must be unique.
@@ -31,13 +32,17 @@ backends:
     - name: Sonarr (test)
       url: http://sonarr-test:8989
       apiKey: ${SONARR_TEST_API_KEY}
+      qualityProfile: HD-1080p
       rootFolder: /data/tv
       seriesType: standard
+      default: true
   radarr:
     - name: Radarr (test)
       url: http://radarr-test:7878
       apiKey: ${RADARR_TEST_API_KEY}
+      qualityProfile: HD-1080p
       rootFolder: /data/movies
+      default: true
 
 mediaServers:
   plex: []

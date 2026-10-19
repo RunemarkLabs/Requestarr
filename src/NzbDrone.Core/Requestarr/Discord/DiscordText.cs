@@ -140,7 +140,7 @@ namespace Requestarr.Core.Discord
 
         public static string BackendUnavailable(string instance) => $"{instance} isn't reachable right now. Try again later.";
 
-        public static string SearchResults(ContentType type, string query, int count) => $"{count} {Label(type).ToLowerInvariant()} result{(count == 1 ? string.Empty : "s")} for \"{query}\". Pick one to see details.";
+        public static string SearchResults(ContentType type, string query, int count) => $"{Label(type)}: {count} result{(count == 1 ? string.Empty : "s")} for \"{query}\". Pick one to see details.";
 
         public static string StateRequested(string owner, RequestStatus status, int id) => $"📌 Already requested by {owner} (#{id}, {Label(status)}). You can follow it to be notified.";
 
