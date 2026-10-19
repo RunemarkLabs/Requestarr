@@ -198,6 +198,11 @@ namespace Requestarr.Core.Provisioning
 
             if (discord != null)
             {
+                if (discord.BotToken.IsNotNullOrWhiteSpace() && (discord.ApplicationId.IsNullOrWhiteSpace() || discord.GuildId.IsNullOrWhiteSpace()))
+                {
+                    yield return "discord.applicationId and discord.guildId are required when discord.botToken is set";
+                }
+
                 foreach (var (field, value) in new[]
                          {
                              ("applicationId", discord.ApplicationId),

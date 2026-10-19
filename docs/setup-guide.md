@@ -112,7 +112,7 @@ auth:
   password: ${REQUESTARR_ADMIN_PASSWORD}
   apiKey: ${REQUESTARR_API_KEY}
 
-# Recognised now, used once Discord support ships (Phase 1).
+# Section 5 explains the Discord settings.
 discord:
   botToken: ${DISCORD_BOT_TOKEN:-}
 ```
@@ -166,7 +166,107 @@ _Coming in Phase 1:_ API keys, multiple instances, automatic webhook registratio
 
 ## 5. Admin setup in Discord
 
-_Coming in Phase 1:_ admin role and admin channel, your first `/user add`, access levels, and quotas.
+### 5.1 Connect the bot
+
+Add the Discord section to `provisioning.yml`, and put the values in `secrets.env`:
+
+```yaml
+discord:
+  botToken: ${DISCORD_BOT_TOKEN}
+  applicationId: ${DISCORD_APPLICATION_ID}   # Developer Portal → General Information
+  guildId: ${DISCORD_GUILD_ID}               # your server's ID
+  adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}    # optional, see 5.2
+```
+
+To copy IDs, turn on Developer Mode in Discord (User Settings → Advanced). Then right-click the server or role and choose **Copy ID**.
+
+Restart Requestarr. The bot comes online, and **System → Status** in the web portal shows a Discord health warning or error until it connects. If the bot stays disconnected for 10 minutes, Requestarr exits so that Docker restarts it with a fresh connection.
+
+### 5.2 Who is an admin
+
+- **The server owner** is always a Requestarr admin.
+- **Optionally, members of one role:** put that role's ID in `adminRoleId`. This lets moderators manage Requestarr without owning the server.
+
+Requestarr checks admin status itself on every command and button click. Hiding commands in Discord's settings changes nothing.
+
+### 5.3 The admin channel and request channels
+
+On first start, Requestarr creates two things, or reuses them if they already exist:
+
+- **`#requestarr-admin`:** run admin commands here. Approval cards (for example media server access requests) also appear here. Only the admin role, the owner, and the bot can see it.
+- **A "Requestarr Requests" category:** each user's private request channel goes here. When a category reaches Discord's limit of 50 channels, Requestarr starts "Requestarr Requests 2", and so on.
+
+You can rename or move the channel and category. Requestarr tracks them by ID.
+
+Admin commands work only in the admin channel. Users' commands work only in their own channel.
+
+### 5.4 Add your first user
+
+In `#requestarr-admin`, run:
+
+```
+/user add member:@someone
+```
+
+Requestarr then:
+
+1. Creates the Requestarr user from the member's Discord account.
+2. Creates a role just for them (`requestarr-{name}`) and gives it to them.
+3. Creates their private channel (`#requests-{name}`). Only that role, the admin role (and the owner), and the bot can see it.
+4. Posts a welcome message there listing what they may request.
+
+By default, a new user gets:
+
+- **Movies and TV:** needs approval.
+- **Music:** off.
+
+To set other levels at add time, use the optional `movie`, `tv`, and `music` options.
+
+Discord allows 250 roles per server, and every user needs one. `/user add` stops a few roles short of that limit and says so.
+
+### 5.5 Access levels and quotas
+
+There are three access levels for each content type:
+
+| Level | Meaning |
+|---|---|
+| off | The user can't request this type. |
+| needs approval | Requests wait for an admin to approve them. |
+| auto-approve | Requests go straight through. |
+
+Change a level at any time:
+
+```
+/user access member:@someone type:Movies level:Auto-approve
+```
+
+Quotas limit how many requests a user can make in a rolling window. To allow 5 movie requests every 7 days:
+
+```
+/user quota member:@someone type:Movies limit:5 days:7
+```
+
+`limit:0` removes the quota.
+
+Comics and books are not offered yet.
+
+### 5.6 Other user commands
+
+| Command | What it does |
+|---|---|
+| `/user info member:@someone` | Shows status, channel, access levels, quotas, and any linked media server account. |
+| `/user suspend member:@someone` | Locks their channel: they can read it but can't post or request. |
+| `/user unsuspend member:@someone` | Unlocks it. |
+| `/user remove member:@someone` | Archives their channel (renamed `archived-…`, visible only to admins), deletes their role, and keeps their request history. Run `/user add` to bring them back later. |
+| `/user mediaserver member:@someone service:Plex username:{plex username}` | Links their Plex account. |
+
+Users can also ask for media server access themselves. In their own channel they run `/mediaserver request username:{plex username}`, and an Approve / Deny card appears in the admin channel. Approving links the account. Plex invites are sent automatically in a later release.
+
+### 5.7 When someone leaves the server
+
+If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, run `/user unsuspend`: Requestarr gives their role back and unlocks the channel.
+
+Every action in this section, whether an admin or Requestarr did it, is recorded in Requestarr's audit log.
 
 ## 6. Connect Plex (optional)
 
@@ -181,5 +281,8 @@ _Coming in Phase 2._
 - **"Private application cannot have a default authorization link":** set Installation → Install Link to None first.
 - **The bot cannot create or assign roles:** move the bot's role higher in Server Settings → Roles.
 - **Members leaving are not detected:** Server Members Intent is off.
+- **"Only the Requestarr admin can use this command":** you are not the server owner and don't have the role set in `adminRoleId`.
+- **"Admin commands only work in the Requestarr admin channel":** run `/user …` commands in `#requestarr-admin`, not in a user's channel.
+- **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.
 - **"Provisioning file could not be applied" under System → Status:** the message names the problem, for example an environment variable that is not set or an invalid value. Fix `provisioning.yml` or `secrets.env`, then `docker compose restart requestarr`.
 - **The container restarts or stays unhealthy:** check `docker compose logs requestarr`. A common cause is a `./config` folder the container cannot write to (see section 3.2).

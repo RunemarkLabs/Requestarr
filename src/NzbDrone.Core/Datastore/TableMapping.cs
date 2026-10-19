@@ -13,6 +13,10 @@ using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Tags;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Update.History;
+using Requestarr.Core.Audit;
+using Requestarr.Core.Discord;
+using Requestarr.Core.MediaServers;
+using Requestarr.Core.Users;
 using static Dapper.SqlMapper;
 
 namespace NzbDrone.Core.Datastore
@@ -45,6 +49,15 @@ namespace NzbDrone.Core.Datastore
 
             Mapper.Entity<CustomFilter>("CustomFilters").RegisterModel();
             Mapper.Entity<UpdateHistory>("UpdateHistory").RegisterModel();
+
+            // Requestarr
+            Mapper.Entity<RequestarrUser>("RequestarrUsers").RegisterModel();
+            Mapper.Entity<UserIdentity>("UserIdentities").RegisterModel();
+            Mapper.Entity<UserMediaAccess>("UserMediaAccess").RegisterModel();
+            Mapper.Entity<MediaServerAccount>("MediaServerAccounts").RegisterModel();
+            Mapper.Entity<MediaServerAccessRequest>("MediaServerAccessRequests").RegisterModel();
+            Mapper.Entity<AuditEntry>("AuditEntries").RegisterModel();
+            Mapper.Entity<DiscordGuildConfig>("DiscordGuildConfigs").RegisterModel();
         }
 
         private static void RegisterMappers()
