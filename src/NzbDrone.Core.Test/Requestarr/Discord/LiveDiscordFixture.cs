@@ -143,6 +143,7 @@ namespace Requestarr.Core.Test.Discord
                 }
 
                 Log($"[bot] role '{botRole.Name}' Pin Messages: {botRole.Permissions.PinMessages}, Manage Messages: {botRole.Permissions.ManageMessages}");
+                Log($"[bot] role raw permissions {botRole.Permissions.RawValue}; roles with Pin or Manage Messages: {string.Join(", ", roleGuild.Roles.Where(r => r.Permissions.PinMessages || r.Permissions.ManageMessages).Select(r => $"'{r.Name}'"))}");
                 Log($"[admin-role] '{adminRoleRead.Name}' ({adminRoleRead.Id}) {(roleCreated ? "created by Requestarr" : "already existed")}; position {adminRoleRead.Position}, below the bot's role '{botRole.Name}' (position {botTop}): {belowBot}; permissions={adminRoleRead.Permissions.RawValue}");
                 adminRoleRead.Name.Should().Be(DiscordSettings.DefaultAdminRoleName);
                 belowBot.Should().BeTrue();
@@ -180,6 +181,15 @@ namespace Requestarr.Core.Test.Discord
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
                 var target = members.FirstOrDefault(m => !m.IsBot && m.Id != guild.OwnerId) ?? members.First(m => m.Id == guild.OwnerId);
                 Log($"[add] target member {target.Username} ({target.Id}){(target.Id == guild.OwnerId ? " (owner: no other human member)" : string.Empty)}");
+
+                // This test's database is fresh, so a member already onboarded by the UAT stack would get a second
+                // channel and role. Never do that: leave onboarded members alone and use LiveUatReadBackFixture instead.
+                var existingChannels = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetTextChannelsAsync();
+                if (existingChannels.Any(c => c.Name == ChannelLayout.UserChannelName(target.Username)))
+                {
+                    Log($"[add] skipped: {target.Username} already has a request channel in this server; nothing was created");
+                    return;
+                }
 
                 var addRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin user add").WithOption("member", target.Id)
                     .By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
