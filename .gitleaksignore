@@ -1,0 +1,4 @@
+# Exact findings that are known fakes, by fingerprint (commit:file:rule:line). Never patterns.
+# 246b79c: a made-up API key literal in a test, flagged by this scanner on PR #10 and replaced
+# in the next commit with a value built at run time. It never was a real key.
+246b79c695934c9adf43194e8e401a866a52ab92:src/NzbDrone.Core.Test/Requestarr/AnimeDub/Item8And9SecretsFixture.cs:generic-api-key:19

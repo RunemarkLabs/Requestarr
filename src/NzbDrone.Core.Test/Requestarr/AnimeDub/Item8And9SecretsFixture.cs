@@ -77,6 +77,11 @@ namespace Requestarr.Core.Test.AnimeDub
             allowed.Should().OnlyContain(rx => !rx.Contains(".*") && !rx.Contains(@"\w") && !rx.Contains('+') && !rx.Contains('['), "allowances must be exact values, never patterns");
             File.ReadAllText(Item4To6Fixture.RepoFile("src", "NzbDrone.Core.Test", "Requestarr", "Polish", "Item4CastFixture.cs"))
                 .Should().Contain(allowed[0].Replace(@"\.", "."), "the one allowance is the fake token that test uses");
+
+            // Ignored findings: exact fingerprints (full commit, file, rule, line) in test code only.
+            var ignored = File.ReadAllLines(Item4To6Fixture.RepoFile(".gitleaksignore")).Where(l => l.Trim().Length > 0 && !l.StartsWith('#')).ToList();
+            ignored.Should().OnlyContain(l => Regex.IsMatch(l, @"^[0-9a-f]{40}:src/NzbDrone\.[A-Za-z.]+\.Test/[^:*]+\.cs:[a-z-]+:\d+$"));
+            File.ReadAllText(Item4To6Fixture.RepoFile(".github", "workflows", "build.yml")).Should().Contain("--gitleaks-ignore-path /repo/.gitleaksignore");
         }
 
         [Test]
