@@ -36,9 +36,10 @@ namespace Requestarr.Core.Test.Gaps
         private const int Heat = 949;
         private const int Inception = 27205;
         private const int Interstellar = 157336;
+        private const int Arrival = 329865;
 
         [Test]
-        public async Task approved_denied_and_cancelled_requests_edit_their_real_messages()
+        public async Task decided_requests_edit_their_real_messages()
         {
             var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
             var radarrKey = Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
@@ -128,13 +129,23 @@ namespace Requestarr.Core.Test.Gaps
                 // Two requests, each in its own real message, as the user's /request would leave them.
                 var approved = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Matrix);
                 var denied = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Heat);
-                var adminCancelled = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Inception);
+                var inLibrary = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Inception);
                 var userCancelled = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Interstellar);
+                var onDisc = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel, target.Id, Arrival);
+
+                // Inception lands in the library while its request waits (added to the test Radarr directly).
+                var radarr = Mocker.Resolve<IRadarrApi>();
+                var radarrSettings = Mocker.Resolve<IBackendService>().Default(ContentType.Movie).Settings;
+                var profile = BackendService.ResolveProfile(await radarr.GetQualityProfilesAsync(radarrSettings), "HD-1080p");
+                await radarr.AddMovieAsync(radarrSettings, await radarr.LookupTmdbAsync(radarrSettings, Inception), profile.Id, "/data/movies");
+                Log("[library] Inception added to the test Radarr while request #3 was pending");
 
                 await Send(dispatcher, FakeInteraction.Button("req-approve:1").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
-                await Send(dispatcher, FakeInteraction.ModalSubmit("req-deny-reason:2").WithField(RequestRoutes.ReasonField, "already have it on disc").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
-                var cancelRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin cancel").WithOption("id", 3L).WithOption("reason", "duplicate of an earlier request").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
-                Log($"[admin cancel] admin reply: {cancelRun.LastReply.Content}");
+                await Send(dispatcher, FakeInteraction.ModalSubmit("req-deny-reason:2").WithField(RequestRoutes.ReasonField, "not something this server collects").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                var cancelRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin cancel").WithOption("id", 3L).WithOption("reason", "we already have it").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                Log($"[in library] admin closed request #3 with /admin cancel; admin reply: {cancelRun.LastReply.Content}");
+                var discRun = await Send(dispatcher, FakeInteraction.Button("req-available:5").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                Log($"[on disc] admin pressed Already available on request #5; card now: {discRun.Responder.Replies.First().Content}");
                 var userCancel = await Send(dispatcher, FakeInteraction.Button("req-cancel:4").By(target.Id).InGuild(guild.Id).InChannel(channel).OnMessage(userCancelled));
                 Log($"[user cancel] reply on the clicked message: {userCancel.LastReply.Content.Replace("\n", " | ")}");
 
@@ -142,7 +153,7 @@ namespace Requestarr.Core.Test.Gaps
                 var admin = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
                 var requests = Mocker.Resolve<IRequestRepository>();
 
-                foreach (var (label, messageId, request) in new[] { ("approved", approved, requests.Get(1)), ("denied", denied, requests.Get(2)), ("admin cancel", adminCancelled, requests.Get(3)), ("user cancel", userCancelled, requests.Get(4)) })
+                foreach (var (label, messageId, request) in new[] { ("approved", approved, requests.Get(1)), ("denied", denied, requests.Get(2)), ("in library", inLibrary, requests.Get(3)), ("user cancel", userCancelled, requests.Get(4)), ("on disc", onDisc, requests.Get(5)) })
                 {
                     var message = await userChannel.GetMessageAsync(messageId);
                     var card = await admin.GetMessageAsync(ulong.Parse(request.AdminMessageId));
@@ -158,16 +169,27 @@ namespace Requestarr.Core.Test.Gaps
                 }
 
                 (await userChannel.GetMessageAsync(approved)).Content.Should().StartWith(DiscordText.FinalApproved);
-                (await userChannel.GetMessageAsync(denied)).Content.Should().StartWith(DiscordText.FinalDenied).And.Contain("already have it on disc");
-                (await userChannel.GetMessageAsync(adminCancelled)).Content.Should().StartWith(DiscordText.FinalCancelled).And.Contain("cancelled by the admin: duplicate of an earlier request");
+                (await userChannel.GetMessageAsync(denied)).Content.Should().StartWith(DiscordText.FinalDenied).And.Contain("not something this server collects");
+
+                // Already there is a win for the user: green and good news, whatever the admin pressed.
+                foreach (var (messageId, label) in new[] { (inLibrary, "Inception (2010)"), (onDisc, "Arrival (2016)") })
+                {
+                    var win = await userChannel.GetMessageAsync(messageId);
+                    win.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain($"Good news: {label} is already in the library");
+                    win.Content.Should().NotContainAny("⛔", "🚫", "⚠️", "Cancelled", "Denied");
+                    win.Embeds.Single().Color.Value.RawValue.Should().Be(RequestCards.SentColor);
+                }
+
                 (await userChannel.GetMessageAsync(userCancelled)).Content.Should().StartWith(DiscordText.FinalCancelled).And.Contain("Request #4 for Interstellar (2014) was cancelled.");
-                (await admin.GetMessageAsync(ulong.Parse(requests.Get(3).AdminMessageId))).Content.Should().StartWith("**Request #3: cancelled** by owner");
+                (await admin.GetMessageAsync(ulong.Parse(requests.Get(3).AdminMessageId))).Content.Should().StartWith("**Request #3: already available**");
+                (await admin.GetMessageAsync(ulong.Parse(requests.Get(5).AdminMessageId))).Content.Should().StartWith("**Request #5: already available**");
                 (await admin.GetMessageAsync(ulong.Parse(requests.Get(4).AdminMessageId))).Content.Should().StartWith("**Request #4: cancelled** by OneRadChad");
 
-                var mine = new[] { approved, denied, adminCancelled, userCancelled };
+                var mine = new[] { approved, denied, inLibrary, userCancelled, onDisc };
                 var notices = (await userChannel.GetMessagesAsync(10).FlattenAsync()).Where(m => m.Author.IsBot && !mine.Contains(m.Id)).Select(m => m.Content).ToList();
-                Log($"[notices] still sent: {string.Join(" || ", notices.Where(n => n.StartsWith("Your request")))}");
-                notices.Should().Contain(n => n.StartsWith("Your request #1")).And.Contain(n => n.StartsWith("Your request #2")).And.Contain(n => n.StartsWith("Your request #3"));
+                var repeats = notices.Where(n => n.StartsWith("Your request") || n.StartsWith("🎉 Good news!")).ToList();
+                Log($"[notices] separate notices repeating an edited request message: {repeats.Count}");
+                repeats.Should().BeEmpty("the edited request message already tells the user");
 
                 // A late Cancel on the approved message changes nothing.
                 var late = await Send(dispatcher, FakeInteraction.Button("req-cancel:1").By(target.Id).InGuild(guild.Id).InChannel(channel).OnMessage(approved));

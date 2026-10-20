@@ -220,7 +220,23 @@ namespace Requestarr.Core.Backends
         public async Task<MediaLookupResult> LookupTmdbAsync(BackendSettings settings, int tmdbId)
         {
             var result = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, "movie/lookup/tmdb", ("tmdbId", tmdbId));
-            return result == null || (int?)result["tmdbId"] is null or 0 ? null : Map(result);
+
+            if (result == null || (int?)result["tmdbId"] is null or 0)
+            {
+                return null;
+            }
+
+            // Radarr's lookup by TMDB ID doesn't say whether the movie is in the library; ask it.
+            var movie = Map(result);
+            var owned = (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "movie", ("tmdbId", tmdbId)))?.FirstOrDefault();
+
+            if (owned != null && (int?)owned["id"] is > 0)
+            {
+                movie.LibraryId = (int)owned["id"];
+                movie.HasFile = (bool?)owned["hasFile"] ?? false;
+            }
+
+            return movie;
         }
 
         public async Task<int> AddMovieAsync(BackendSettings settings, MediaLookupResult movie, int qualityProfileId, string rootFolder)
@@ -281,7 +297,20 @@ namespace Requestarr.Core.Backends
 
         public async Task<MediaLookupResult> LookupTvdbAsync(BackendSettings settings, int tvdbId)
         {
-            return (await LookupAsync(settings, $"tvdb:{tvdbId}")).FirstOrDefault(r => r.TvdbId == tvdbId);
+            var series = (await LookupAsync(settings, $"tvdb:{tvdbId}")).FirstOrDefault(r => r.TvdbId == tvdbId);
+
+            // Make sure a series already in the library is recognised as such.
+            if (series != null && !series.LibraryId.HasValue)
+            {
+                var owned = (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "series", ("tvdbId", tvdbId)))?.FirstOrDefault(s => (int?)s["tvdbId"] == tvdbId);
+
+                if (owned != null && (int?)owned["id"] is > 0)
+                {
+                    series.LibraryId = (int)owned["id"];
+                }
+            }
+
+            return series;
         }
 
         public async Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture)

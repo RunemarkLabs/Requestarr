@@ -36,8 +36,7 @@ namespace Requestarr.Core.Test.Gaps
             edited.Content.Should().StartWith(DiscordText.FinalApproved).And.Contain("added to Radarr");
             edited.Buttons.Should().BeEmpty();
             edited.Embeds.Single().Color.Should().Be(RequestCards.SentColor);
-            ChannelFor(Alice).Messages.Count.Should().Be(before + 1, "the notice that pings the user is still sent");
-            LastMessageIn(Alice).Should().Be(DiscordText.RequestApprovedNotice("Dune (2021)", 1, "Radarr"));
+            ChannelFor(Alice).Messages.Count.Should().Be(before, "the edited message says it all; no separate notice repeats it");
         }
 
         [Test]
@@ -62,7 +61,7 @@ namespace Requestarr.Core.Test.Gaps
             edited.Content.Should().StartWith(DiscordText.FinalDenied).And.Contain("not in English");
             edited.Buttons.Should().BeEmpty();
             edited.Embeds.Single().Color.Should().Be(RequestCards.RefusedColor);
-            LastMessageIn(Alice).Should().Be(DiscordText.RequestDeniedNotice("Dune (2021)", 1, "not in English"));
+            NoSeparateNotice(message);
         }
 
         [Test]
@@ -77,7 +76,7 @@ namespace Requestarr.Core.Test.Gaps
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Cancelled);
             Message(Alice, message).Content.Should().StartWith(DiscordText.FinalCancelled).And.Contain("cancelled by the admin: duplicate");
             Message(Alice, message).Buttons.Should().BeEmpty();
-            LastMessageIn(Alice).Should().Be(DiscordText.RequestCancelledByAdminNotice("Dune (2021)", 1, "duplicate"));
+            NoSeparateNotice(message);
 
             var adminCard = Discord.Channels[AdminChannel].Messages[Discord.Channels[AdminChannel].MessageIds.IndexOf(card)];
             adminCard.Content.Should().StartWith("**Request #1: cancelled** by owner");
@@ -137,6 +136,17 @@ namespace Requestarr.Core.Test.Gaps
         }
 
         [Test]
+        public async Task without_a_message_to_edit_the_notice_is_sent_instead()
+        {
+            await RequestMovie(Alice, Dune);
+            NowInLibrary(Dune);
+
+            await AdminButton("req-available:1");
+
+            LastMessageIn(Alice).Should().Be(DiscordText.RequestAlreadyAvailableNotice("Dune (2021)", 1));
+        }
+
+        [Test]
         public async Task requests_made_before_messages_were_stored_keep_working()
         {
             await RequestMovie(Alice, Dune);
@@ -148,12 +158,15 @@ namespace Requestarr.Core.Test.Gaps
 
         private void NowInLibrary(int tmdbId) => Radarr.Catalog.Single(c => c.TmdbId == tmdbId).LibraryId = 55;
 
+        // The request message is the last thing in the channel: nothing was posted after it.
+        private void NoSeparateNotice(ulong message) => ChannelFor(Alice).MessageIds.Last().Should().Be(message);
+
         private void ShowsAlreadyAvailable(ulong message)
         {
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
             Message(Alice, message).Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain(DiscordText.RequestAlreadyAvailableStatus("Dune (2021)", 1));
             Message(Alice, message).Buttons.Should().BeEmpty();
-            LastMessageIn(Alice).Should().Be(DiscordText.RequestAlreadyAvailableNotice("Dune (2021)", 1));
+            NoSeparateNotice(message);
             Radarr.Adds.Should().BeEmpty("a title already in the library is never added again");
         }
 
@@ -215,6 +228,78 @@ namespace Requestarr.Core.Test.Gaps
             ShowsAlreadyAvailable(message);
 
             (await Harness.SendAsync(AdminSlash("available").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Available));
+        }
+
+        private static void LooksLikeAWin(Requestarr.Core.Discord.Interactions.InteractionReply reply)
+        {
+            reply.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain("Good news");
+            reply.Content.Should().NotContainAny("⛔", "🚫", "⚠️", "Denied", "Cancelled", "Not requested", "Couldn't");
+            reply.Embeds.Single().Color.Should().Be(RequestCards.SentColor);
+        }
+
+        [Test]
+        public async Task requesting_a_title_already_in_the_library_is_a_win()
+        {
+            var final = (await RequestMovie(Alice, Arrival)).LastReply;
+
+            LooksLikeAWin(final);
+            final.Content.Should().Contain(DiscordText.AlreadyInLibrary);
+            final.Ephemeral.Should().BeFalse();
+        }
+
+        [Test]
+        public async Task the_card_of_a_title_in_the_library_brings_good_news()
+        {
+            var card = (await Harness.SendAsync(Search(Alice, "movie", $"tmdb:{Arrival}"))).LastReply;
+
+            card.Content.Should().Contain(DiscordText.StateInLibrary).And.Contain("Good news");
+        }
+
+        [Test]
+        public async Task an_admin_cancel_of_a_title_now_in_the_library_tells_the_user_good_news()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            NowInLibrary(Dune);
+
+            await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L).WithOption("reason", "we have it"));
+
+            LooksLikeAWin(Message(Alice, message));
+            NoSeparateNotice(message);
+        }
+
+        [Test]
+        public async Task an_add_that_finds_the_title_already_there_is_a_win_not_a_failure()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            Radarr.AlreadyAdded = true;
+
+            await AdminButton("req-approve:1");
+
+            RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
+            LooksLikeAWin(Message(Alice, message));
+            NoSeparateNotice(message);
+        }
+
+        [Test]
+        public async Task an_auto_approved_request_that_finds_the_title_already_there_is_a_win()
+        {
+            await SetAccess(Alice, "movie", "auto");
+            Radarr.AlreadyAdded = true;
+
+            var final = (await RequestMovie(Alice, Dune)).LastReply;
+
+            LooksLikeAWin(final);
+            RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
+        }
+
+        [Test]
+        public async Task a_late_click_on_a_title_now_in_the_library_gets_the_good_news()
+        {
+            NowInLibrary(Dune);
+
+            var run = await Harness.SendAsync(Requestarr.Core.Test.Discord.Harness.FakeInteraction.Button($"req-follow:movie:{Dune}").By(Alice).InGuild(Requestarr.Core.Test.Discord.Harness.FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+
+            run.LastReply.Content.Should().Be(DiscordText.AlreadyThereNote);
         }
 
         [Test]

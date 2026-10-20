@@ -179,7 +179,7 @@ namespace Requestarr.Core.Discord.Handlers
             if (detail.Error == null && (detail.Value.Item.LibraryId.HasValue || detail.Value.Active != null))
             {
                 await responder.EditAsync(RequestCards.Detail(ContentType.Tv, detail.Value));
-                await responder.Ephemeral(DiscordText.NothingChanged(RequestCards.StateLine(detail.Value)));
+                await responder.Ephemeral(detail.Value.Item.LibraryId.HasValue ? DiscordText.AlreadyThereNote : DiscordText.NothingChanged(RequestCards.StateLine(detail.Value)));
                 return;
             }
 
@@ -213,7 +213,9 @@ namespace Requestarr.Core.Discord.Handlers
             if (state.Active == null || state.CallerOwnsActive || state.CallerFollows || state.Item.LibraryId.HasValue)
             {
                 await responder.EditAsync(RequestCards.Detail(type.Value, state));
-                await responder.Ephemeral(state.Active == null && !state.Item.LibraryId.HasValue ? DiscordText.NothingToFollow : DiscordText.NothingChanged(RequestCards.StateLine(state)));
+                await responder.Ephemeral(state.Item.LibraryId.HasValue ? DiscordText.AlreadyThereNote
+                    : state.Active == null ? DiscordText.NothingToFollow
+                    : DiscordText.NothingChanged(RequestCards.StateLine(state)));
                 return;
             }
 

@@ -247,7 +247,7 @@ namespace Requestarr.Core.Requests
 
             if (item.LibraryId.HasValue)
             {
-                return new RequestResult(false, DiscordText.AlreadyInLibrary, null, RequestOutcome.AlreadyAvailable);
+                return new RequestResult(true, DiscordText.AlreadyInLibrary, null, RequestOutcome.AlreadyAvailable);
             }
 
             // Duplicate: attach as subscriber instead of a second request. No quota cost.
@@ -323,6 +323,11 @@ namespace Requestarr.Core.Requests
                 request.DecidedByUserId = caller.AsAdmin ? caller.User.Id : null;
                 var (sent, _) = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
 
+                if (request.Status == RequestStatus.Available)
+                {
+                    return new RequestResult(true, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id), request, RequestOutcome.AlreadyAvailable);
+                }
+
                 return sent
                     ? new RequestResult(true, DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name), request, RequestOutcome.Sent)
                     : new RequestResult(false, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason), request, RequestOutcome.Failed);
@@ -365,9 +370,14 @@ namespace Requestarr.Core.Requests
             _audit.Record(admin, "request.approve", "request", request.Id.ToString());
 
             var (sent, item) = await SendAsync(request, instance, current, admin);
-            await RefreshMessagesAsync(request, item);
 
-            await Notify(request, sent
+            if (request.Status == RequestStatus.Available)
+            {
+                await RefreshOrNotify(request, item, DiscordText.RequestAlreadyAvailableNotice(request.Label, request.Id));
+                return ServiceResult.Ok(DiscordText.AdminMarkedAvailable(request));
+            }
+
+            await RefreshOrNotify(request, item, sent
                 ? DiscordText.RequestApprovedNotice(request.Label, request.Id, instance.Name)
                 : DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason));
 
@@ -404,8 +414,7 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
 
             _audit.Record(admin, "request.deny", "request", request.Id.ToString(), request.DecisionReason);
-            await RefreshMessagesAsync(request);
-            await Notify(request, DiscordText.RequestDeniedNotice(request.Label, request.Id, request.DecisionReason));
+            await RefreshOrNotify(request, null, DiscordText.RequestDeniedNotice(request.Label, request.Id, request.DecisionReason));
 
             return ServiceResult.Ok(DiscordText.AdminDenied(request));
         }
@@ -438,8 +447,7 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
 
             _audit.Record(admin, "request.cancel", "request", request.Id.ToString(), request.DecisionReason);
-            await RefreshMessagesAsync(request);
-            await Notify(request, DiscordText.RequestCancelledByAdminNotice(request.Label, request.Id, request.DecisionReason));
+            await RefreshOrNotify(request, null, DiscordText.RequestCancelledByAdminNotice(request.Label, request.Id, request.DecisionReason));
 
             return ServiceResult.Ok(DiscordText.AdminCancelled(request));
         }
@@ -473,8 +481,7 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
 
             _audit.Record(admin, "request.available", "request", request.Id.ToString(), item?.LibraryId != null ? "already in the library" : "marked by the admin");
-            await RefreshMessagesAsync(request, item);
-            await Notify(request, DiscordText.RequestAlreadyAvailableNotice(request.Label, request.Id));
+            await RefreshOrNotify(request, item, DiscordText.RequestAlreadyAvailableNotice(request.Label, request.Id));
 
             return ServiceResult.Ok(DiscordText.AdminMarkedAvailable(request));
         }
@@ -604,6 +611,19 @@ namespace Requestarr.Core.Requests
 
                 return (true, item);
             }
+            catch (BackendException ex) when (AlreadyAdded(ex))
+            {
+                // Someone added it to the instance since the request was made: it's there.
+                _logger.Info("Request {0}: {1} already has it", request.Id, instance.Name);
+                request.Status = RequestStatus.Available;
+                request.DecisionReason = null;
+                request.Decided = Clock();
+                request.Fulfilled = Clock();
+                _requests.Update(request);
+                _audit.Record(actor, "request.available", "request", request.Id.ToString(), $"already on {instance.Name}");
+
+                return (false, item);
+            }
             catch (Exception ex) when (ex is BackendException || ex is InvalidOperationException)
             {
                 _logger.Error(ex, "Sending request {0} to {1} failed", request.Id, instance.Name);
@@ -619,6 +639,9 @@ namespace Requestarr.Core.Requests
             }
         }
 
+        // Radarr / Sonarr reject a second add with "This movie / series has already been added".
+        private static bool AlreadyAdded(BackendException ex) => ex.Message.Contains("already been added", StringComparison.OrdinalIgnoreCase);
+
         private async Task PostApprovalCard(Request request, BackendInstance instance, MediaLookupResult item, string ownerName)
         {
             var adminChannel = ulong.Parse(_guildSetup.GetConfig().AdminChannelId);
@@ -631,15 +654,19 @@ namespace Requestarr.Core.Requests
         // Edits the user's request message and the admin approval card to the request's real state,
         // without buttons that no longer apply. A message that is gone (deleted, channel removed)
         // is skipped quietly: the notice to the user still goes out.
-        private async Task RefreshMessagesAsync(Request request, MediaLookupResult item = null)
+        private async Task<bool> RefreshMessagesAsync(Request request, MediaLookupResult item = null)
         {
+            var edited = false;
+
             if (ulong.TryParse(request.MessageChannelId, out var channel) && ulong.TryParse(request.MessageId, out var message))
             {
                 try
                 {
-                    if (!await _gateway.EditMessageAsync(channel, message, await StatusReplyAsync(request, item)))
+                    edited = await _gateway.EditMessageAsync(channel, message, await StatusReplyAsync(request, item));
+
+                    if (!edited)
                     {
-                        _logger.Debug("Request {0}: its message no longer exists, so only the notice is sent", request.Id);
+                        _logger.Debug("Request {0}: its message no longer exists, so a notice is sent instead", request.Id);
                     }
                 }
                 catch (Exception ex)
@@ -659,6 +686,18 @@ namespace Requestarr.Core.Requests
                 {
                     _logger.Debug(ex, "Request {0}: its approval card could not be edited", request.Id);
                 }
+            }
+
+            return edited;
+        }
+
+        // The request message itself shows the outcome; a separate notice only when it can't
+        // (requests from before messages were stored, or a message that was deleted).
+        private async Task RefreshOrNotify(Request request, MediaLookupResult item, string notice)
+        {
+            if (!await RefreshMessagesAsync(request, item))
+            {
+                await Notify(request, notice);
             }
         }
 
