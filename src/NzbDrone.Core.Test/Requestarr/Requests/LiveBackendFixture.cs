@@ -128,16 +128,19 @@ namespace Requestarr.Core.Test.Requests
             LogCard("movie card", movie.LastReply);
         }
 
-        // Choose seasons on a long show: seasons 1, 2 and the last one, picked across pages, then
-        // read back from the test Sonarr.
-        [Test]
-        public async Task long_show_seasons_1_2_and_last_read_back_from_sonarr()
+        // Choose seasons on a long show and on a 1,000-plus-episode anime: seasons 1, 2 and the last
+        // one, picked across pages where there are several, then read back from the test Sonarr.
+        [TestCase("the simpsons", "The Simpsons (1989)")]
+        [TestCase("one piece", "One Piece (1999)")]
+        public async Task long_show_seasons_1_2_and_last_read_back_from_sonarr(string term, string label)
         {
             await AddUser(Alice);
             await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "auto"));
 
-            var results = (await Harness.SendAsync(Search(Alice, "tv", "the simpsons"))).LastReply;
-            var tvdbId = int.Parse(results.SelectMenu.Options.First(o => o.Label == "The Simpsons (1989)").Value);
+            var results = (await Harness.SendAsync(Search(Alice, "tv", term))).LastReply;
+            var tvdbId = int.Parse(results.SelectMenu.Options.First(o => o.Label == label).Value);
+            var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{tvdbId}"))).LastReply.Embeds.Single();
+            Log($"[card] {card.Title}: {string.Join(" · ", card.Fields.Where(f => f.Key is "Genres" or "Seasons" or "Episodes").Select(f => $"{f.Key} {f.Value}"))}");
 
             var step = (await Click($"{RequestRoutes.TvChoose}:{tvdbId}")).LastReply;
             Log($"[pages] page 1: {step.SelectMenu.Options.Count} options ({step.SelectMenu.Options.First().Label} … {step.SelectMenu.Options.Last().Label}); buttons {string.Join(" ", step.Buttons.Select(b => $"[{b.Label}]"))}");
@@ -151,8 +154,10 @@ namespace Requestarr.Core.Test.Requests
                 Log($"[pages] page {page}: {step.SelectMenu.Options.First().Label} … {step.SelectMenu.Options.Last().Label}");
             }
 
+            // Discord sends every ticked option on the page, including the ones already ticked.
             var last = step.SelectMenu.Options.Last().Value;
-            step = (await Pick(step.SelectMenu.CustomId, last)).LastReply;
+            var ticked = step.SelectMenu.Options.Where(o => o.Default).Select(o => o.Value).Append(last).Distinct().ToArray();
+            step = (await Pick(step.SelectMenu.CustomId, ticked)).LastReply;
             Log($"[pages] {step.Content.Split('\n').Last()}");
 
             var confirm = (await Click(step.Buttons.Single(b => b.Label == DiscordText.ContinueLabel).CustomId)).LastReply;
