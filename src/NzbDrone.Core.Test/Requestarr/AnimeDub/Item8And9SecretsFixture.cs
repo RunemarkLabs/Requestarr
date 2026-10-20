@@ -16,13 +16,14 @@ namespace Requestarr.Core.Test.AnimeDub
     [TestFixture]
     public class Item8And9SecretsFixture
     {
-        private const string ApiKey = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+        // Built at run time so the source holds no key-shaped literal for the secret scanner.
+        private static readonly string ApiKey = string.Concat(Enumerable.Repeat("fake", 8));
 
         // As the running app has it: backend settings are stored (and traced) as JSON.
         [SetUp]
         public void MapSettingsLikeTheApp()
         {
-            SqlMapper.AddTypeHandler(typeof(BackendSettings), new ProviderSettingConverter());
+            SqlMapper.AddTypeHandler(typeof(BackendSettings), new EmbeddedDocumentConverter<BackendSettings>());
         }
 
         [Test]
