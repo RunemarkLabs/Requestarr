@@ -209,6 +209,20 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.CompletedTask;
         }
 
+        // Simulates a message the bot can't delete (missing permission).
+        public bool CannotDelete { get; set; }
+
+        public Task<bool> DeleteMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (CannotDelete || !Channels.TryGetValue(channelId, out var channel) || !channel.MessageIds.Contains(messageId))
+            {
+                return Task.FromResult(false);
+            }
+
+            DeleteMessage(channelId, messageId);
+            return Task.FromResult(true);
+        }
+
         public void DeleteMessage(ulong channelId, ulong messageId)
         {
             var channel = Channels[channelId];

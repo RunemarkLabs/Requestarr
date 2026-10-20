@@ -7,6 +7,13 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Requests
 {
+    // Anime only: which audio the series is steered to on its Sonarr instance.
+    public enum AnimeLanguage
+    {
+        Dub = 1,
+        Sub = 2
+    }
+
     public enum RequestStatus
     {
         Pending = 0,
@@ -47,6 +54,8 @@ namespace Requestarr.Core.Requests
         public string MessageId { get; set; }
         public string AdminMessageId { get; set; }
 
+        public AnimeLanguage? Language { get; set; }
+
         public int? ExternalId => ContentType == ContentType.Tv ? TvdbId : TmdbId;
 
         public bool IsActive => Status == RequestStatus.Pending || Status == RequestStatus.Approved || Status == RequestStatus.Available;
@@ -59,6 +68,10 @@ namespace Requestarr.Core.Requests
         public int RequestId { get; set; }
         public int UserId { get; set; }
         public DateTime Added { get; set; }
+
+        // The follower's own message about this request, reposted when the request changes.
+        public string MessageChannelId { get; set; }
+        public string MessageId { get; set; }
     }
 
     public interface IRequestRepository : IBasicRepository<Request>

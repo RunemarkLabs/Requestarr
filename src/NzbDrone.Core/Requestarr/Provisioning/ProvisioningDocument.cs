@@ -85,6 +85,27 @@ namespace Requestarr.Core.Provisioning
         // Sonarr only: standard | anime | daily
         public string SeriesType { get; set; }
         public List<string> Tags { get; set; } = new();
+
+        // Sonarr only: anime sub/dub. Optional; on with the defaults when left out.
+        public AnimeProvisioning Anime { get; set; }
+    }
+
+    public class AnimeProvisioning
+    {
+        // false: sub/dub is not offered on this instance (anime is still added as Anime type).
+        public bool? Enabled { get; set; }
+
+        // dub (default) | sub | first
+        public string Priority { get; set; }
+        public AnimeTermsProvisioning Dub { get; set; }
+        public AnimeTermsProvisioning Sub { get; set; }
+    }
+
+    // Release terms for one language's Sonarr release profile. Leave a list out to keep the default.
+    public class AnimeTermsProvisioning
+    {
+        public List<string> Required { get; set; }
+        public List<string> Ignored { get; set; }
     }
 
     public class MediaServersProvisioning

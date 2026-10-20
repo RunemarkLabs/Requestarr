@@ -452,6 +452,58 @@ namespace Requestarr.Core.Discord
 
         public static string Label(RequestStatus status) => status.ToString().ToLowerInvariant();
 
+        // Anime: sub or dub
+        public static string Label(AnimeLanguage language) => language == AnimeLanguage.Dub ? "Dub" : "Sub";
+
+        public static string LanguageHint(AnimeLanguage language) => language == AnimeLanguage.Dub ? "English audio" : "original audio with subtitles";
+
+        public const string AnimeIntro = "This is anime. Pick **Dub** (English audio) or **Sub** (original audio with subtitles).";
+
+        public static string SwitchLabel(AnimeLanguage language) => $"Switch to {Label(language)}";
+
+        public static string LanguageLine(AnimeLanguage language) => $"Language: **{Label(language)}** ({LanguageHint(language)})";
+
+        public static string CurrentlySetTo(AnimeLanguage language) => $"Set to **{Label(language)}** here.";
+
+        public static string PriorityRule(Anime.AnimePriority priority, string instance) => priority switch
+        {
+            Anime.AnimePriority.Dub => $"On {instance}, dub wins: a dub request switches a sub series to dub, and a sub request for a dub series follows it.",
+            Anime.AnimePriority.Sub => $"On {instance}, sub wins: a sub request switches a dub series to sub, and a dub request for a sub series follows it.",
+            _ => $"On {instance}, the first request decides: a series stays in the language it was first requested in."
+        };
+
+        private static string Keeps(Anime.AnimePriority priority) => priority switch
+        {
+            Anime.AnimePriority.Dub => "dub wins here",
+            Anime.AnimePriority.Sub => "sub wins here",
+            _ => "the first request decides here"
+        };
+
+        public static string AnimeStays(string label, AnimeLanguage existing, Anime.AnimePriority priority, string owner, int id) =>
+            $"{label} stays **{Label(existing)}** ({Keeps(priority)}). You're following {owner}'s request #{id} and will be told when it's added.";
+
+        public static string AnimeStaysYours(string label, AnimeLanguage existing, Anime.AnimePriority priority) =>
+            $"Your request for {label} stays **{Label(existing)}** ({Keeps(priority)}).";
+
+        public static string AnimeStaysInLibrary(string label, AnimeLanguage existing, Anime.AnimePriority priority) =>
+            $"Good news: {label} is already in the library, set to **{Label(existing)}** ({Keeps(priority)}).";
+
+        // Honest about a switch: Sonarr changes what it looks for next; files already there stay.
+        public static string AnimeSwitchedNote(AnimeLanguage language) =>
+            $"🔁 Now set to **{Label(language)}** after a later request. Episodes already downloaded stay as they are; new and missing episodes will be looked for as {Label(language)}.";
+
+        public static string AnimeSwitchedNotice(string label, AnimeLanguage language) => $"🔁 {label} is now set to **{Label(language)}** after a later request. Episodes already downloaded stay as they are; new and missing episodes will be looked for as {Label(language)}.";
+
+        public static string AnimeSwitchedInLibrary(string label, AnimeLanguage language) =>
+            $"Good news: {label} is in the library and is now set to **{Label(language)}**. New and missing episodes will be looked for as {Label(language)}; episodes already downloaded stay as they are.";
+
+        public static string AnimeSwitchedYours(string label, AnimeLanguage language) => $"Your request for {label} is now **{Label(language)}**.";
+
+        public static string AnimeSwitchedFollow(string label, AnimeLanguage language, string owner, int id) =>
+            $"{label} is now set to **{Label(language)}**. You're following {owner}'s request #{id} and will be told when it's added.";
+
+        public static string FollowingOf(string owner) => $"You're following {owner}'s request.";
+
         public static string DiscordTimestamp(DateTime utc) => $"<t:{new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds()}:R>";
 
         public static string InstanceNotFound(string name, ContentType type) => $"No enabled {(type == ContentType.Tv ? "Sonarr" : "Radarr")} instance named '{name}'.";

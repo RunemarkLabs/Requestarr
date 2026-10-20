@@ -135,7 +135,8 @@ namespace NzbDrone.Core.Datastore
             sb.AppendLine("==== End Query Trace ====");
             sb.AppendLine();
 
-            return sb.ToString();
+            // Parameters include settings JSON (API keys, tokens): never let them reach a log.
+            return CleanseLogMessage.Cleanse(sb.ToString());
         }
 
         private static WhereBuilder GetWhereBuilder(DatabaseType databaseType, Expression filter, bool requireConcrete, int seq)

@@ -62,5 +62,8 @@ namespace Requestarr.Core.Discord.Gateway
         // False when the message no longer exists (deleted by someone).
         Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message);
         Task PinMessageAsync(ulong channelId, ulong messageId);
+
+        // False when the message is gone already or can't be deleted.
+        Task<bool> DeleteMessageAsync(ulong channelId, ulong messageId);
     }
 }

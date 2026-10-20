@@ -226,7 +226,7 @@ The file is the source of truth. An instance removed from the file is disabled, 
 List as many instances per type as you need. Common setups:
 
 - a separate Radarr for 4K
-- a separate Sonarr for anime with `seriesType: anime`
+- a separate Sonarr for anime, or separate sub and dub anime instances (see 4.7)
 
 ```yaml
   radarr:
@@ -274,7 +274,13 @@ The assignment is per user and per content type. Run `/admin user info` to see i
 6. The message ends with a clear status: **Request sent**, **Waiting for approval** (with a Cancel button), **Following**, **Already available**, or **Not requested** with the reason.
 7. When a request is approved, Requestarr adds it to the instance with the instance's quality profile, root folder and series type, monitored, and starts a search. The user is told the outcome in their channel.
 8. A request for a title that's already in the library when you act ends as 🎉 **Already available** with a "good news" message to the user (never denied, cancelled or failed, whichever you press, and also when Sonarr or Radarr reports it was added meanwhile); use the card's **Already available** button (or `/admin available`) when you have it some other way.
-9. Whenever a request is decided (approved, already available, denied, or cancelled with `/admin cancel` or by the user), the user's original request message and the approval card are both edited to show it, without their old buttons. No separate notice repeats it; a notice is sent only when the message can't be edited (deleted, or a request from before this version). Buttons clicked late re-check the request and never change one that's already decided.
+9. Whenever a request changes later (approved, already available, denied, cancelled with `/admin cancel`, or switched to another anime language), the user's old request message is deleted and a fresh one is posted at the bottom of their channel. It mentions them, so they get a ping, and only has the buttons that still make sense (Cancel while it waits for approval, none once decided). Followers' messages get the same treatment. The approval card is edited in place. Details:
+   - The user's own **Cancel** edits their message in place, without a repost or ping.
+   - A message that's still in the middle of its steps (results, seasons, confirmation) is never reposted.
+   - If the bot can't delete the old message, the new one is still posted and the old one loses its buttons.
+   - No separate notice repeats the news. A notice is sent only to someone with no message to repost: the message was deleted, or the request is from before this version.
+
+   Buttons clicked late re-check the request and never change one that's already decided.
 
 Quotas (section 5.6) count requests a user makes over a rolling window. Following someone else's request doesn't count. When a user hits the limit, Requestarr tells them when their next request frees up.
 
@@ -308,6 +314,65 @@ The key is kept in memory only. It is never written to the database or logs. Cas
 - **`/help` and `/admin help`:** a **Credits** topic with TMDB's logo and the full notice.
 
 The logo is TMDB's approved short logo, unaltered, as a PNG (Discord can't show SVG). Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. If you use a key, The Movie Database's terms of use apply to you.
+
+### 4.7 Anime: sub or dub
+
+Anime is anything Sonarr lists with the genre **Anime**. For anime, the request card asks **Dub** (English audio) or **Sub** (original audio with subtitles) before seasons. Every other show is unchanged.
+
+**What Requestarr sets up in each Sonarr.** On every start (and when an instance is checked), Requestarr makes sure these exist, creating only what's missing:
+
+| Item | Name |
+|---|---|
+| Tag | `requestarr-dub` |
+| Tag | `requestarr-sub` |
+| Release profile, limited to the dub tag | `Requestarr: anime dub` |
+| Release profile, limited to the sub tag | `Requestarr: anime sub` |
+
+It only ever looks at items with exactly these names. Your own tags and release profiles are never changed, and it's safe to restart as often as you like. If you change the terms in `provisioning.yml`, Requestarr updates its own two profiles to match.
+
+A requested anime series is added with the tag for its language, so Sonarr applies that release profile to it. Your quality profile and custom formats still decide between the releases that pass.
+
+**Default release terms.** Release groups mark dubbed anime in a few common ways; the defaults cover them:
+
+| Profile | Must contain (any one) | Must not contain | Why |
+|---|---|---|---|
+| Dub | `Dual Audio`, `Dual-Audio`, `DualAudio`, `Multi-Audio`, `Multi Audio`, `Dubbed`, `English Dub`, `Eng Dub`, `Eng-Dub`, `EN Dub`, `[Dub]`, `(Dub)` | nothing | Most English-dubbed anime is released as **dual audio** (English and Japanese tracks), so dual and multi audio count as dub. The others are the usual dub markers. Without a must-contain list, Sonarr would happily grab the far more common sub-only releases. |
+| Sub | nothing | `Dubbed`, `English Dub`, `Eng Dub`, `Eng-Dub`, `EN Dub`, `[Dub]`, `(Dub)` | Most anime releases are subtitled and say nothing about it, so there's nothing reliable to require. Dub-only releases are blocked. Dual audio is allowed, because it still has the original audio and subtitles. |
+
+Matching isn't case-sensitive in Sonarr. To change the terms for one instance, add an `anime` block to it. A list you leave out keeps its default:
+
+```yaml
+  sonarr:
+    - name: Sonarr
+      url: http://sonarr:8989
+      apiKey: ${SONARR_API_KEY}
+      anime:
+        enabled: true          # false: no Sub/Dub question on this instance
+        priority: dub          # dub (default) | sub | first
+        dub:
+          required: [Dual Audio, Dual-Audio, Dubbed, English Dub]
+        sub:
+          ignored: [Dubbed, English Dub]
+```
+
+`anime` only works on Sonarr instances; on a Radarr it's a provisioning error, reported at start like any other. With `enabled: false` the card doesn't ask, no tag is added, and the tags and profiles aren't created on that instance.
+
+**One language per series, and who wins.** A series exists once on a Sonarr, so it can only be one language there. The card says what an existing series is set to, and the instance's rule:
+
+- **dub** (default): a dub request wins over sub.
+- **sub**: a sub request wins over dub.
+- **first**: the first request decides, and later requests can't change it.
+
+A request for the losing language doesn't create a second request; the user follows the existing one and is told it stays in that language. A request for the winning language switches the series: Requestarr swaps the Sonarr tag (keeping every other tag on it), updates any open request for it, reposts the owner's and followers' messages saying so, and records an `anime.switch` entry in the audit log. Series that Requestarr never tagged are left alone.
+
+**What a switch re-downloads.** Sonarr only applies a release profile when it searches. Episodes already downloaded stay as they are; they aren't deleted or replaced. New episodes, and missing ones when Sonarr searches for them, come in the new language. To replace existing episodes too, search for them in Sonarr yourself (for example **Series → Search Monitored**), knowing that it downloads them all again. Users are told this when they switch a series.
+
+**Series type.** Anime is always added as Sonarr's **Anime** series type (absolute episode numbering), whatever `seriesType` the instance has; other shows use the instance's `seriesType`. If a series numbers better as Standard, switch it in Sonarr (**Edit → Series Type**). Requestarr never switches it back.
+
+**Separate sub and dub instances.** If you'd rather keep dubbed and subtitled anime apart, run two Sonarr instances. Give one `priority: dub` and the other `priority: sub`, and point users at one with `/admin user access ... type:TV instance:{name}`. Then the same show can exist in both languages, once per instance. Two warnings:
+
+- The instances need **different root folders**. Two Sonarrs sharing a folder fight over the same files.
+- Point your media server at them as **separate libraries**. In one library, the show appears twice.
 
 ## 5. Admin setup in Discord
 

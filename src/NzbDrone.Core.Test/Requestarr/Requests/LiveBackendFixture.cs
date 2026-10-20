@@ -173,6 +173,71 @@ namespace Requestarr.Core.Test.Requests
             ((string)series["monitorNewItems"]).Should().Be("none");
         }
 
+        // Anime: the tags and release profiles Requestarr creates (twice, to show it's idempotent),
+        // then Alice requests One Piece as Sub and Bob as Dub (dub wins), read back from Sonarr.
+        [Test]
+        public async Task anime_tags_profiles_and_a_sub_then_dub_switch_read_back_from_sonarr()
+        {
+            const int onePiece = 81797;
+            var anime = Mocker.Resolve<Requestarr.Core.Anime.IAnimeService>();
+            var instance = Mocker.Resolve<IBackendService>().Default(ContentType.Tv);
+            await anime.EnsureAsync(instance);
+            await anime.EnsureAsync(instance);
+
+            var http = Mocker.Resolve<IHttpClient>();
+            var tags = (await Get(http, SonarrUrl, SonarrKey, "tag")).Children<JObject>().ToDictionary(t => (int)t["id"], t => (string)t["label"]);
+            Log($"[sonarr] tags: {string.Join(", ", tags.Select(t => $"{t.Value}={t.Key}"))}");
+
+            foreach (var profile in (await Get(http, SonarrUrl, SonarrKey, "releaseprofile")).Children<JObject>())
+            {
+                Log($"[sonarr] release profile \"{profile["name"]}\" enabled={profile["enabled"]} tags=[{string.Join(", ", profile["tags"].Select(t => tags[(int)t]))}]");
+                Log($"[sonarr]   must contain: {string.Join(", ", profile["required"].Select(t => (string)t))}");
+                Log($"[sonarr]   must not contain: {string.Join(", ", profile["ignored"].Select(t => (string)t))}");
+            }
+
+            tags.Values.Count(t => t == Requestarr.Core.Anime.AnimeDefaults.DubTag).Should().Be(1);
+            tags.Values.Count(t => t == Requestarr.Core.Anime.AnimeDefaults.SubTag).Should().Be(1);
+            var profiles = (await Get(http, SonarrUrl, SonarrKey, "releaseprofile")).Children<JObject>().ToList();
+            profiles.Count(p => (string)p["name"] == Requestarr.Core.Anime.AnimeDefaults.DubProfile).Should().Be(1);
+            profiles.Count(p => (string)p["name"] == Requestarr.Core.Anime.AnimeDefaults.SubProfile).Should().Be(1);
+
+            await AddUser(Alice);
+            await AddUser(Bob);
+            await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "auto"));
+            await Harness.SendAsync(AdminCommand("user access", Bob).WithOption("type", "tv").WithOption("level", "auto"));
+
+            var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{onePiece}"))).LastReply;
+            Log($"[alice] card: {card.Content.Replace("\n", " | ")}");
+            Log($"[alice] buttons: {string.Join(" ", card.Buttons.Select(b => $"[{b.Label}]"))}");
+            await Click($"{RequestRoutes.TvLanguage}:{onePiece}:s");
+            var final = (await Click($"{RequestRoutes.TvAll}:{onePiece}:s")).LastReply;
+            Log($"[alice] final: {final.Content.Replace("\n", " | ")}");
+
+            var series = await Series(http, onePiece);
+            Log($"[sonarr] after sub: {series["title"]} type={series["seriesType"]} tags=[{string.Join(", ", series["tags"].Select(t => tags[(int)t]))}]");
+            ((string)series["seriesType"]).Should().Be("anime");
+            series["tags"].Select(t => tags[(int)t]).Should().Equal(Requestarr.Core.Anime.AnimeDefaults.SubTag);
+
+            var bobCard = (await Harness.SendAsync(Search(Bob, "tv", $"tvdb:{onePiece}"))).LastReply;
+            Log($"[bob] card: {bobCard.Content.Replace("\n", " | ")}");
+            Log($"[bob] buttons: {string.Join(" ", bobCard.Buttons.Select(b => $"[{b.Label}]"))}");
+            var switched = (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.TvLanguage}:{onePiece}:d").By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob)))).LastReply;
+            Log($"[bob] final: {switched.Content.Replace("\n", " | ")}");
+
+            series = await Series(http, onePiece);
+            Log($"[sonarr] after dub: {series["title"]} type={series["seriesType"]} tags=[{string.Join(", ", series["tags"].Select(t => tags[(int)t]))}]");
+            ((string)series["seriesType"]).Should().Be("anime");
+            series["tags"].Select(t => tags[(int)t]).Should().Equal(Requestarr.Core.Anime.AnimeDefaults.DubTag);
+
+            foreach (var entry in Mocker.Resolve<Requestarr.Core.Audit.IAuditRepository>().All().Where(a => a.Action.StartsWith("anime")))
+            {
+                Log($"[audit] {entry.Action} {entry.TargetType} {entry.TargetId}");
+            }
+        }
+
+        private async Task<JObject> Series(IHttpClient http, int tvdbId) =>
+            (await Get(http, SonarrUrl, SonarrKey, "series")).Children<JObject>().Single(s => (int)s["tvdbId"] == tvdbId);
+
         private Task<InteractionRun> Pick(string customId, params string[] values) =>
             Harness.SendAsync(FakeInteraction.SelectMenu(customId, values).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 

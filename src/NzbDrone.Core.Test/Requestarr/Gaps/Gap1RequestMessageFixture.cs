@@ -32,8 +32,8 @@ namespace Requestarr.Core.Test.Gaps
 
             await AdminButton("req-approve:1");
 
-            var edited = Message(Alice, message);
-            edited.Content.Should().StartWith(DiscordText.FinalApproved).And.Contain("added to Radarr");
+            var edited = Latest(Alice);
+            edited.Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalApproved).And.Contain("added to Radarr");
             edited.Buttons.Should().BeEmpty();
             edited.Embeds.Single().Color.Should().Be(RequestCards.SentColor);
             ChannelFor(Alice).Messages.Count.Should().Be(before, "the edited message says it all; no separate notice repeats it");
@@ -46,8 +46,8 @@ namespace Requestarr.Core.Test.Gaps
 
             await Harness.SendAsync(AdminSlash("approve").WithOption("id", 1L));
 
-            Message(Alice, message).Content.Should().StartWith(DiscordText.FinalApproved);
-            Message(Alice, message).Buttons.Should().BeEmpty();
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalApproved);
+            Latest(Alice).Buttons.Should().BeEmpty();
         }
 
         [Test]
@@ -57,11 +57,11 @@ namespace Requestarr.Core.Test.Gaps
 
             await AdminModal("req-deny-reason:1", RequestRoutes.ReasonField, "not in English");
 
-            var edited = Message(Alice, message);
-            edited.Content.Should().StartWith(DiscordText.FinalDenied).And.Contain("not in English");
+            var edited = Latest(Alice);
+            edited.Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalDenied).And.Contain("not in English");
             edited.Buttons.Should().BeEmpty();
             edited.Embeds.Single().Color.Should().Be(RequestCards.RefusedColor);
-            NoSeparateNotice(message);
+            NoSeparateNotice();
         }
 
         [Test]
@@ -74,9 +74,9 @@ namespace Requestarr.Core.Test.Gaps
 
             run.LastReply.Content.Should().Be(DiscordText.AdminCancelled(RequestStore.Get(1)));
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Cancelled);
-            Message(Alice, message).Content.Should().StartWith(DiscordText.FinalCancelled).And.Contain("cancelled by the admin: duplicate");
-            Message(Alice, message).Buttons.Should().BeEmpty();
-            NoSeparateNotice(message);
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalCancelled).And.Contain("cancelled by the admin: duplicate");
+            Latest(Alice).Buttons.Should().BeEmpty();
+            NoSeparateNotice();
 
             var adminCard = Discord.Channels[AdminChannel].Messages[Discord.Channels[AdminChannel].MessageIds.IndexOf(card)];
             adminCard.Content.Should().StartWith("**Request #1: cancelled** by owner");
@@ -119,7 +119,7 @@ namespace Requestarr.Core.Test.Gaps
 
             run.LastReply.Content.Should().Contain("approved");
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Approved);
-            LastMessageIn(Alice).Should().Be(DiscordText.RequestApprovedNotice("Dune (2021)", 1, "Radarr"));
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}> {DiscordText.FinalApproved}");
             ExceptionVerification.AssertNoUnexpectedLogs();
         }
 
@@ -159,14 +159,20 @@ namespace Requestarr.Core.Test.Gaps
         private void NowInLibrary(int tmdbId) => Radarr.Catalog.Single(c => c.TmdbId == tmdbId).LibraryId = 55;
 
         // The request message is the last thing in the channel: nothing was posted after it.
-        private void NoSeparateNotice(ulong message) => ChannelFor(Alice).MessageIds.Last().Should().Be(message);
+        // After a decision the request's message is the newest in the channel (reposted), and it is the
+        // request's tracked message: nothing else repeats it.
+        private void NoSeparateNotice()
+        {
+            ChannelFor(Alice).MessageIds.Last().ToString().Should().Be(RequestStore.Get(1).MessageId);
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}>");
+        }
 
         private void ShowsAlreadyAvailable(ulong message)
         {
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
-            Message(Alice, message).Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain(DiscordText.RequestAlreadyAvailableStatus("Dune (2021)", 1));
-            Message(Alice, message).Buttons.Should().BeEmpty();
-            NoSeparateNotice(message);
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalAvailable).And.Contain(DiscordText.RequestAlreadyAvailableStatus("Dune (2021)", 1));
+            Latest(Alice).Buttons.Should().BeEmpty();
+            NoSeparateNotice();
             Radarr.Adds.Should().BeEmpty("a title already in the library is never added again");
         }
 
@@ -180,7 +186,7 @@ namespace Requestarr.Core.Test.Gaps
 
             ShowsAlreadyAvailable(message);
             run.LastReply.Content.Should().StartWith("**Request #1: already available**");
-            Message(Alice, message).Content.Should().NotContain(DiscordText.FinalDenied);
+            Latest(Alice).Content.Should().NotContain(DiscordText.FinalDenied);
         }
 
         [Test]
@@ -232,7 +238,7 @@ namespace Requestarr.Core.Test.Gaps
 
         private static void LooksLikeAWin(Requestarr.Core.Discord.Interactions.InteractionReply reply)
         {
-            reply.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain("Good news");
+            System.Text.RegularExpressions.Regex.Replace(reply.Content, @"^<@\d+> ", string.Empty).Should().StartWith(DiscordText.FinalAvailable).And.Contain("Good news");
             reply.Content.Should().NotContainAny("⛔", "🚫", "⚠️", "Denied", "Cancelled", "Not requested", "Couldn't");
             reply.Embeds.Single().Color.Should().Be(RequestCards.SentColor);
         }
@@ -263,8 +269,8 @@ namespace Requestarr.Core.Test.Gaps
 
             await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L).WithOption("reason", "we have it"));
 
-            LooksLikeAWin(Message(Alice, message));
-            NoSeparateNotice(message);
+            LooksLikeAWin(Latest(Alice));
+            NoSeparateNotice();
         }
 
         [Test]
@@ -276,8 +282,8 @@ namespace Requestarr.Core.Test.Gaps
             await AdminButton("req-approve:1");
 
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
-            LooksLikeAWin(Message(Alice, message));
-            NoSeparateNotice(message);
+            LooksLikeAWin(Latest(Alice));
+            NoSeparateNotice();
         }
 
         [Test]
@@ -310,7 +316,7 @@ namespace Requestarr.Core.Test.Gaps
 
             await AdminButton("req-approve:1");
 
-            Message(Alice, message).Content.Should().StartWith(DiscordText.FinalApproved).And.Contain("Seasons: seasons 1–2, plus new seasons as they air.");
+            Latest(Alice).Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalApproved).And.Contain("Seasons: seasons 1–2, plus new seasons as they air.");
             Sonarr.Adds.Single().Seasons.Should().Equal(1, 2);
         }
     }

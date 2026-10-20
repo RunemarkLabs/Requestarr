@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using NLog;
+using Requestarr.Core.Anime;
 using Requestarr.Core.Audit;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
@@ -26,6 +27,10 @@ namespace Requestarr.Core.Requests
         public bool CallerOwnsActive { get; init; }
         public bool CallerFollows { get; init; }
         public Request LastDenied { get; init; }
+
+        // Anime with sub/dub on: the instance's settings, and the language the series is set to.
+        public AnimeConfig Anime { get; init; }
+        public AnimeLanguage? Language { get; init; }
     }
 
     public record LookupOutcome<T>(T Value, string Error)
@@ -65,7 +70,7 @@ namespace Requestarr.Core.Requests
     {
         Task<LookupOutcome<List<MediaLookupResult>>> SearchAsync(RequestCaller caller, ContentType type, string query);
         Task<LookupOutcome<TitleState>> DetailAsync(RequestCaller caller, ContentType type, int externalId);
-        Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null);
+        Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null, AnimeLanguage? language = null);
         Task<ServiceResult> ApproveAsync(int requestId, Actor admin, string adminName);
         Task<ServiceResult> DenyAsync(int requestId, string reason, Actor admin, string adminName);
         Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId);
@@ -76,6 +81,9 @@ namespace Requestarr.Core.Requests
 
         // Remembers the message a request was made in, so it can be edited after a decision.
         void AttachMessage(int requestId, ulong channelId, ulong messageId);
+
+        // Remembers a follower's own message about a request, reposted when the request changes.
+        void AttachFollowerMessage(int requestId, int userId, ulong channelId, ulong messageId);
 
         // The request's real state as a request message: status line, card, and a Cancel button
         // only while it can still be cancelled.
@@ -102,6 +110,8 @@ namespace Requestarr.Core.Requests
         private readonly IGuildSetupService _guildSetup;
         private readonly IAuditService _audit;
         private readonly IMetadataService _metadata;
+        private readonly IAnimeService _anime;
+        private readonly IUserIdentityRepository _identities;
         private readonly Logger _logger;
 
         public RequestService(IRequestRepository requests,
@@ -115,6 +125,8 @@ namespace Requestarr.Core.Requests
                               IGuildSetupService guildSetup,
                               IAuditService audit,
                               IMetadataService metadata,
+                              IAnimeService anime,
+                              IUserIdentityRepository identities,
                               Logger logger)
         {
             _requests = requests;
@@ -128,6 +140,8 @@ namespace Requestarr.Core.Requests
             _guildSetup = guildSetup;
             _audit = audit;
             _metadata = metadata;
+            _anime = anime;
+            _identities = identities;
             _logger = logger;
         }
 
@@ -198,6 +212,13 @@ namespace Requestarr.Core.Requests
 
             var forTitle = _requests.ForTitle(type, externalId).Where(r => r.BackendId == instance.Id).Newest().ToList();
             var active = forTitle.FirstOrDefault(r => r.IsActive);
+            var anime = type == ContentType.Tv && item.IsAnime ? _anime.ConfigFor(instance) : null;
+            AnimeLanguage? language = null;
+
+            if (anime is { Enabled: true })
+            {
+                language = active?.Language ?? (item.LibraryId.HasValue ? _anime.LanguageOf(item.TagIds, await _anime.TagsAsync(instance)) : null);
+            }
 
             return LookupOutcome<TitleState>.Ok(new TitleState
             {
@@ -207,19 +228,21 @@ namespace Requestarr.Core.Requests
                 ActiveOwner = active == null ? null : OwnerName(active),
                 CallerOwnsActive = active != null && caller.User != null && active.OwnerUserId == caller.User.Id,
                 CallerFollows = active != null && caller.User != null && _subscribers.ForRequest(active.Id).Any(s => s.UserId == caller.User.Id),
-                LastDenied = active == null ? forTitle.FirstOrDefault(r => r.Status == RequestStatus.Denied) : null
+                LastDenied = active == null ? forTitle.FirstOrDefault(r => r.Status == RequestStatus.Denied) : null,
+                Anime = anime is { Enabled: true } ? anime : null,
+                Language = language
             });
         }
 
-        public async Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null)
+        public async Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null, AnimeLanguage? language = null)
         {
             var seen = new System.Runtime.CompilerServices.StrongBox<MediaLookupResult>();
-            var result = await RequestCoreAsync(caller, type, externalId, seasons, seen);
+            var result = await RequestCoreAsync(caller, type, externalId, seasons, language, seen);
 
             return result with { Item = seen.Value };
         }
 
-        private async Task<RequestResult> RequestCoreAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons, System.Runtime.CompilerServices.StrongBox<MediaLookupResult> seen)
+        private async Task<RequestResult> RequestCoreAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons, AnimeLanguage? language, System.Runtime.CompilerServices.StrongBox<MediaLookupResult> seen)
         {
             if (type == ContentType.Music)
             {
@@ -244,6 +267,30 @@ namespace Requestarr.Core.Requests
             var state = detail.Value;
             var item = state.Item;
             seen.Value = item;
+
+            // Anime: one language per series per instance, settled by the instance's priority rule.
+            var anime = type == ContentType.Tv && item.IsAnime ? _anime.ConfigFor(state.Instance) : null;
+
+            if (anime is { Enabled: true })
+            {
+                var tags = await _anime.TagsAsync(state.Instance);
+
+                // In the library, Sonarr's tag is the truth (like any title there, it's good news);
+                // otherwise the open request's language.
+                var existing = item.LibraryId.HasValue ? _anime.LanguageOf(item.TagIds, tags) : state.Active?.Language;
+                language ??= AnimeDefaults.Default(anime.Priority, existing);
+
+                if (existing.HasValue && existing != language)
+                {
+                    return AnimeDefaults.Winner(anime.Priority, existing.Value, language.Value) == existing.Value
+                        ? StaysAs(caller, state, existing.Value, anime.Priority)
+                        : await SwitchTo(caller, state, language.Value);
+                }
+            }
+            else
+            {
+                language = null;
+            }
 
             if (item.LibraryId.HasValue)
             {
@@ -312,10 +359,11 @@ namespace Requestarr.Core.Requests
                 BackendId = state.Instance.Id,
                 Seasons = chosen,
                 MonitorFutureSeasons = future,
+                Language = language,
                 Requested = Clock()
             });
 
-            var seasonDetail = type == ContentType.Tv ? $", seasons {DiscordText.Seasons(request)}" : string.Empty;
+            var seasonDetail = type == ContentType.Tv ? $", seasons {DiscordText.Seasons(request)}{(language.HasValue ? $", {DiscordText.Label(language.Value)}" : string.Empty)}" : string.Empty;
             _audit.Record(caller.Actor, "request.create", "request", request.Id.ToString(), $"{type} {request.Label} on {state.Instance.Name}{seasonDetail}");
 
             if (caller.AsAdmin || access.State == AccessState.AutoApprove)
@@ -486,6 +534,97 @@ namespace Requestarr.Core.Requests
             return ServiceResult.Ok(DiscordText.AdminMarkedAvailable(request));
         }
 
+        public void AttachFollowerMessage(int requestId, int userId, ulong channelId, ulong messageId)
+        {
+            var subscriber = _subscribers.ForRequest(requestId).FirstOrDefault(s => s.UserId == userId);
+
+            if (subscriber == null)
+            {
+                return;
+            }
+
+            subscriber.MessageChannelId = channelId.ToString();
+            subscriber.MessageId = messageId.ToString();
+            _subscribers.Update(subscriber);
+        }
+
+        // The requested language loses to the series' current one: follow it (or, in the library,
+        // the good news that it is there).
+        private RequestResult StaysAs(RequestCaller caller, TitleState state, AnimeLanguage existing, AnimePriority priority)
+        {
+            var label = Titles.WithYear(state.Item.Title, state.Item.Year);
+
+            if (state.Item.LibraryId.HasValue || state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority), null, RequestOutcome.AlreadyAvailable);
+            }
+
+            if (state.CallerOwnsActive)
+            {
+                return new RequestResult(false, DiscordText.AnimeStaysYours(label, existing, priority), state.Active, RequestOutcome.Refused);
+            }
+
+            if (!state.CallerFollows)
+            {
+                _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
+                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"asked for {DiscordText.Label(existing == AnimeLanguage.Dub ? AnimeLanguage.Sub : AnimeLanguage.Dub)}, stays {DiscordText.Label(existing)}");
+            }
+
+            return new RequestResult(true, DiscordText.AnimeStays(label, existing, priority, state.ActiveOwner, state.Active.Id), state.Active, RequestOutcome.Following);
+        }
+
+        // The requested language wins: the series switches. In the library its Sonarr tag changes;
+        // a pending request changes language. Everyone on the request is told; nothing is deleted.
+        private async Task<RequestResult> SwitchTo(RequestCaller caller, TitleState state, AnimeLanguage language)
+        {
+            var item = state.Item;
+            var label = Titles.WithYear(item.Title, item.Year);
+
+            try
+            {
+                if (item.LibraryId.HasValue)
+                {
+                    await _anime.SetLanguageAsync(state.Instance, item.LibraryId.Value, item.TagIds, language);
+                }
+            }
+            catch (BackendException ex)
+            {
+                _logger.Warn(ex, "Switching {0} to {1} on {2} failed", label, language, state.Instance.Name);
+                return RequestResult.Refused(DiscordText.BackendUnavailable(state.Instance.Name));
+            }
+
+            _audit.Record(caller.Actor, "anime.switch", "title", $"tv:{item.TvdbId}", $"{label} on {state.Instance.Name} now {DiscordText.Label(language)}");
+
+            // Every request for this title on the instance: its language changes and its people are told.
+            foreach (var request in _requests.ForTitle(ContentType.Tv, item.TvdbId.Value).Where(r => r.BackendId == state.Instance.Id && r.IsActive))
+            {
+                request.Language = language;
+                _requests.Update(request);
+                await RefreshOrNotify(request, item, DiscordText.AnimeSwitchedNotice(request.Label, language), DiscordText.AnimeSwitchedNote(language), skipUserId: caller.User?.Id);
+            }
+
+            if (item.LibraryId.HasValue || state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language), null, RequestOutcome.AlreadyAvailable);
+            }
+
+            // Re-read: the loop above changed its language.
+            var active = _requests.Find(state.Active.Id);
+
+            if (state.CallerOwnsActive)
+            {
+                return new RequestResult(true, DiscordText.AnimeSwitchedYours(label, language), active, RequestOutcome.Pending);
+            }
+
+            if (!state.CallerFollows)
+            {
+                _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
+                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"switched it to {DiscordText.Label(language)}");
+            }
+
+            return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, active.Id), active, RequestOutcome.Following);
+        }
+
         public void AttachMessage(int requestId, ulong channelId, ulong messageId)
         {
             var request = _requests.Find(requestId);
@@ -500,12 +639,14 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
         }
 
-        public async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null)
+        public Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null) => StatusReplyAsync(request, item, null, null, null);
+
+        private async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item, string mention, string note, string followerOf)
         {
             var instance = _backends.Find(request.BackendId ?? 0);
             item ??= await TryLookup(instance, request);
 
-            return RequestCards.Status(request, item, instance?.Name);
+            return RequestCards.Status(request, item, instance?.Name, mention, note, followerOf);
         }
 
         public async Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId)
@@ -531,7 +672,7 @@ namespace Requestarr.Core.Requests
             request.Decided = Clock();
             _requests.Update(request);
             _audit.Record(caller.Actor, "request.cancel", "request", request.Id.ToString());
-            await RefreshMessagesAsync(request);
+            await RefreshMessagesAsync(request, null, ownerRepost: false, notice: DiscordText.RequestCancelled(request.Label, request.Id));
 
             return ServiceResult.Ok(DiscordText.RequestCancelled(request.Label, request.Id));
         }
@@ -596,9 +737,14 @@ namespace Requestarr.Core.Requests
                 var root = instance.Settings.RootFolder ?? (await api.GetRootFoldersAsync(instance.Settings)).FirstOrDefault()
                            ?? throw new BackendException($"no root folder on {instance.Name}");
 
+                // Anime always goes in as Sonarr's Anime type (absolute numbering, scene mapping);
+                // with sub/dub on, tagged with its language so the matching release profile applies.
+                var seriesType = item.IsAnime ? "anime" : instance.Settings.SeriesType;
+                var tags = request.Language.HasValue && await _anime.TagsAsync(instance) is { } animeTags ? new[] { animeTags.For(request.Language.Value) } : null;
+
                 request.ExternalItemId = request.ContentType == ContentType.Movie
                     ? await _radarr.AddMovieAsync(instance.Settings, item, profile.Id, root)
-                    : await _sonarr.AddSeriesAsync(instance.Settings, item, profile.Id, root, instance.Settings.SeriesType, request.Seasons, request.MonitorFutureSeasons);
+                    : await _sonarr.AddSeriesAsync(instance.Settings, item, profile.Id, root, seriesType, request.Seasons, request.MonitorFutureSeasons, tags);
 
                 request.QualityProfileId = profile.Id;
                 request.RootFolderPath = root;
@@ -606,7 +752,7 @@ namespace Requestarr.Core.Requests
                 request.Decided = Clock();
                 _requests.Update(request);
 
-                var typeDetail = request.ContentType == ContentType.Tv ? $", type {instance.Settings.SeriesType ?? "standard"}" : string.Empty;
+                var typeDetail = request.ContentType == ContentType.Tv ? $", type {seriesType ?? "standard"}{(tags != null ? $", tag {tags[0]}" : string.Empty)}" : string.Empty;
                 _audit.Record(actor, "request.send", "request", request.Id.ToString(), $"{instance.Name} item {request.ExternalItemId}, profile {profile.Name}, root {root}{typeDetail}");
 
                 return (true, item);
@@ -651,29 +797,45 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
         }
 
-        // Edits the user's request message and the admin approval card to the request's real state,
-        // without buttons that no longer apply. A message that is gone (deleted, channel removed)
-        // is skipped quietly: the notice to the user still goes out.
-        private async Task<bool> RefreshMessagesAsync(Request request, MediaLookupResult item = null)
+        // After a request changes while its people are no longer in the request flow, each of them
+        // gets the news as the newest message in their channel: their old message about it is
+        // deleted and a fresh one, mentioning them, is posted with only the buttons valid now. The
+        // owner's own Cancel click edits in place instead (ownerRepost false). The admin card is
+        // edited in place. Returns whether the owner's message was handled (else: notice fallback).
+        private async Task<bool> RefreshMessagesAsync(Request request, MediaLookupResult item = null, bool ownerRepost = true, string note = null, int? skipUserId = null, string notice = null)
         {
-            var edited = false;
+            var instance = _backends.Find(request.BackendId ?? 0);
+            item ??= await TryLookup(instance, request);
+            var handled = false;
 
-            if (ulong.TryParse(request.MessageChannelId, out var channel) && ulong.TryParse(request.MessageId, out var message))
+            if (request.OwnerUserId != skipUserId && ulong.TryParse(request.MessageChannelId, out var channel) && ulong.TryParse(request.MessageId, out var message))
             {
                 try
                 {
-                    edited = await _gateway.EditMessageAsync(channel, message, await StatusReplyAsync(request, item));
+                    var reply = RequestCards.Status(request, item, instance?.Name, ownerRepost ? Mention(request.OwnerUserId) : null, note, null);
 
-                    if (!edited)
+                    if (ownerRepost)
                     {
-                        _logger.Debug("Request {0}: its message no longer exists, so a notice is sent instead", request.Id);
+                        request.MessageId = (await Repost(channel, message, reply)).ToString();
+                        _requests.Update(request);
+                        handled = true;
+                    }
+                    else
+                    {
+                        handled = await _gateway.EditMessageAsync(channel, message, reply);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Debug(ex, "Request {0}: its message could not be edited", request.Id);
+                    _logger.Debug(ex, "Request {0}: its message could not be updated", request.Id);
                 }
             }
+            else if (request.OwnerUserId == skipUserId)
+            {
+                handled = true;
+            }
+
+            await RefreshFollowers(request, item, instance, note, skipUserId, notice);
 
             if (ulong.TryParse(request.AdminMessageId, out var card) && ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
             {
@@ -688,16 +850,99 @@ namespace Requestarr.Core.Requests
                 }
             }
 
-            return edited;
+            return handled;
         }
 
-        // The request message itself shows the outcome; a separate notice only when it can't
-        // (requests from before messages were stored, or a message that was deleted).
-        private async Task RefreshOrNotify(Request request, MediaLookupResult item, string notice)
+        private async Task RefreshFollowers(Request request, MediaLookupResult item, BackendInstance instance, string note, int? skipUserId, string notice)
         {
-            if (!await RefreshMessagesAsync(request, item))
+            var owner = OwnerName(request);
+
+            foreach (var follower in _subscribers.ForRequest(request.Id).Where(f => f.UserId != skipUserId))
+            {
+                if (ulong.TryParse(follower.MessageChannelId, out var channel) && ulong.TryParse(follower.MessageId, out var message))
+                {
+                    try
+                    {
+                        var reply = RequestCards.Status(request, item, instance?.Name, Mention(follower.UserId), note, owner);
+                        follower.MessageId = (await Repost(channel, message, reply)).ToString();
+                        _subscribers.Update(follower);
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug(ex, "Request {0}: follower {1}'s message could not be reposted", request.Id, follower.UserId);
+                    }
+                }
+
+                if (notice != null)
+                {
+                    await NotifyUser(follower.UserId, notice);
+                }
+            }
+        }
+
+        // Deletes the old message and posts the new one at the bottom. If the old one can't be
+        // deleted, the new one is posted anyway and the old one loses its buttons.
+        private async Task<ulong> Repost(ulong channel, ulong old, InteractionReply reply)
+        {
+            var deleted = false;
+
+            try
+            {
+                deleted = await _gateway.DeleteMessageAsync(channel, old);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Could not delete message {0}", old);
+            }
+
+            if (!deleted)
+            {
+                try
+                {
+                    await _gateway.EditMessageAsync(channel, old, new InteractionReply { Content = reply.Content, KeepEmbeds = true });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Could not strip the buttons from message {0}", old);
+                }
+            }
+
+            return await _gateway.SendMessageAsync(channel, reply);
+        }
+
+        private string Mention(int userId)
+        {
+            var discordId = _identities.GetForUser(userId).FirstOrDefault(i => i.Provider == UserIdentity.DiscordProvider)?.ExternalId;
+            return discordId == null ? null : $"<@{discordId}>";
+        }
+
+        // The request's messages show the outcome; a separate notice only to whoever has no message
+        // to show it (requests from before messages were stored, or a message that is gone).
+        private async Task RefreshOrNotify(Request request, MediaLookupResult item, string notice, string note = null, int? skipUserId = null)
+        {
+            if (!await RefreshMessagesAsync(request, item, ownerRepost: true, note, skipUserId, notice))
             {
                 await Notify(request, notice);
+            }
+        }
+
+        private async Task NotifyUser(int userId, string message)
+        {
+            var user = _users.Find(userId);
+
+            if (user?.Status != UserStatus.Active || !ulong.TryParse(user.PrivateChannelId, out var channel))
+            {
+                return;
+            }
+
+            try
+            {
+                await _gateway.SendMessageAsync(channel, new InteractionReply { Content = $"{Mention(userId)} {message}".Trim() });
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not notify user {0}", userId);
             }
         }
 

@@ -121,7 +121,13 @@ namespace Requestarr.Core.Backends
                     RootFolder = entry.RootFolder,
                     SeriesType = entry.SeriesType,
                     IsDefault = entry.Default,
-                    PollingOnly = entry.PollingOnly
+                    PollingOnly = entry.PollingOnly,
+                    AnimeEnabled = entry.Anime?.Enabled ?? true,
+                    AnimePriority = Anime.AnimeDefaults.PriorityKey(Anime.AnimeDefaults.ParsePriority(entry.Anime?.Priority)),
+                    DubRequired = entry.Anime?.Dub?.Required,
+                    DubIgnored = entry.Anime?.Dub?.Ignored,
+                    SubRequired = entry.Anime?.Sub?.Required,
+                    SubIgnored = entry.Anime?.Sub?.Ignored
                 };
 
                 _repository.Upsert(instance);

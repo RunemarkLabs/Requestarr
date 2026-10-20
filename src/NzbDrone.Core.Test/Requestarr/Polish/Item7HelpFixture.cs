@@ -13,8 +13,8 @@ namespace Requestarr.Core.Test.Polish
     [TestFixture]
     public class Item7HelpFixture : PolishScenario
     {
-        private static readonly string[] AllUserTopics = { "request", "seasons", "follow", "mine", "limits", "plex" };
-        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "limits", "mediaserver", "visibility" };
+        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "mine", "limits", "plex" };
+        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "limits", "mediaserver", "anime", "visibility" };
 
         private static string[] Topics(InteractionRun run) => run.LastReply.SelectMenu.Options.Select(o => o.Value).ToArray();
 
@@ -82,7 +82,8 @@ namespace Requestarr.Core.Test.Polish
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand("help").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             Topics(run).Should().Equal(AllUserTopics);
-            Topics(run).Should().NotContain(AllAdminTopics.Except(new[] { "limits" }));
+            Topics(run).Should().NotContain(AllAdminTopics.Except(new[] { "limits", "anime" }));
+            run.LastReply.SelectMenu.Options.Select(o => o.Label).Should().NotContain(HelpCatalog.AdminTopics.Where(t => t.Key != "limits").Select(t => t.Title));
             run.LastReply.SelectMenu.CustomId.Should().Be("help:user");
         }
 

@@ -18,7 +18,8 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task cancel_after_approval_changes_nothing_and_refreshes_the_message()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
+            var message = await Ask(Alice, "movie", $"tmdb:{Dune}");   // a later card, still showing Cancel
             await AdminButton("req-approve:1");
 
             var run = await ClickOn(Alice, message, "req-cancel:1");
@@ -34,7 +35,8 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task cancel_after_a_denial_changes_nothing()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
+            var message = await Ask(Alice, "movie", $"tmdb:{Dune}");
             await AdminModal("req-deny-reason:1", RequestRoutes.ReasonField, "no");
 
             await ClickOn(Alice, message, "req-cancel:1");
