@@ -11,6 +11,18 @@ namespace Requestarr.Core.Backends
 
     public record NamedItem(int Id, string Name);
 
+    // A Sonarr release profile (v4: required / ignored are lists of terms).
+    public class ReleaseProfile
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public bool Enabled { get; set; } = true;
+        public List<string> Required { get; set; } = new();
+        public List<string> Ignored { get; set; } = new();
+        public int IndexerId { get; set; }
+        public List<int> Tags { get; set; } = new();
+    }
+
     // A title as returned by a backend's own lookup (Radarr / Sonarr metadata; no third-party keys).
     public class MediaLookupResult
     {
@@ -52,6 +64,13 @@ namespace Requestarr.Core.Backends
         public List<string> Cast { get; set; } = new();
         public int? EpisodeCount { get; set; }
 
+        // TV: the series' tags and type on the instance (when it is in the library).
+        public List<int> TagIds { get; set; } = new();
+        public string SeriesType { get; set; }
+
+        // Sonarr's metadata marks anime with the genre "Anime".
+        public bool IsAnime => Genres.Any(g => string.Equals(g, "Anime", StringComparison.OrdinalIgnoreCase));
+
         // Studio for movies, network for TV.
         public string Maker => Studio ?? Network;
 
@@ -85,7 +104,15 @@ namespace Requestarr.Core.Backends
     {
         Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term);
         Task<MediaLookupResult> LookupTvdbAsync(BackendSettings settings, int tvdbId);
-        Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture);
+        Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture, IReadOnlyCollection<int> tags = null);
+
+        Task<List<NamedItem>> GetTagsAsync(BackendSettings settings);
+        Task<NamedItem> CreateTagAsync(BackendSettings settings, string label);
+        Task<List<ReleaseProfile>> GetReleaseProfilesAsync(BackendSettings settings);
+        Task<ReleaseProfile> SaveReleaseProfileAsync(BackendSettings settings, ReleaseProfile profile);
+
+        // Replaces a series' tags (the rest of the series is sent back unchanged).
+        Task SetSeriesTagsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> tags);
     }
 
     // Shared v3 API plumbing (Sonarr 4 and Radarr 5 both use /api/v3).
@@ -135,9 +162,20 @@ namespace Requestarr.Core.Backends
             }
         }
 
-        protected async Task<string> PostAsync(BackendSettings settings, string resource, object body)
+        protected Task<string> PostAsync(BackendSettings settings, string resource, object body) => SendAsync(settings, resource, body, put: false);
+
+        protected Task<string> PutAsync(BackendSettings settings, string resource, object body) => SendAsync(settings, resource, body, put: true);
+
+        private async Task<string> SendAsync(BackendSettings settings, string resource, object body, bool put)
         {
-            var request = Builder(settings, resource).Post().Build();
+            var builder = Builder(settings, resource);
+            var request = builder.Post().Build();
+
+            if (put)
+            {
+                request.Method = System.Net.Http.HttpMethod.Put;
+            }
+
             request.Headers.ContentType = "application/json";
             request.SetContent(Json.ToJson(body));
 
@@ -299,21 +337,23 @@ namespace Requestarr.Core.Backends
         {
             var series = (await LookupAsync(settings, $"tvdb:{tvdbId}")).FirstOrDefault(r => r.TvdbId == tvdbId);
 
-            // Make sure a series already in the library is recognised as such.
-            if (series != null && !series.LibraryId.HasValue)
+            // A series already in the library: its id, tags and series type come from the library.
+            if (series != null)
             {
                 var owned = (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "series", ("tvdbId", tvdbId)))?.FirstOrDefault(s => (int?)s["tvdbId"] == tvdbId);
 
                 if (owned != null && (int?)owned["id"] is > 0)
                 {
                     series.LibraryId = (int)owned["id"];
+                    series.TagIds = owned["tags"]?.Select(t => (int)t).ToList() ?? new List<int>();
+                    series.SeriesType = Text(owned["seriesType"]);
                 }
             }
 
             return series;
         }
 
-        public async Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture)
+        public async Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture, IReadOnlyCollection<int> tags = null)
         {
             var body = Newtonsoft.Json.Linq.JObject.Parse(series.Raw);
             body["qualityProfileId"] = qualityProfileId;
@@ -332,12 +372,64 @@ namespace Requestarr.Core.Backends
 
             body["seasons"] = seasonArray;
 
+            if (tags != null && tags.Count > 0)
+            {
+                body["tags"] = new Newtonsoft.Json.Linq.JArray(tags);
+            }
+
             // No "monitor" preset: Sonarr then keeps the per-season flags above.
             body["addOptions"] = Newtonsoft.Json.Linq.JObject.FromObject(new { searchForMissingEpisodes = true, searchForCutoffUnmetEpisodes = false, ignoreEpisodesWithFiles = true });
 
             var response = Newtonsoft.Json.Linq.JObject.Parse(await PostAsync(settings, "series", body));
             return (int)response["id"];
         }
+
+        public async Task<List<NamedItem>> GetTagsAsync(BackendSettings settings) =>
+            ((await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "tag")) ?? new List<Newtonsoft.Json.Linq.JObject>())
+                .Select(t => new NamedItem((int)t["id"], (string)t["label"])).ToList();
+
+        public async Task<NamedItem> CreateTagAsync(BackendSettings settings, string label)
+        {
+            var created = Newtonsoft.Json.Linq.JObject.Parse(await PostAsync(settings, "tag", new { label }));
+            return new NamedItem((int)created["id"], (string)created["label"]);
+        }
+
+        public async Task<List<ReleaseProfile>> GetReleaseProfilesAsync(BackendSettings settings) =>
+            ((await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "releaseprofile")) ?? new List<Newtonsoft.Json.Linq.JObject>())
+                .Select(p => new ReleaseProfile
+                {
+                    Id = (int)p["id"],
+                    Name = (string)p["name"],
+                    Enabled = (bool?)p["enabled"] ?? true,
+                    Required = Terms(p["required"]),
+                    Ignored = Terms(p["ignored"]),
+                    IndexerId = (int?)p["indexerId"] ?? 0,
+                    Tags = p["tags"]?.Select(t => (int)t).ToList() ?? new List<int>()
+                }).ToList();
+
+        public async Task<ReleaseProfile> SaveReleaseProfileAsync(BackendSettings settings, ReleaseProfile profile)
+        {
+            var body = new { id = profile.Id, name = profile.Name, enabled = profile.Enabled, required = profile.Required, ignored = profile.Ignored, indexerId = profile.IndexerId, tags = profile.Tags };
+            var saved = Newtonsoft.Json.Linq.JObject.Parse(profile.Id > 0 ? await PutAsync(settings, $"releaseprofile/{profile.Id}", body) : await PostAsync(settings, "releaseprofile", body));
+
+            profile.Id = (int)saved["id"];
+            return profile;
+        }
+
+        public async Task SetSeriesTagsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> tags)
+        {
+            var series = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, $"series/{seriesId}");
+            series["tags"] = new Newtonsoft.Json.Linq.JArray(tags);
+            await PutAsync(settings, $"series/{seriesId}", series);
+        }
+
+        // Sonarr 4 returns terms as a list; older payloads used one comma-separated string.
+        private static List<string> Terms(Newtonsoft.Json.Linq.JToken token) => token?.Type switch
+        {
+            Newtonsoft.Json.Linq.JTokenType.Array => token.Select(t => (string)t).Where(t => !string.IsNullOrWhiteSpace(t)).ToList(),
+            Newtonsoft.Json.Linq.JTokenType.String => ((string)token).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            _ => new List<string>()
+        };
 
         private static MediaLookupResult Map(Newtonsoft.Json.Linq.JObject json)
         {

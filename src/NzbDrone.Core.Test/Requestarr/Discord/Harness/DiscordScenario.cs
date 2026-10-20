@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using NzbDrone.Core.Test.Framework;
+using Requestarr.Core.Anime;
 using Requestarr.Core.Audit;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
@@ -66,6 +67,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
+            Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
 
             Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();

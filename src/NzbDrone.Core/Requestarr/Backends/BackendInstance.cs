@@ -43,6 +43,14 @@ namespace Requestarr.Core.Backends
         public string SeriesType { get; set; }
         public bool IsDefault { get; set; }
         public bool PollingOnly { get; set; }
+
+        // Sonarr only: anime sub/dub (see AnimeDefaults). On unless the instance opts out.
+        public bool AnimeEnabled { get; set; } = true;
+        public string AnimePriority { get; set; } = "dub";
+        public List<string> DubRequired { get; set; }
+        public List<string> DubIgnored { get; set; }
+        public List<string> SubRequired { get; set; }
+        public List<string> SubIgnored { get; set; }
     }
 
     public interface IBackendRepository : IBasicRepository<BackendInstance>

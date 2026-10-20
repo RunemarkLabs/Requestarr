@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Requestarr.Core.Anime;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.Metadata;
@@ -50,6 +51,7 @@ namespace Requestarr.Core.Discord.Handlers
             (InteractionKind.Button, RequestRoutes.TvReview),
             (InteractionKind.Button, RequestRoutes.TvConfirm),
             (InteractionKind.Button, RequestRoutes.TvBack),
+            (InteractionKind.Button, RequestRoutes.TvLanguage),
             (InteractionKind.Button, RequestRoutes.Cancel)
         };
 
@@ -114,11 +116,15 @@ namespace Requestarr.Core.Discord.Handlers
 
                 // All seasons sends straight away; the final status says exactly what was requested.
                 case (InteractionKind.Button, RequestRoutes.TvAll):
-                    await RequestTv(interaction, responder, caller, SeasonChoice.Everything);
+                    await RequestTv(interaction, responder, caller, SeasonChoice.Everything, LanguageAt(args, 1));
                     break;
 
                 case (InteractionKind.Button, RequestRoutes.TvConfirm):
-                    await RequestTv(interaction, responder, caller, args.Count > 1 ? RequestCards.DecodeSeasons(args[1]) : null);
+                    await RequestTv(interaction, responder, caller, args.Count > 1 ? RequestCards.DecodeSeasons(args[1]) : null, LanguageAt(args, 2));
+                    break;
+
+                case (InteractionKind.Button, RequestRoutes.TvLanguage):
+                    await HandleLanguage(interaction, responder, caller);
                     break;
 
                 // The single season menu on cards from before the two-path flow.
@@ -157,7 +163,7 @@ namespace Requestarr.Core.Discord.Handlers
 
                     await responder.DeferAsync();
                     var result = await _requests.RequestAsync(caller, type.Value, id);
-                    await Finish(interaction, responder, type.Value, result, SeasonText(result, null));
+                    await Finish(interaction, responder, type.Value, result, SeasonText(result, null), caller);
                     break;
                 }
             }
@@ -165,7 +171,41 @@ namespace Requestarr.Core.Discord.Handlers
 
         // Sends a TV request, unless the title was requested or added since the card was shown:
         // then nothing changes and the message shows the title as it is now.
-        private async Task RequestTv(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller, SeasonChoice choice)
+        private static AnimeLanguage? LanguageAt(IReadOnlyList<string> args, int index) => args.Count > index ? AnimeDefaults.ParseKey(args[index]) : null;
+
+        // Dub or Sub on an anime card. A series nobody has yet goes on to seasons with the language;
+        // one that exists (library or requested) is settled at once by the instance's priority rule.
+        private async Task HandleLanguage(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
+        {
+            var args = interaction.CustomIdArgs;
+            var language = LanguageAt(args, 1);
+
+            if (!int.TryParse(First(args), out var tvdbId) || language == null)
+            {
+                await responder.Ephemeral(DiscordText.TitleNotFound);
+                return;
+            }
+
+            await responder.DeferAsync();
+            var detail = await _requests.DetailAsync(caller, ContentType.Tv, tvdbId);
+
+            if (detail.Error != null)
+            {
+                await responder.EditAsync(RequestCards.Stopped(ContentType.Tv, detail.Error));
+                return;
+            }
+
+            if (detail.Value.Item.LibraryId.HasValue || detail.Value.Active != null)
+            {
+                var result = await _requests.RequestAsync(caller, ContentType.Tv, tvdbId, null, language);
+                await Finish(interaction, responder, ContentType.Tv, result, null, caller);
+                return;
+            }
+
+            await responder.EditAsync(RequestCards.LanguageChosen(detail.Value, language.Value));
+        }
+
+        private async Task RequestTv(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller, SeasonChoice choice, AnimeLanguage? language = null)
         {
             if (!int.TryParse(First(interaction.CustomIdArgs), out var tvdbId) || choice == null)
             {
@@ -183,8 +223,8 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var result = await _requests.RequestAsync(caller, ContentType.Tv, tvdbId, choice);
-            await Finish(interaction, responder, ContentType.Tv, result, SeasonText(result, choice));
+            var result = await _requests.RequestAsync(caller, ContentType.Tv, tvdbId, choice, language);
+            await Finish(interaction, responder, ContentType.Tv, result, SeasonText(result, choice), caller);
         }
 
         private async Task HandleFollow(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
@@ -220,7 +260,7 @@ namespace Requestarr.Core.Discord.Handlers
             }
 
             var result = await _requests.RequestAsync(caller, type.Value, id);
-            await responder.EditAsync(RequestCards.Final(type.Value, result));
+            await Finish(interaction, responder, type.Value, result, null, caller);
         }
 
         // Cancel re-checks on the server: only a pending request of the caller's is cancelled.
@@ -255,13 +295,23 @@ namespace Requestarr.Core.Discord.Handlers
 
         // The end of a request: the status, and for a pending request the message it lives in,
         // so it can be edited when an admin decides.
-        private async Task Finish(DiscordInteraction interaction, IInteractionResponder responder, ContentType type, RequestResult result, string seasonsText)
+        private async Task Finish(DiscordInteraction interaction, IInteractionResponder responder, ContentType type, RequestResult result, string seasonsText, RequestCaller caller)
         {
             await responder.EditAsync(RequestCards.Final(type, result, seasonsText));
 
-            if (result.Outcome == RequestOutcome.Pending && result.Request != null && await responder.MessageIdAsync() is { } messageId)
+            if (result.Request == null || await responder.MessageIdAsync() is not { } messageId)
+            {
+                return;
+            }
+
+            // The message now about this request: the owner's while pending, a follower's while following.
+            if (result.Outcome == RequestOutcome.Pending && result.Request.OwnerUserId == caller.User.Id)
             {
                 _requests.AttachMessage(result.Request.Id, interaction.ChannelId, messageId);
+            }
+            else if (result.Outcome == RequestOutcome.Following)
+            {
+                _requests.AttachFollowerMessage(result.Request.Id, caller.User.Id, interaction.ChannelId, messageId);
             }
         }
 
@@ -298,15 +348,23 @@ namespace Requestarr.Core.Discord.Handlers
             var page = !review && args.Count > 1 && int.TryParse(args[1], out var p) ? p : 0;
             var picks = review ? (args.Count > 1 ? RequestCards.DecodeSeasons(args[1]) : null) : args.Count > 2 ? RequestCards.DecodeSeasons(args[2]) : null;
 
+            // The chosen sub/dub rides along: choose {id}:{lang}, review {id}:{picks}:{lang}, page / menu {id}:{page}:{picks}:{lang}.
+            var language = interaction.Route switch
+            {
+                RequestRoutes.TvChoose => LanguageAt(args, 1),
+                RequestRoutes.TvReview => LanguageAt(args, 2),
+                _ => LanguageAt(args, 3)
+            };
+
             var reply = interaction.Route switch
             {
-                RequestRoutes.TvChoose => RequestCards.SeasonPicker(state, 0, null),
-                RequestRoutes.TvPage => RequestCards.SeasonPicker(state, page, picks),
-                RequestRoutes.TvReview when picks != null => RequestCards.Confirm(state, picks),
-                RequestRoutes.TvReview => RequestCards.SeasonPicker(state, 0, null),
+                RequestRoutes.TvChoose => RequestCards.SeasonPicker(state, 0, null, language),
+                RequestRoutes.TvPage => RequestCards.SeasonPicker(state, page, picks, language),
+                RequestRoutes.TvReview when picks != null => RequestCards.Confirm(state, picks, language),
+                RequestRoutes.TvReview => RequestCards.SeasonPicker(state, 0, null, language),
 
                 // The menu on a page: those picks replace that page's, the rest are kept.
-                _ when args.Count > 1 => RequestCards.SeasonPicker(state, page, RequestCards.WithPagePicks(picks, RequestCards.PageSeasons(state.Item, page), interaction.Values)),
+                _ when args.Count > 1 => RequestCards.SeasonPicker(state, page, RequestCards.WithPagePicks(picks, RequestCards.PageSeasons(state.Item, page), interaction.Values), language),
 
                 // The single-page menu from before pages: straight to the confirmation.
                 _ => RequestCards.Confirm(state, RequestCards.FromMenu(interaction.Values))

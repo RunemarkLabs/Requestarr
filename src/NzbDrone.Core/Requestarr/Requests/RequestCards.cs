@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Requestarr.Core.Anime;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Interactions;
@@ -22,6 +23,7 @@ namespace Requestarr.Core.Requests
         public const string TvPick = "req-tv-pick";
         public const string TvConfirm = "req-tv-ok";
         public const string TvBack = "req-tv-back";
+        public const string TvLanguage = "req-tv-lang";
         public const string Cancel = "req-cancel";
         public const string Approve = "req-approve";
         public const string Available = "req-available";
@@ -174,7 +176,14 @@ namespace Requestarr.Core.Requests
                     lines.Add(DiscordText.StatePreviouslyDenied(state.LastDenied.DecisionReason));
                 }
 
-                if (type == ContentType.Tv)
+                if (type == ContentType.Tv && state.Anime != null)
+                {
+                    lines.Add(DiscordText.AnimeIntro);
+                    lines.Add(DiscordText.PriorityRule(state.Anime.Priority, state.Instance?.Name));
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvLanguage}:{externalId}:d", Label = DiscordText.Label(AnimeLanguage.Dub), Style = ButtonStyle.Primary });
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvLanguage}:{externalId}:s", Label = DiscordText.Label(AnimeLanguage.Sub), Style = ButtonStyle.Primary });
+                }
+                else if (type == ContentType.Tv)
                 {
                     buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvAll}:{externalId}", Label = DiscordText.AllSeasons, Style = ButtonStyle.Success });
                     buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvChoose}:{externalId}", Label = DiscordText.ChooseSeasonsLabel, Style = ButtonStyle.Primary });
@@ -182,6 +191,19 @@ namespace Requestarr.Core.Requests
                 else
                 {
                     buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.Make}:{TypeKey(type)}:{externalId}", Label = DiscordText.RequestLabel, Style = ButtonStyle.Success });
+                }
+            }
+
+            // Anime already in the library or requested: its language, and a switch when that would win.
+            if (state.Anime != null && state.Language.HasValue && (item.LibraryId.HasValue || state.Active != null))
+            {
+                lines.Add(DiscordText.CurrentlySetTo(state.Language.Value));
+                lines.Add(DiscordText.PriorityRule(state.Anime.Priority, state.Instance?.Name));
+                var other = state.Language == AnimeLanguage.Dub ? AnimeLanguage.Sub : AnimeLanguage.Dub;
+
+                if (AnimeDefaults.Winner(state.Anime.Priority, state.Language.Value, other) == other)
+                {
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvLanguage}:{externalId}:{AnimeDefaults.Key(other)}", Label = DiscordText.SwitchLabel(other), Style = ButtonStyle.Primary });
                 }
             }
 
@@ -200,6 +222,27 @@ namespace Requestarr.Core.Requests
             };
         }
 
+        public static InteractionReply LanguageChosen(TitleState state, AnimeLanguage language)
+        {
+            var tvdbId = state.Item.TvdbId.Value;
+            var key = AnimeDefaults.Key(language);
+
+            return new InteractionReply
+            {
+                Content = DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepSeasons) + "\n" + DiscordText.LanguageLine(language),
+                Embeds = new List<InteractionEmbed> { Card(ContentType.Tv, state.Item, state.Instance?.Name, DetailColor) },
+                Buttons = new List<InteractionButton>
+                {
+                    new() { CustomId = $"{RequestRoutes.TvAll}:{tvdbId}:{key}", Label = DiscordText.AllSeasons, Style = ButtonStyle.Success },
+                    new() { CustomId = $"{RequestRoutes.TvChoose}:{tvdbId}:{key}", Label = DiscordText.ChooseSeasonsLabel, Style = ButtonStyle.Primary },
+                    BackButton(tvdbId)
+                }
+            };
+        }
+
+        // ":d" / ":s" on the season steps' custom IDs when a language was chosen; nothing otherwise.
+        private static string Lang(AnimeLanguage? language) => language.HasValue ? $":{AnimeDefaults.Key(language.Value)}" : string.Empty;
+
         public static int PageCount(MediaLookupResult item) => Math.Max(1, (item.Seasons.Count + SeasonsPerPage - 1) / SeasonsPerPage);
 
         // The seasons on one page of "Choose seasons": specials first on page 1, then regular seasons.
@@ -211,7 +254,7 @@ namespace Requestarr.Core.Requests
 
         // "Choose seasons": every season of any show, a page at a time. Picks are kept in the
         // buttons and menu (Discord keeps no state), shown as already selected, and summed up.
-        public static InteractionReply SeasonPicker(TitleState state, int page, SeasonChoice picks)
+        public static InteractionReply SeasonPicker(TitleState state, int page, SeasonChoice picks, AnimeLanguage? language = null)
         {
             var item = state.Item;
             var tvdbId = item.TvdbId.Value;
@@ -222,6 +265,11 @@ namespace Requestarr.Core.Requests
             var onPage = PageSeasons(item, page);
 
             var lines = new List<string> { DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepSeasons), DiscordText.ChooseSeasonsPrompt };
+
+            if (language.HasValue)
+            {
+                lines.Insert(1, DiscordText.LanguageLine(language.Value));
+            }
 
             if (pages > 1)
             {
@@ -234,22 +282,22 @@ namespace Requestarr.Core.Requests
 
             if (page > 0)
             {
-                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page - 1}:{spec}", Label = DiscordText.PreviousSeasons(Range(item, page - 1)) });
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page - 1}:{spec}{Lang(language)}", Label = DiscordText.PreviousSeasons(Range(item, page - 1)) });
             }
 
             if (page < pages - 1)
             {
-                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page + 1}:{spec}", Label = DiscordText.NextSeasons(Range(item, page + 1)) });
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page + 1}:{spec}{Lang(language)}", Label = DiscordText.NextSeasons(Range(item, page + 1)) });
             }
 
             var toggled = EncodeSeasons(picks with { Future = !picks.Future });
-            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page}:{toggled}", Label = DiscordText.FutureToggle(picks.Future), Style = picks.Future ? ButtonStyle.Primary : ButtonStyle.Secondary });
-            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvReview}:{tvdbId}:{spec}", Label = DiscordText.ContinueLabel, Style = ButtonStyle.Success, Disabled = !picks.Seasons.Any() && !picks.Future });
+            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:{page}:{toggled}{Lang(language)}", Label = DiscordText.FutureToggle(picks.Future), Style = picks.Future ? ButtonStyle.Primary : ButtonStyle.Secondary });
+            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvReview}:{tvdbId}:{spec}{Lang(language)}", Label = DiscordText.ContinueLabel, Style = ButtonStyle.Success, Disabled = !picks.Seasons.Any() && !picks.Future });
             buttons.Add(BackButton(tvdbId));
 
             var menu = new InteractionSelectMenu
             {
-                CustomId = $"{RequestRoutes.TvPick}:{tvdbId}:{page}:{spec}",
+                CustomId = $"{RequestRoutes.TvPick}:{tvdbId}:{page}:{spec}{Lang(language)}",
                 Placeholder = DiscordText.SeasonsPlaceholder,
                 MinValues = 0,
                 MaxValues = onPage.Count,
@@ -285,18 +333,19 @@ namespace Requestarr.Core.Requests
         }
 
         // The choice restated in plain words, with Request and Back.
-        public static InteractionReply Confirm(TitleState state, SeasonChoice choice)
+        public static InteractionReply Confirm(TitleState state, SeasonChoice choice, AnimeLanguage? language = null)
         {
             var tvdbId = state.Item.TvdbId.Value;
+            var languageLine = language.HasValue ? "\n" + DiscordText.LanguageLine(language.Value) : string.Empty;
 
             return new InteractionReply
             {
-                Content = DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepConfirm) + "\n" + DiscordText.YouChose(DiscordText.SeasonChoiceText(choice, state.Item.Seasons)),
+                Content = DiscordText.BlockHeader(ContentType.Tv, DiscordText.StepConfirm) + languageLine + "\n" + DiscordText.YouChose(DiscordText.SeasonChoiceText(choice, state.Item.Seasons)),
                 Embeds = new List<InteractionEmbed> { Card(ContentType.Tv, state.Item, state.Instance?.Name, DetailColor) },
                 Buttons = new List<InteractionButton>
                 {
-                    new() { CustomId = $"{RequestRoutes.TvConfirm}:{tvdbId}:{EncodeSeasons(choice)}", Label = DiscordText.RequestLabel, Style = ButtonStyle.Success },
-                    new() { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:0:{EncodeSeasons(choice)}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
+                    new() { CustomId = $"{RequestRoutes.TvConfirm}:{tvdbId}:{EncodeSeasons(choice)}{Lang(language)}", Label = DiscordText.RequestLabel, Style = ButtonStyle.Success },
+                    new() { CustomId = $"{RequestRoutes.TvPage}:{tvdbId}:0:{EncodeSeasons(choice)}{Lang(language)}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
                 }
             };
         }
@@ -321,6 +370,11 @@ namespace Requestarr.Core.Requests
                 lines.Add(DiscordText.SeasonsLine(seasonsText));
             }
 
+            if (result.Request?.Language is { } language)
+            {
+                lines.Add(DiscordText.LanguageLine(language));
+            }
+
             var reply = new InteractionReply
             {
                 Content = DiscordLimits.Truncate(string.Join("\n", lines), DiscordLimits.MessageLength),
@@ -336,7 +390,11 @@ namespace Requestarr.Core.Requests
         }
 
         // A request message showing the request's real state; Cancel only while it is pending.
-        public static InteractionReply Status(Request request, MediaLookupResult item, string instance)
+        public static InteractionReply Status(Request request, MediaLookupResult item, string instance) => Status(request, item, instance, null, null, null);
+
+        // mention: the person the message is for (a reposted message pings them); note: an extra line
+        // (for example a sub/dub switch); followerOf: the owner's name when the message is a follower's.
+        public static InteractionReply Status(Request request, MediaLookupResult item, string instance, string mention, string note, string followerOf)
         {
             var (status, color, message) = request.Status switch
             {
@@ -350,11 +408,26 @@ namespace Requestarr.Core.Requests
                 _ => (DiscordText.FinalFailed, RefusedColor, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason))
             };
 
-            var lines = new List<string> { $"{status}{DiscordText.Dot}{message}" };
+            var lines = new List<string> { $"{(mention != null ? mention + " " : string.Empty)}{status}{DiscordText.Dot}{message}" };
+
+            if (followerOf != null)
+            {
+                lines.Add(DiscordText.FollowingOf(followerOf));
+            }
 
             if (request.ContentType == ContentType.Tv)
             {
                 lines.Add(DiscordText.SeasonsLine(DiscordText.Seasons(request)));
+            }
+
+            if (request.Language.HasValue)
+            {
+                lines.Add(DiscordText.LanguageLine(request.Language.Value));
+            }
+
+            if (note != null)
+            {
+                lines.Add(note);
             }
 
             var reply = new InteractionReply
@@ -364,7 +437,8 @@ namespace Requestarr.Core.Requests
                 KeepEmbeds = item == null
             };
 
-            if (request.Status == RequestStatus.Pending)
+            // Only the buttons valid now: Cancel for the owner of a pending request.
+            if (request.Status == RequestStatus.Pending && followerOf == null)
             {
                 reply.Buttons.Add(CancelButton(request.Id));
             }

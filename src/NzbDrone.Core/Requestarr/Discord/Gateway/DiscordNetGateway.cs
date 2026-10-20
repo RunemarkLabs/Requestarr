@@ -180,6 +180,24 @@ namespace Requestarr.Core.Discord.Gateway
             return true;
         }
 
+        public async Task<bool> DeleteMessageAsync(ulong channelId, ulong messageId)
+        {
+            try
+            {
+                if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel && await channel.GetMessageAsync(messageId) is { } message)
+                {
+                    await message.DeleteAsync();
+                    return true;
+                }
+            }
+            catch (global::Discord.Net.HttpException)
+            {
+                // Missing permission or already gone: the caller falls back.
+            }
+
+            return false;
+        }
+
         public async Task PinMessageAsync(ulong channelId, ulong messageId)
         {
             if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&

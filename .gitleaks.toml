@@ -1,0 +1,14 @@
+# Secret scanning for pull requests and pushes (see the "secrets" job in .github/workflows/build.yml).
+# Uses gitleaks' default rules. Allowances are exact throwaway test values only, never patterns.
+title = "Requestarr"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Throwaway test values that look like credentials but are not"
+regexes = [
+  # Fake TMDB read access token (header.payload.signature of nothing) in Item4CastFixture,
+  # used to test that such a token is sent as a Bearer header.
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJhdWQiOiJ4In0\.c2ln''',
+]

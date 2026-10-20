@@ -13,7 +13,7 @@ namespace Requestarr.Core.Test.Discord.Harness
     // a record of what was added, per instance URL.
     public abstract class FakeArr : IBackendApi
     {
-        public record Added(string Url, MediaLookupResult Item, int QualityProfileId, string RootFolder, string SeriesType, IReadOnlyCollection<int> Seasons, bool MonitorFuture);
+        public record Added(string Url, MediaLookupResult Item, int QualityProfileId, string RootFolder, string SeriesType, IReadOnlyCollection<int> Seasons, bool MonitorFuture, IReadOnlyCollection<int> Tags = null);
 
         public string AppName { get; set; }
         public Version Version { get; set; }
@@ -43,7 +43,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.FromResult(action());
         }
 
-        protected int Add(BackendSettings settings, MediaLookupResult item, int profile, string root, string seriesType, IReadOnlyCollection<int> seasons, bool future)
+        protected int Add(BackendSettings settings, MediaLookupResult item, int profile, string root, string seriesType, IReadOnlyCollection<int> seasons, bool future, IReadOnlyCollection<int> tags = null)
         {
             if (FailAdds)
             {
@@ -55,10 +55,15 @@ namespace Requestarr.Core.Test.Discord.Harness
                 throw new BackendException("http://radarr-test:7878: HTTP request failed: [400:BadRequest] [POST] [{\"errorMessage\": \"This movie has already been added\"}]");
             }
 
-            Adds.Add(new Added(settings.Url, item, profile, root, seriesType, seasons?.ToList(), future));
+            Adds.Add(new Added(settings.Url, item, profile, root, seriesType, seasons?.ToList(), future, tags?.ToList() ?? new List<int>()));
             var libraryId = Adds.Count + 100;
+            OnAdded(libraryId, seriesType, tags);
             Catalog.Single(c => c == item || (c.TmdbId != null && c.TmdbId == item.TmdbId) || (c.TvdbId != null && c.TvdbId == item.TvdbId)).LibraryId = libraryId;
             return libraryId;
+        }
+
+        protected virtual void OnAdded(int libraryId, string seriesType, IReadOnlyCollection<int> tags)
+        {
         }
 
         protected static MediaLookupResult Copy(MediaLookupResult item) => item == null ? null : new MediaLookupResult
@@ -173,9 +178,83 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term) =>
             Run(() => Catalog.Where(c => c.Title.Contains(term, StringComparison.OrdinalIgnoreCase)).Select(Copy).ToList());
 
-        public Task<MediaLookupResult> LookupTvdbAsync(BackendSettings settings, int tvdbId) => Run(() => Copy(Catalog.FirstOrDefault(c => c.TvdbId == tvdbId)));
+        public Task<MediaLookupResult> LookupTvdbAsync(BackendSettings settings, int tvdbId) => Run(() =>
+        {
+            var copy = Copy(Catalog.FirstOrDefault(c => c.TvdbId == tvdbId));
 
-        public Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture) =>
-            Run(() => Add(settings, series, qualityProfileId, rootFolder, seriesType, seasons, monitorFuture));
+            if (copy?.LibraryId != null)
+            {
+                copy.TagIds = SeriesTags.GetValueOrDefault(copy.LibraryId.Value)?.ToList() ?? new List<int>();
+                copy.SeriesType = SeriesTypes.GetValueOrDefault(copy.LibraryId.Value);
+            }
+
+            return copy;
+        });
+
+        public Task<int> AddSeriesAsync(BackendSettings settings, MediaLookupResult series, int qualityProfileId, string rootFolder, string seriesType, IReadOnlyCollection<int> seasons, bool monitorFuture, IReadOnlyCollection<int> tags = null) =>
+            Run(() => Add(settings, series, qualityProfileId, rootFolder, seriesType, seasons, monitorFuture, tags));
+
+        // Tags, release profiles and per-series tags / type, as Sonarr keeps them.
+        public List<NamedItem> Tags { get; } = new();
+        public List<ReleaseProfile> ReleaseProfiles { get; } = new();
+        public Dictionary<int, List<int>> SeriesTags { get; } = new();
+        public Dictionary<int, string> SeriesTypes { get; } = new();
+        public int Writes { get; private set; }
+
+        public Task<List<NamedItem>> GetTagsAsync(BackendSettings settings) => Run(() => Tags.ToList());
+
+        public Task<NamedItem> CreateTagAsync(BackendSettings settings, string label) => Run(() =>
+        {
+            var tag = new NamedItem(Tags.Select(t => t.Id).DefaultIfEmpty(0).Max() + 1, label);
+            Tags.Add(tag);
+            Writes++;
+            return tag;
+        });
+
+        public Task<List<ReleaseProfile>> GetReleaseProfilesAsync(BackendSettings settings) => Run(() => ReleaseProfiles.Select(Clone).ToList());
+
+        public Task<ReleaseProfile> SaveReleaseProfileAsync(BackendSettings settings, ReleaseProfile profile) => Run(() =>
+        {
+            var saved = Clone(profile);
+
+            if (saved.Id == 0)
+            {
+                saved.Id = ReleaseProfiles.Select(p => p.Id).DefaultIfEmpty(0).Max() + 1;
+            }
+
+            ReleaseProfiles.RemoveAll(p => p.Id == saved.Id);
+            ReleaseProfiles.Add(saved);
+            Writes++;
+            profile.Id = saved.Id;
+            return profile;
+        });
+
+        public Task SetSeriesTagsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> tags) => Run(() =>
+        {
+            SeriesTags[seriesId] = tags.ToList();
+            Writes++;
+            return true;
+        });
+
+        // Puts a catalog title in the library as if the owner had added it.
+        public int AddToLibrary(int tvdbId, string seriesType = "standard", params int[] tags)
+        {
+            var item = Catalog.Single(c => c.TvdbId == tvdbId);
+            item.LibraryId = 900 + (tvdbId % 100);
+            SeriesTags[item.LibraryId.Value] = tags.ToList();
+            SeriesTypes[item.LibraryId.Value] = seriesType;
+            return item.LibraryId.Value;
+        }
+
+        protected override void OnAdded(int libraryId, string seriesType, IReadOnlyCollection<int> tags)
+        {
+            SeriesTags[libraryId] = tags?.ToList() ?? new List<int>();
+            SeriesTypes[libraryId] = seriesType;
+        }
+
+        private static ReleaseProfile Clone(ReleaseProfile p) => new()
+        {
+            Id = p.Id, Name = p.Name, Enabled = p.Enabled, Required = p.Required.ToList(), Ignored = p.Ignored.ToList(), IndexerId = p.IndexerId, Tags = p.Tags.ToList()
+        };
     }
 }

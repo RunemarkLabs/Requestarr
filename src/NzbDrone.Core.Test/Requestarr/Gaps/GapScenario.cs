@@ -32,6 +32,9 @@ namespace Requestarr.Core.Test.Gaps
         protected Task<InteractionRun> ChooseOn(ulong user, ulong message, string customId, params string[] values) =>
             Harness.SendAsync(FakeInteraction.SelectMenu(customId, values).By(user).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(user)).OnMessage(message));
 
+        // The newest message in the user's channel (where a reposted request message lands).
+        protected InteractionReply Latest(ulong user) => ChannelFor(user).Messages[^1];
+
         protected InteractionReply Message(ulong user, ulong id)
         {
             var channel = ChannelFor(user);
