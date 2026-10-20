@@ -70,6 +70,7 @@ namespace Requestarr.Core.Discord.Gateway
                         .WithType(ApplicationCommandOptionType.User).WithRequired(false))
                     .AddOption(Type(required: false)))
                 .AddOption(Sub("approve", DiscordText.Commands.Approve).AddOption(RequestId()))
+                .AddOption(Sub("available", DiscordText.Commands.AdminAvailable).AddOption(RequestId()))
                 .AddOption(Sub("cancel", DiscordText.Commands.AdminCancel)
                     .AddOption(RequestId())
                     .AddOption(new SlashCommandOptionBuilder().WithName("reason").WithDescription(DiscordText.Commands.OptionCancelReason)

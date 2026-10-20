@@ -69,7 +69,7 @@ The card also says if the title is:
 
 For TV, the status repeats which seasons were requested.
 
-**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. You still get a separate message that pings you. Requests made before this version just get the separate message.
+**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, ✅ **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. You still get a separate message that pings you. Requests made before this version just get the separate message.
 
 **Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
@@ -121,7 +121,10 @@ All admin commands are under `/admin` and only work in `#requestarr-admin`.
 | `/admin queue [user] [type]` | Lists requests waiting for approval. |
 | `/admin approve id:{number}` | Approves a request and sends it to the user's Sonarr or Radarr. The **Approve** button on a request card does the same. |
 | `/admin deny id:{number} [reason]` | Denies a request. The reason is shown to the user. The **Deny** button asks for a reason. |
+| `/admin available id:{number}` | Closes a pending request as **already available**, for when you already have the title. The **Already available** button on a request card does the same. |
 | `/admin cancel id:{number} [reason]` | Cancels a pending request for the user, for example a duplicate. The reason is shown to the user. |
+
+A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead.
 
 When a request is approved, denied or cancelled, the user's request message and the approval card here both change to show it, and their buttons disappear. Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
 | `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |

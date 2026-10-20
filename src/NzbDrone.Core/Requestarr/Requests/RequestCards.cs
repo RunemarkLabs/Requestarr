@@ -24,6 +24,7 @@ namespace Requestarr.Core.Requests
         public const string TvBack = "req-tv-back";
         public const string Cancel = "req-cancel";
         public const string Approve = "req-approve";
+        public const string Available = "req-available";
         public const string Deny = "req-deny";
         public const string DenyReason = "req-deny-reason";
         public const string ReasonField = "reason";
@@ -341,7 +342,7 @@ namespace Requestarr.Core.Requests
             {
                 RequestStatus.Pending => (DiscordText.FinalPending, PendingColor, DiscordText.RequestPending(request.Label, request.Id)),
                 RequestStatus.Approved => (DiscordText.FinalApproved, SentColor, DiscordText.RequestApprovedStatus(request.Label, request.Id, instance)),
-                RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAvailableStatus(request.Label, request.Id)),
+                RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id)),
                 RequestStatus.Denied => (DiscordText.FinalDenied, RefusedColor, DiscordText.RequestDeniedStatus(request.Label, request.Id, request.DecisionReason)),
                 RequestStatus.Cancelled => (DiscordText.FinalCancelled, CancelledColor, request.DecidedByUserId.HasValue
                     ? DiscordText.RequestCancelledByAdmin(request.Label, request.Id, request.DecisionReason)
@@ -497,7 +498,8 @@ namespace Requestarr.Core.Requests
                 Buttons = new List<InteractionButton>
                 {
                     new() { CustomId = $"{RequestRoutes.Approve}:{request.Id}", Label = DiscordText.ApproveLabel, Style = ButtonStyle.Success },
-                    new() { CustomId = $"{RequestRoutes.Deny}:{request.Id}", Label = DiscordText.DenyLabel, Style = ButtonStyle.Danger }
+                    new() { CustomId = $"{RequestRoutes.Deny}:{request.Id}", Label = DiscordText.DenyLabel, Style = ButtonStyle.Danger },
+                    new() { CustomId = $"{RequestRoutes.Available}:{request.Id}", Label = DiscordText.AlreadyAvailableLabel, Style = ButtonStyle.Secondary }
                 }
             };
         }

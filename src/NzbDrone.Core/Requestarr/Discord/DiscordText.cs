@@ -158,7 +158,13 @@ namespace Requestarr.Core.Discord
 
         public static string RequestApprovedStatus(string label, int id, string instance) => $"Request #{id} for {label} was approved and added to {instance ?? "the server"}. A search has started.";
 
-        public static string RequestAvailableStatus(string label, int id) => $"Request #{id} for {label} is available.";
+        public const string AlreadyAvailableLabel = "Already available";
+
+        public static string RequestAlreadyAvailableStatus(string label, int id) => $"Request #{id} for {label} is already available.";
+
+        public static string RequestAlreadyAvailableNotice(string label, int id) => $"Your request #{id} for {label} is already available.";
+
+        public static string AdminMarkedAvailable(Request request) => $"Request #{request.Id} for {request.Label} is marked as already available. The user is told.";
 
         public static string RequestDeniedStatus(string label, int id, string reason) => $"Request #{id} for {label} was denied: {reason ?? NoReason}.";
 
@@ -171,7 +177,8 @@ namespace Requestarr.Core.Discord
         // The approval card once the request is decided, without its buttons.
         public static string DecidedCard(Request request, string owner, string by) => request.Status switch
         {
-            RequestStatus.Approved or RequestStatus.Available => ApprovedCard(request, owner, by ?? "the admin"),
+            RequestStatus.Approved => ApprovedCard(request, owner, by ?? "the admin"),
+            RequestStatus.Available => $"**Request #{request.Id}: already available** · {request.Label} for {owner}{(by != null ? $" · closed by {by}" : string.Empty)}",
             RequestStatus.Denied => DeniedCard(request, owner, by ?? "the admin", request.DecisionReason),
             RequestStatus.Cancelled when by != null => $"**Request #{request.Id}: cancelled** by {by} · {request.Label} for {owner}",
             RequestStatus.Cancelled => $"**Request #{request.Id}: cancelled** by {owner} · {request.Label}",
@@ -525,6 +532,7 @@ namespace Requestarr.Core.Discord
             public const string RequestOne = "Request a movie or TV show";
             public const string Help = "How to use Requestarr";
             public const string AdminCancel = "Cancel a pending request (admin)";
+            public const string AdminAvailable = "Close a pending request as already available (admin)";
             public const string OptionCancelReason = "Reason shown to the user";
             public const string AdminHelp = "Help for admins";
             public const string OptionRequestType = "What to request (only types you have access to)";

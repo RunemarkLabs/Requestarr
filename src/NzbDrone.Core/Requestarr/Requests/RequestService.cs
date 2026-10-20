@@ -71,6 +71,9 @@ namespace Requestarr.Core.Requests
         Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId);
         Task<ServiceResult> AdminCancelAsync(int requestId, string reason, Actor admin, string adminName);
 
+        // Closes a pending request as already available (the title is already there).
+        Task<ServiceResult> MarkAvailableAsync(int requestId, Actor admin, string adminName);
+
         // Remembers the message a request was made in, so it can be edited after a decision.
         void AttachMessage(int requestId, ulong channelId, ulong messageId);
 
@@ -351,10 +354,17 @@ namespace Requestarr.Core.Requests
                 return ServiceResult.Fail(DiscordText.NoBackend(request.ContentType));
             }
 
+            var current = await TryLookup(instance, request);
+
+            if (current?.LibraryId != null)
+            {
+                return await CloseAsAvailable(request, admin, current);
+            }
+
             request.DecidedByUserId = admin.UserId;
             _audit.Record(admin, "request.approve", "request", request.Id.ToString());
 
-            var (sent, item) = await SendAsync(request, instance, null, admin);
+            var (sent, item) = await SendAsync(request, instance, current, admin);
             await RefreshMessagesAsync(request, item);
 
             await Notify(request, sent
@@ -378,6 +388,13 @@ namespace Requestarr.Core.Requests
             if (request.Status != RequestStatus.Pending)
             {
                 return ServiceResult.Fail(DiscordText.NotPending(request.Id, request.Status));
+            }
+
+            var inLibrary = await TryLookup(_backends.Find(request.BackendId ?? 0), request);
+
+            if (inLibrary?.LibraryId != null)
+            {
+                return await CloseAsAvailable(request, admin, inLibrary);
             }
 
             request.Status = RequestStatus.Denied;
@@ -407,6 +424,13 @@ namespace Requestarr.Core.Requests
                 return ServiceResult.Fail(DiscordText.CannotCancel(request.Status));
             }
 
+            var available = await TryLookup(_backends.Find(request.BackendId ?? 0), request);
+
+            if (available?.LibraryId != null)
+            {
+                return await CloseAsAvailable(request, admin, available);
+            }
+
             request.Status = RequestStatus.Cancelled;
             request.DecisionReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
             request.Decided = Clock();
@@ -418,6 +442,41 @@ namespace Requestarr.Core.Requests
             await Notify(request, DiscordText.RequestCancelledByAdminNotice(request.Label, request.Id, request.DecisionReason));
 
             return ServiceResult.Ok(DiscordText.AdminCancelled(request));
+        }
+
+        public async Task<ServiceResult> MarkAvailableAsync(int requestId, Actor admin, string adminName)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return ServiceResult.Fail(DiscordText.RequestNotFound);
+            }
+
+            if (request.Status != RequestStatus.Pending)
+            {
+                return ServiceResult.Fail(DiscordText.NotPending(request.Id, request.Status));
+            }
+
+            return await CloseAsAvailable(request, admin, null);
+        }
+
+        // The title is already there: the request ends as available (never "denied"), the user's
+        // message and the approval card say so, and the user is told.
+        private async Task<ServiceResult> CloseAsAvailable(Request request, Actor admin, MediaLookupResult item)
+        {
+            request.Status = RequestStatus.Available;
+            request.DecisionReason = null;
+            request.Decided = Clock();
+            request.Fulfilled = Clock();
+            request.DecidedByUserId = admin.UserId;
+            _requests.Update(request);
+
+            _audit.Record(admin, "request.available", "request", request.Id.ToString(), item?.LibraryId != null ? "already in the library" : "marked by the admin");
+            await RefreshMessagesAsync(request, item);
+            await Notify(request, DiscordText.RequestAlreadyAvailableNotice(request.Label, request.Id));
+
+            return ServiceResult.Ok(DiscordText.AdminMarkedAvailable(request));
         }
 
         public void AttachMessage(int requestId, ulong channelId, ulong messageId)

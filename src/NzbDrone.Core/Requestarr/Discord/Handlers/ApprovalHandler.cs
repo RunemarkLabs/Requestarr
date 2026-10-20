@@ -27,6 +27,8 @@ namespace Requestarr.Core.Discord.Handlers
             (InteractionKind.SlashCommand, "admin approve"),
             (InteractionKind.SlashCommand, "admin deny"),
             (InteractionKind.SlashCommand, "admin cancel"),
+            (InteractionKind.SlashCommand, "admin available"),
+            (InteractionKind.Button, RequestRoutes.Available),
             (InteractionKind.Button, RequestRoutes.Approve),
             (InteractionKind.Button, RequestRoutes.Deny),
             (InteractionKind.ModalSubmit, RequestRoutes.DenyReason)
@@ -75,6 +77,23 @@ namespace Requestarr.Core.Discord.Handlers
                     await responder.DeferAsync();
                     await responder.Reply(await _requests.AdminCancelAsync((int)(interaction.GetInteger("id") ?? 0), interaction.GetOption<string>("reason"), actor, adminName));
                     break;
+
+                case InteractionKind.SlashCommand when interaction.CommandName == "admin available":
+                    await responder.DeferAsync();
+                    await responder.Reply(await _requests.MarkAvailableAsync((int)(interaction.GetInteger("id") ?? 0), actor, adminName));
+                    break;
+
+                case InteractionKind.Button when interaction.Route == RequestRoutes.Available:
+                {
+                    if (!TryId(interaction, out var id))
+                    {
+                        await responder.Ephemeral(DiscordText.RequestNotFound);
+                        return;
+                    }
+
+                    await RefreshCard(responder, id, await _requests.MarkAvailableAsync(id, actor, adminName));
+                    break;
+                }
 
                 case InteractionKind.Button when interaction.Route == RequestRoutes.Approve:
                 {

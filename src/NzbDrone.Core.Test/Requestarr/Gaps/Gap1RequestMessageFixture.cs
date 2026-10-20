@@ -146,6 +146,77 @@ namespace Requestarr.Core.Test.Gaps
             LastMessageIn(Alice).Should().Be(DiscordText.RequestApprovedNotice("Dune (2021)", 1, "Radarr"));
         }
 
+        private void NowInLibrary(int tmdbId) => Radarr.Catalog.Single(c => c.TmdbId == tmdbId).LibraryId = 55;
+
+        private void ShowsAlreadyAvailable(ulong message)
+        {
+            RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
+            Message(Alice, message).Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain(DiscordText.RequestAlreadyAvailableStatus("Dune (2021)", 1));
+            Message(Alice, message).Buttons.Should().BeEmpty();
+            LastMessageIn(Alice).Should().Be(DiscordText.RequestAlreadyAvailableNotice("Dune (2021)", 1));
+            Radarr.Adds.Should().BeEmpty("a title already in the library is never added again");
+        }
+
+        [Test]
+        public async Task denying_a_title_that_is_already_in_the_library_ends_as_already_available()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            NowInLibrary(Dune);
+
+            var run = await AdminModal("req-deny-reason:1", RequestRoutes.ReasonField, "already have it");
+
+            ShowsAlreadyAvailable(message);
+            run.LastReply.Content.Should().StartWith("**Request #1: already available**");
+            Message(Alice, message).Content.Should().NotContain(DiscordText.FinalDenied);
+        }
+
+        [Test]
+        public async Task approving_a_title_that_is_already_in_the_library_ends_as_already_available()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            NowInLibrary(Dune);
+
+            await AdminButton("req-approve:1");
+
+            ShowsAlreadyAvailable(message);
+        }
+
+        [Test]
+        public async Task an_admin_cancel_of_a_title_already_in_the_library_ends_as_already_available()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            NowInLibrary(Dune);
+
+            (await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.AdminMarkedAvailable(RequestStore.Get(1)));
+
+            ShowsAlreadyAvailable(message);
+        }
+
+        [Test]
+        public async Task the_already_available_button_closes_a_request_the_admin_knows_is_covered()
+        {
+            var message = await PendingMovie(Alice, Dune);
+            var card = Discord.Channels[AdminChannel].Messages.Last();
+            card.Buttons.Select(b => b.Label).Should().Equal(DiscordText.ApproveLabel, DiscordText.DenyLabel, DiscordText.AlreadyAvailableLabel);
+
+            var run = await AdminButton("req-available:1");
+
+            ShowsAlreadyAvailable(message);
+            run.Responder.Replies.First().Content.Should().StartWith("**Request #1: already available**").And.Contain("closed by owner");
+            run.Responder.Replies.First().Buttons.Should().BeEmpty();
+        }
+
+        [Test]
+        public async Task the_available_command_does_the_same_and_refuses_decided_requests()
+        {
+            var message = await PendingMovie(Alice, Dune);
+
+            (await Harness.SendAsync(AdminSlash("available").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.AdminMarkedAvailable(RequestStore.Get(1)));
+            ShowsAlreadyAvailable(message);
+
+            (await Harness.SendAsync(AdminSlash("available").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Available));
+        }
+
         [Test]
         public async Task a_tv_request_message_keeps_its_seasons_after_approval()
         {

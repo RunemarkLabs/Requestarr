@@ -142,8 +142,8 @@ namespace Requestarr.Core.Discord.Help
                 Key = "approvals",
                 Title = "Approvals and the queue",
                 Summary = "Approve or deny requests",
-                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. `/request` in this channel requests as you, skipping approval and limits.",
-                Commands = new[] { "admin queue", "admin approve", "admin deny", "admin cancel" },
+                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. `/request` in this channel requests as you, skipping approval and limits.",
+                Commands = new[] { "admin queue", "admin approve", "admin deny", "admin available", "admin cancel" },
                 Buttons = new[] { PanelButtons.PendingQueue }
             },
             new HelpTopic
