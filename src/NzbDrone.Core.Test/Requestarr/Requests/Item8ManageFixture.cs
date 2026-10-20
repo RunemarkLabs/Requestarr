@@ -41,7 +41,7 @@ namespace Requestarr.Core.Test.Requests
         {
             (await Harness.SendAsync(CancelButton(Alice, 2))).LastReply.Content.Should().Contain(DiscordText.NotYourRequest);
             (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Contain(DiscordText.RequestCancelled("Dune (2021)", 1));
-            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Contain(DiscordText.CannotCancel(RequestStatus.Cancelled));
+            (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply.Content.Should().Contain(DiscordText.NothingChanged("Request #1 for Dune (2021) is cancelled."));
             (await Harness.SendAsync(CancelButton(Alice, 99))).LastReply.Content.Should().Contain(DiscordText.RequestNotFound);
         }
 

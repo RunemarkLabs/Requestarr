@@ -41,6 +41,12 @@ namespace Requestarr.Core.Requests
         public DateTime? Decided { get; set; }
         public DateTime? Fulfilled { get; set; }
 
+        // The user's request message and the admin approval card (Discord message IDs), edited
+        // to the real state after a decision. Empty on requests made before they were stored.
+        public string MessageChannelId { get; set; }
+        public string MessageId { get; set; }
+        public string AdminMessageId { get; set; }
+
         public int? ExternalId => ContentType == ContentType.Tv ? TvdbId : TmdbId;
 
         public bool IsActive => Status == RequestStatus.Pending || Status == RequestStatus.Approved || Status == RequestStatus.Available;

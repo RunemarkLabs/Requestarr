@@ -139,6 +139,14 @@ namespace Requestarr.Core.Test.Discord.Harness
             Catalog.Add(new MediaLookupResult { Title = "Severance", Year = 2022, Overview = "Work-life balance.", TvdbId = 371980, Seasons = new() { 1, 2 }, Continuing = true });
             Catalog.Add(new MediaLookupResult { Title = "The Long Show", Year = 1990, Overview = "Many seasons.", TvdbId = 100000, Seasons = Enumerable.Range(1, 40).ToList() });
 
+            // A 36-season show and a 1,000-plus-episode anime, for paging through Choose seasons.
+            Catalog.Add(new MediaLookupResult { Title = "Thirty Six", Year = 1989, Overview = "Runs forever.", TvdbId = 500036, Seasons = Enumerable.Range(1, 36).ToList(), HasSpecials = true, Continuing = true });
+            Catalog.Add(new MediaLookupResult
+            {
+                Title = "One Piece", Year = 1999, Overview = "Pirates.", TvdbId = 81797, Seasons = Enumerable.Range(1, 22).ToList(), HasSpecials = true, Continuing = true,
+                Genres = new() { "Animation", "Anime" }, EpisodeCount = 1122
+            });
+
             // Two shows with the same name; Sonarr already puts the year in the newer one's title.
             Catalog.Add(new MediaLookupResult
             {

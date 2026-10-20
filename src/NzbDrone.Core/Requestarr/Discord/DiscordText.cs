@@ -122,7 +122,7 @@ namespace Requestarr.Core.Discord
         public const string SeasonsPlaceholder = "Pick the seasons you want";
         public const string AllSeasons = "All seasons";
         public const string ChooseSeasonsLabel = "Choose seasons";
-        public const string ChooseSeasonsPrompt = "Pick the seasons you want. Add \"Also new seasons as they air\" to keep getting new ones.";
+        public const string ChooseSeasonsPrompt = "Pick the seasons you want, then press Continue. Turn on \"Also new seasons\" to keep getting new ones.";
         public const string Specials = "Specials";
         public const string SpecialsHint = "Season 0: extras and one-off episodes";
         public const string AlsoFutureSeasons = "Also new seasons as they air";
@@ -146,11 +146,71 @@ namespace Requestarr.Core.Discord
         public const string FinalFailed = "⚠️ **Couldn't be added**";
         public const string FinalRefused = "⛔ **Not requested**";
         public const string FinalCancelled = "🚫 **Cancelled**";
+        public const string FinalApproved = "✅ **Approved**";
+        public const string FinalDenied = "⛔ **Denied**";
+
+        // Late clicks on request messages: nothing changes, the asker is told why.
+        public const string NothingToFollow = "That request isn't active any more, so there's nothing to follow. The message now shows the title as it is.";
+
+        public static string NothingChanged(string state) => $"Nothing was changed. {state}";
+
+        public static string RequestState(Request request) => $"Request #{request.Id} for {request.Label} is {Label(request.Status)}.";
+
+        public static string RequestApprovedStatus(string label, int id, string instance) => $"Request #{id} for {label} was approved and added to {instance ?? "the server"}. A search has started.";
+
+        public const string AlreadyAvailableLabel = "Already available";
+
+        public static string RequestAlreadyAvailableStatus(string label, int id) => $"Request #{id} for {label} is already available.";
+
+        public static string RequestAlreadyAvailableNotice(string label, int id) => $"Your request #{id} for {label} is already available.";
+
+        public static string AdminMarkedAvailable(Request request) => $"Request #{request.Id} for {request.Label} is marked as already available. The user is told.";
+
+        public static string RequestDeniedStatus(string label, int id, string reason) => $"Request #{id} for {label} was denied: {reason ?? NoReason}.";
+
+        public static string RequestCancelledByAdmin(string label, int id, string reason) => $"Request #{id} for {label} was cancelled by the admin{(reason != null ? ": " + reason : string.Empty)}.";
+
+        public static string RequestCancelledByAdminNotice(string label, int id, string reason) => $"Your request #{id} for {label} was cancelled by the admin{(reason != null ? ": " + reason : string.Empty)}.";
+
+        public static string AdminCancelled(Request request) => $"Cancelled request #{request.Id} for {request.Label}.";
+
+        // The approval card once the request is decided, without its buttons.
+        public static string DecidedCard(Request request, string owner, string by) => request.Status switch
+        {
+            RequestStatus.Approved => ApprovedCard(request, owner, by ?? "the admin"),
+            RequestStatus.Available => $"**Request #{request.Id}: already available** · {request.Label} for {owner}{(by != null ? $" · closed by {by}" : string.Empty)}",
+            RequestStatus.Denied => DeniedCard(request, owner, by ?? "the admin", request.DecisionReason),
+            RequestStatus.Cancelled when by != null => $"**Request #{request.Id}: cancelled** by {by} · {request.Label} for {owner}",
+            RequestStatus.Cancelled => $"**Request #{request.Id}: cancelled** by {owner} · {request.Label}",
+            RequestStatus.Failed => $"**Request #{request.Id}: couldn't be added** · {request.Label} for {owner} · {request.DecisionReason}",
+            _ => $"**Request #{request.Id}** · {request.Label} for {owner} · {Label(request.Status)}"
+        };
+
+        // Choose seasons, a page at a time.
+        public const string NothingPickedYet = "Nothing picked yet.";
+        public const string ContinueLabel = "Continue";
+
+        public static string PickedSoFar(string choice) => $"Picked so far: **{choice}**.";
+
+        public static string SeasonPageHint((int From, int To) page, int total) =>
+            $"Showing seasons {page.From}–{page.To} of {total}. Use the arrows for the others; your picks are kept.";
+
+        public static string PreviousSeasons((int From, int To) page) => $"◀ Seasons {page.From}–{page.To}";
+
+        public static string NextSeasons((int From, int To) page) => $"Seasons {page.From}–{page.To} ▶";
+
+        public static string FutureToggle(bool on) => $"Also new seasons: {(on ? "on" : "off")}";
 
         // The Movie Database: a short credit wherever its data appears, the full notice in Help and the docs.
         public const string TmdbAttribution = "Cast from TMDB";
         public const string TmdbSubtext = "-# " + TmdbAttribution;
-        public const string TmdbNotice = "Cast and episode counts come from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB.";
+        public const string TmdbNotice = "Cast and TV episode counts come from The Movie Database (TMDB). Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.";
+
+        // TMDB's approved "alt short" logo, rendered unaltered to PNG (Discord can't show SVG) and
+        // served from this project's public repository. Shown small: never larger than Requestarr's own mark.
+        public const string TmdbLogoUrl = "https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/docs/assets/tmdb-logo.png";
+        public const string TmdbName = "The Movie Database (TMDB)";
+        public const string TmdbSite = "https://www.themoviedb.org";
 
         // Card fields
         public const string FieldGenres = "Genres";
@@ -471,6 +531,9 @@ namespace Requestarr.Core.Discord
             public const string AdminMediaServer = "Media server access requests";
             public const string RequestOne = "Request a movie or TV show";
             public const string Help = "How to use Requestarr";
+            public const string AdminCancel = "Cancel a pending request (admin)";
+            public const string AdminAvailable = "Close a pending request as already available (admin)";
+            public const string OptionCancelReason = "Reason shown to the user";
             public const string AdminHelp = "Help for admins";
             public const string OptionRequestType = "What to request (only types you have access to)";
             public const string OptionRequestQuery = "Title to search for, or tmdb:603 / tvdb:12345";

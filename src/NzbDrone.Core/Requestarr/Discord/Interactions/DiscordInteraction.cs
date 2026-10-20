@@ -41,6 +41,9 @@ namespace Requestarr.Core.Discord.Interactions
         public ulong GuildId { get; init; }
         public ulong ChannelId { get; init; }
 
+        // Components and modals: the message the component sits on.
+        public ulong? MessageId { get; init; }
+
         // Route used for dispatch: the command path, or the custom ID up to the first ':'.
         public string Route => Kind == InteractionKind.SlashCommand || Kind == InteractionKind.Autocomplete
             ? CommandName

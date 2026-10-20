@@ -104,7 +104,8 @@ namespace Requestarr.Core.Test.CommandSurface
 
             (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.TvConfirm}:{Severance}:1f").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice))))
                 .LastReply.Content.Should().Contain(DiscordText.RequestPending("Severance (2022)", 1));
-            (await RequestTv(Bob, Severance, "s1")).LastReply.Content.Should().Contain(DiscordText.Subscribed("Severance (2022)", "alice", 1));
+            (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.Follow}:tv:{Severance}").By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Bob))))
+                .LastReply.Content.Should().Contain(DiscordText.Subscribed("Severance (2022)", "alice", 1));
             (await AdminButton("req-approve:1")).LastReply.Content.Should().Contain("approved");
             Sonarr.Adds.Single().MonitorFuture.Should().BeTrue();
         }

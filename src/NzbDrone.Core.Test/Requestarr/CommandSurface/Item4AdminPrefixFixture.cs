@@ -52,7 +52,7 @@ namespace Requestarr.Core.Test.CommandSurface
             var expected = new[]
             {
                 "user add", "user remove", "user suspend", "user unsuspend", "user access", "user quota", "user info", "user mediaserver",
-                "help", "queue", "approve", "deny", "mediaserver approve", "mediaserver deny"
+                "help", "queue", "approve", "available", "cancel", "deny", "mediaserver approve", "mediaserver deny"
             };
 
             paths.Should().BeEquivalentTo(expected);

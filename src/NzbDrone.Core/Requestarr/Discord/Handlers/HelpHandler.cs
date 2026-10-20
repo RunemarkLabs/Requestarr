@@ -56,7 +56,7 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var viewer = tree == HelpTree.User ? Viewer(caller) : HelpViewer.Everything;
+            var viewer = (tree == HelpTree.User ? Viewer(caller) : HelpViewer.Everything)?.WithTmdb(_metadata.CastEnabled);
 
             if (viewer == null)
             {
@@ -66,13 +66,13 @@ namespace Requestarr.Core.Discord.Handlers
 
             if (entry != null)
             {
-                await responder.RespondAsync(HelpCatalog.Home(tree, viewer, _metadata.CastEnabled));
+                await responder.RespondAsync(HelpCatalog.Home(tree, viewer));
                 return;
             }
 
-            var page = interaction.Route == HelpCatalog.RouteHome ? HelpCatalog.Home(tree, viewer, _metadata.CastEnabled)
-                : tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything, _metadata.CastEnabled)
-                : HelpCatalog.Topic(tree, viewer, picked, _metadata.CastEnabled);
+            var page = interaction.Route == HelpCatalog.RouteHome ? HelpCatalog.Home(tree, viewer)
+                : tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything.WithTmdb(_metadata.CastEnabled))
+                : HelpCatalog.Topic(tree, viewer, picked);
 
             await responder.UpdateMessageAsync(page);
         }

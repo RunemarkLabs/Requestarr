@@ -264,7 +264,7 @@ The assignment is per user and per content type. Run `/admin user info` to see i
    - previously denied, and why
 4. For TV, they choose one of two paths:
    - **All seasons:** sends the request straight away for every season now, and new seasons as they air (Sonarr's monitor-new-seasons setting). Specials (season 0) are not included.
-   - **Choose seasons:** pick individual seasons, including **Specials** if they want them, and optionally **Also new seasons as they air**. Requestarr then restates the choice in plain words, for example "season 2 only; new seasons won't be added", and they press **Request** or **Back**.
+   - **Choose seasons:** pick individual seasons, including **Specials** if they want them, and optionally **Also new seasons**. Every season of any show can be picked. Long shows (more than 24 seasons) page through them with ◀ / ▶, and picks are kept across pages. After **Continue**, Requestarr restates the choice in plain words, for example "seasons 1–2 and 36 only; new seasons won't be added", and they press **Request** or **Back**.
 
    Either way, the final status says exactly which seasons were requested.
 5. What happens next depends on their access level:
@@ -273,6 +273,8 @@ The assignment is per user and per content type. Run `/admin user info` to see i
    - **auto-approve:** sent straight away
 6. The message ends with a clear status: **Request sent**, **Waiting for approval** (with a Cancel button), **Following**, **Already available**, or **Not requested** with the reason.
 7. When a request is approved, Requestarr adds it to the instance with the instance's quality profile, root folder and series type, monitored, and starts a search. The user is told the outcome in their channel.
+8. A request for a title that's already in the library when you act ends as **Already available**, never Denied; use the card's **Already available** button (or `/admin available`) when you have it some other way.
+9. Whenever a request is decided (approved, already available, denied, or cancelled with `/admin cancel` or by the user), the user's original request message and the approval card are both edited to show it, without their old buttons. If the message was deleted, only the notice is sent. Buttons clicked late re-check the request and never change one that's already decided.
 
 Quotas (section 5.6) count requests a user makes over a rolling window. Following someone else's request doesn't count. When a user hits the limit, Requestarr tells them when their next request frees up.
 
@@ -299,7 +301,13 @@ Sonarr and Radarr don't return cast. With a free The Movie Database key, Request
 
 The key is kept in memory only. It is never written to the database or logs. Cast lookups are cached for 12 hours and give up after a few seconds, so a slow or unavailable The Movie Database never holds up a request.
 
-**Attribution:** wherever cast appears, a short "Cast from TMDB" credit is shown under the result list and in the card footer. The full notice, "This product uses the TMDB API but is not endorsed or certified by TMDB.", appears in `/help` and `/admin help` while a key is set, and here: Requestarr uses the TMDB API but is not endorsed or certified by TMDB. If you use a key, The Movie Database's terms of use apply to you.
+**Attribution:** TMDB's terms ask apps to use TMDB's logo, keep it less prominent than the app's own branding, and show the notice "… uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB." in an About or Credits area. Requestarr does this while a key is set:
+
+- **Cards with cast:** a short "Cast from TMDB" footer with TMDB's small logo.
+- **Result lists with cast:** a "Cast from TMDB" line.
+- **`/help` and `/admin help`:** a **Credits** topic with TMDB's logo and the full notice.
+
+The logo is TMDB's approved short logo, unaltered, as a PNG (Discord can't show SVG). Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. If you use a key, The Movie Database's terms of use apply to you.
 
 ## 5. Admin setup in Discord
 
@@ -342,7 +350,7 @@ Requestarr registers exactly three commands:
 
 - **`/request`** is visible to everyone. Its type list is filled in for each person from their own access, so someone without TV access never sees TV.
 - **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
-- **`/admin`** holds every admin command: `/admin user …`, `/admin queue`, `/admin approve`, `/admin deny`, `/admin mediaserver …` and `/admin help`. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
+- **`/admin`** holds every admin command: `/admin user …`, `/admin queue`, `/admin approve`, `/admin deny`, `/admin available`, `/admin cancel`, `/admin mediaserver …` and `/admin help`. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
 Everything else users need is a button: on their pinned panel (5.5) or on their request cards.
 

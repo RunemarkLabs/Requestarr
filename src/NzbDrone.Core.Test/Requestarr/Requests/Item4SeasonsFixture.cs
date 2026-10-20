@@ -20,14 +20,14 @@ namespace Requestarr.Core.Test.Requests
         }
 
         [Test]
-        public async Task long_shows_should_offer_the_latest_seasons_within_25_options()
+        public async Task long_shows_page_their_seasons_within_discord_limits()
         {
-            var menu = (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.TvChoose}:{LongShow}").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)))).LastReply.SelectMenu;
+            var step = (await Harness.SendAsync(FakeInteraction.Button($"{RequestRoutes.TvChoose}:{LongShow}").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)))).LastReply;
 
-            menu.Options.Count.Should().Be(DiscordLimits.ChoicesPerMenu);
-            menu.Options[0].Value.Should().Be("s17");
-            menu.Options[^2].Value.Should().Be("s40");
-            menu.Options[^1].Value.Should().Be("future");
+            step.SelectMenu.Options.Count.Should().Be(RequestCards.SeasonsPerPage);
+            step.SelectMenu.Options[0].Value.Should().Be("s1");
+            step.SelectMenu.Options[^1].Value.Should().Be("s24");
+            step.Buttons.First().Label.Should().Be("Seasons 25–40 ▶");
         }
 
         [Test]

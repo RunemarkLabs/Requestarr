@@ -18,9 +18,12 @@ namespace Requestarr.Core.Discord.Help
 
     // Who is reading: the content types they can request and whether Plex is linked.
     // Everything is the admin's view of user help and an admin who isn't a user.
-    public record HelpViewer(IReadOnlyCollection<ContentType> Types, bool Linked)
+    // Tmdb: a The Movie Database key is set, so its credits are shown.
+    public record HelpViewer(IReadOnlyCollection<ContentType> Types, bool Linked, bool Tmdb = false)
     {
         public static HelpViewer Everything => new(ContentTypes.Requestable, false);
+
+        public HelpViewer WithTmdb(bool on) => this with { Tmdb = on };
     }
 
     // A topic names the commands and buttons it explains; their usage and labels come from the
@@ -34,6 +37,9 @@ namespace Requestarr.Core.Discord.Help
         public Func<HelpViewer, string> Intro { get; init; }
         public IReadOnlyList<string> Commands { get; init; } = Array.Empty<string>();
         public IReadOnlyList<PanelButton> Buttons { get; init; } = Array.Empty<PanelButton>();
+
+        // The credits topic carries The Movie Database's logo.
+        public bool ShowsTmdbLogo { get; init; }
     }
 
     public static class HelpCatalog
@@ -48,6 +54,17 @@ namespace Requestarr.Core.Discord.Help
         public static readonly IReadOnlyList<string> AdminEntryCommands = new[] { "admin help" };
         public static readonly IReadOnlyList<PanelButton> UserEntryButtons = new[] { PanelButtons.Help };
         public static readonly IReadOnlyList<PanelButton> AdminEntryButtons = new[] { PanelButtons.AdminHelp };
+
+        // The about / credits area The Movie Database's terms ask for; only while a key is set.
+        public static readonly HelpTopic Credits = new()
+        {
+            Key = "credits",
+            Title = "Credits",
+            Summary = "Where cast data comes from",
+            Visible = v => v.Tmdb,
+            Intro = _ => DiscordText.TmdbNotice,
+            ShowsTmdbLogo = true
+        };
 
         public static readonly IReadOnlyList<HelpTopic> UserTopics = new[]
         {
@@ -105,7 +122,8 @@ namespace Requestarr.Core.Discord.Help
                 Visible = v => !v.Linked,
                 Intro = _ => "Enter your Plex username or email. The admin approves it, and the button disappears once your account is linked.",
                 Buttons = new[] { PanelButtons.LinkPlex }
-            }
+            },
+            Credits
         };
 
         public static readonly IReadOnlyList<HelpTopic> AdminTopics = new[]
@@ -124,8 +142,8 @@ namespace Requestarr.Core.Discord.Help
                 Key = "approvals",
                 Title = "Approvals and the queue",
                 Summary = "Approve or deny requests",
-                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
-                Commands = new[] { "admin queue", "admin approve", "admin deny" },
+                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. `/request` in this channel requests as you, skipping approval and limits.",
+                Commands = new[] { "admin queue", "admin approve", "admin deny", "admin available", "admin cancel" },
                 Buttons = new[] { PanelButtons.PendingQueue }
             },
             new HelpTopic
@@ -150,14 +168,14 @@ namespace Requestarr.Core.Discord.Help
                 Title = "The admin role and command visibility",
                 Summary = "Who is an admin, who sees /admin",
                 Intro = _ => $"Admins are the server owner and anyone with the **{DiscordSettings.DefaultAdminRoleName}** role (or the role set in provisioning). `/admin` only shows to members with Manage Server; to show it to the role, use Server Settings, Integrations, Requestarr. Requestarr re-checks the admin and the channel on every use either way."
-            }
+            },
+            Credits
         };
 
         public static IReadOnlyList<HelpTopic> Topics(HelpTree tree, HelpViewer viewer) =>
-            (tree == HelpTree.Admin ? AdminTopics : UserTopics).Where(t => tree != HelpTree.User || t.Visible(viewer)).ToList();
+            (tree == HelpTree.Admin ? AdminTopics : UserTopics).Where(t => t.Visible(viewer)).ToList();
 
-        // castFromTmdb adds The Movie Database's notice to the overview (its credits page).
-        public static InteractionReply Home(HelpTree tree, HelpViewer viewer, bool castFromTmdb = false)
+        public static InteractionReply Home(HelpTree tree, HelpViewer viewer)
         {
             var overview = tree switch
             {
@@ -168,14 +186,14 @@ namespace Requestarr.Core.Discord.Help
                     : "**Requestarr help**\nYou can't request anything yet; ask the admin for access. Pick a topic."
             };
 
-            return Page(tree, viewer, castFromTmdb ? $"{overview}\n-# {DiscordText.TmdbNotice}" : overview, home: true);
+            return Page(tree, viewer, overview, home: true);
         }
 
-        public static InteractionReply Topic(HelpTree tree, HelpViewer viewer, string key, bool castFromTmdb = false)
+        public static InteractionReply Topic(HelpTree tree, HelpViewer viewer, string key)
         {
             var topic = Topics(tree, viewer).FirstOrDefault(t => t.Key == key);
 
-            return topic == null ? Home(tree, viewer, castFromTmdb) : Page(tree, viewer, $"**{topic.Title}**\n{Body(topic, viewer)}", home: false);
+            return topic == null ? Home(tree, viewer) : Page(tree, viewer, $"**{topic.Title}**\n{Body(topic, viewer)}", home: false, topic);
         }
 
         public static string Body(HelpTopic topic, HelpViewer viewer)
@@ -197,7 +215,7 @@ namespace Requestarr.Core.Discord.Help
             return DiscordLimits.Truncate(string.Join("\n", lines), DiscordLimits.MessageLength - 100);
         }
 
-        private static InteractionReply Page(HelpTree tree, HelpViewer viewer, string content, bool home)
+        private static InteractionReply Page(HelpTree tree, HelpViewer viewer, string content, bool home, HelpTopic topic = null)
         {
             var options = Topics(tree, viewer).Select(t => new InteractionSelectOption(t.Title, t.Key, t.Summary)).ToList();
 
@@ -218,6 +236,9 @@ namespace Requestarr.Core.Discord.Help
             {
                 Content = content,
                 Ephemeral = true,
+                Embeds = topic?.ShowsTmdbLogo == true
+                    ? new List<InteractionEmbed> { new() { Title = DiscordText.TmdbName, Url = DiscordText.TmdbSite, ThumbnailUrl = DiscordText.TmdbLogoUrl } }
+                    : new List<InteractionEmbed>(),
                 SelectMenu = options.Any() ? new InteractionSelectMenu { CustomId = $"{RouteTopic}:{Key(tree)}", Placeholder = "Pick a topic", Options = options } : null,
                 Buttons = buttons
             };

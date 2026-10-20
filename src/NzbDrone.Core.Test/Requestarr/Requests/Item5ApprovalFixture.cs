@@ -33,7 +33,7 @@ namespace Requestarr.Core.Test.Requests
 
             var card = LastAdminMessage;
             card.Content.Should().Contain("Request #1").And.Contain("Dune (2021)").And.Contain("alice");
-            card.Buttons.Select(b => b.CustomId).Should().Equal("req-approve:1", "req-deny:1");
+            card.Buttons.Select(b => b.CustomId).Should().Equal("req-approve:1", "req-deny:1", "req-available:1");
         }
 
         [Test]
