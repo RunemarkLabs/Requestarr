@@ -115,7 +115,7 @@ namespace Requestarr.Core.Discord
         public const string ChooseSeasons = "Pick at least one season, or future seasons.";
         public const string AlreadyRequestedByYou = "You've already requested this.";
         public const string AlreadyFollowing = "You're already following this request.";
-        public const string AlreadyInLibrary = "This is already in the library, so there's nothing to request.";
+        public const string AlreadyInLibrary = "Good news: it's already in the library, ready for you. No request needed.";
         public const string RequestLabel = "Request";
         public const string FollowLabel = "Follow request";
         public const string SearchPlaceholder = "Pick a title";
@@ -142,7 +142,7 @@ namespace Requestarr.Core.Discord
         public const string FinalSent = "✅ **Request sent**";
         public const string FinalPending = "⏳ **Waiting for approval**";
         public const string FinalFollowing = "📌 **Following**";
-        public const string FinalAvailable = "✅ **Already available**";
+        public const string FinalAvailable = "🎉 **Already available**";
         public const string FinalFailed = "⚠️ **Couldn't be added**";
         public const string FinalRefused = "⛔ **Not requested**";
         public const string FinalCancelled = "🚫 **Cancelled**";
@@ -160,11 +160,13 @@ namespace Requestarr.Core.Discord
 
         public const string AlreadyAvailableLabel = "Already available";
 
-        public static string RequestAlreadyAvailableStatus(string label, int id) => $"Request #{id} for {label} is already available.";
+        public static string RequestAlreadyAvailableStatus(string label, int id) => $"Good news: {label} is already in the library, ready for you. Request #{id} is complete.";
 
-        public static string RequestAlreadyAvailableNotice(string label, int id) => $"Your request #{id} for {label} is already available.";
+        public static string RequestAlreadyAvailableNotice(string label, int id) => $"🎉 Good news! {label} (request #{id}) is already in the library, ready for you.";
 
-        public static string AdminMarkedAvailable(Request request) => $"Request #{request.Id} for {request.Label} is marked as already available. The user is told.";
+        public const string AlreadyThereNote = "🎉 Good news: it's already in the library, ready for you. Nothing to request.";
+
+        public static string AdminMarkedAvailable(Request request) => $"Request #{request.Id} for {request.Label} is closed as already available. The user is told the good news.";
 
         public static string RequestDeniedStatus(string label, int id, string reason) => $"Request #{id} for {label} was denied: {reason ?? NoReason}.";
 
@@ -386,7 +388,7 @@ namespace Requestarr.Core.Discord
         public const string NoReason = "no reason given";
         public const string NoRequests = "No requests match.";
         public const string QueueEmpty = "Nothing is waiting for approval.";
-        public const string StateInLibrary = "✅ Already in the library.";
+        public const string StateInLibrary = "🎉 Good news: this is already in the library, ready for you.";
 
         public static string AccessOff(ContentType type) => $"You can't request {Label(type).ToLowerInvariant()}. Ask the admin if you'd like access.";
 

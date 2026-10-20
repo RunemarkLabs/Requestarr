@@ -19,6 +19,9 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Version Version { get; set; }
         public bool Unreachable { get; set; }
         public bool FailAdds { get; set; }
+
+        // The instance already has the title (added outside Requestarr since the lookup).
+        public bool AlreadyAdded { get; set; }
         public List<NamedItem> Profiles { get; } = new() { new(1, "Any"), new(4, "HD-1080p") };
         public List<string> RootFolders { get; } = new() { "/data/media" };
         public List<MediaLookupResult> Catalog { get; } = new();
@@ -45,6 +48,11 @@ namespace Requestarr.Core.Test.Discord.Harness
             if (FailAdds)
             {
                 throw new BackendException("400 BadRequest: validation failed");
+            }
+
+            if (AlreadyAdded)
+            {
+                throw new BackendException("http://radarr-test:7878: HTTP request failed: [400:BadRequest] [POST] [{\"errorMessage\": \"This movie has already been added\"}]");
             }
 
             Adds.Add(new Added(settings.Url, item, profile, root, seriesType, seasons?.ToList(), future));

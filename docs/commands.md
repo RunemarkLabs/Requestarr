@@ -64,12 +64,12 @@ The card also says if the title is:
 | ✅ **Request sent** | Added to Sonarr or Radarr; a search has started. |
 | ⏳ **Waiting for approval** | Waiting for an admin. Has a **Cancel request** button until it's decided. |
 | 📌 **Following** | Someone else asked first; you're notified with them. |
-| ✅ **Already available** | It's in the library. |
+| 🎉 **Already available** | Good news: it's already in the library, ready for you. |
 | ⛔ **Not requested** | Refused, with the reason (for example your limit). |
 
 For TV, the status repeats which seasons were requested.
 
-**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, ✅ **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. You still get a separate message that pings you. Requests made before this version just get the separate message.
+**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, 🎉 **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. Nothing else is posted, so the outcome isn't repeated. If the request message can't be edited (it was deleted, or the request is from before this version), you get a separate message instead.
 
 **Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
