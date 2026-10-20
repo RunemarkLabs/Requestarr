@@ -75,6 +75,10 @@ The card also says if the title is:
 
 For TV, the status repeats which seasons were requested.
 
+**After it's sent**, the message follows the download: ⬇️ **Downloading**, ⚠️ **Download stuck** (with the reason), ⚠️ **Download failed** (Sonarr or Radarr usually tries another release by itself), 🎉 **Partly available** (TV: which seasons are there), and 🎉 **Available** when it's ready to watch. A TV season counts as available when every episode that has aired is there.
+
+**Add seasons** (TV): on the request's message, at any time, also on requests you follow. Pick from the seasons not requested yet (pages for long shows), and optionally **Also new seasons**, then press **Add these seasons**. No approval and no limit. Sonarr starts searching for them straight away; on a request still waiting for approval they go to Sonarr with it. Seasons are never removed here.
+
 **After the admin decides**, your old request message is replaced by a fresh one at the bottom of your channel that mentions you, so you get a ping: ✅ **Approved**, 🎉 **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. It only has the buttons that still apply. The same happens if an anime series is switched to another language, and to the messages of anyone following the request. Nothing else is posted, so the outcome isn't repeated.
 
 - Your own **Cancel request** changes the message in place, without a new message.
@@ -103,6 +107,7 @@ Opens help that only you can see. It starts with a short overview, then you pick
 - TV seasons
 - anime: sub or dub
 - following an existing request
+- downloads and availability
 - my requests and cancelling
 - limits
 - linking Plex
@@ -134,12 +139,16 @@ All admin commands are under `/admin` and only work in `#requestarr-admin`.
 | `/admin approve id:{number}` | Approves a request and sends it to the user's Sonarr or Radarr. The **Approve** button on a request card does the same. |
 | `/admin deny id:{number} [reason]` | Denies a request. The reason is shown to the user. The **Deny** button asks for a reason. |
 | `/admin available id:{number}` | Closes a pending request as **already available**, for when you already have the title. The **Already available** button on a request card does the same. |
-| `/admin cancel id:{number} [reason]` | Cancels a pending request for the user, for example a duplicate. The reason is shown to the user. |
+| `/admin cancel id:{number} [reason]` | Cancels a request for the user, for example a duplicate: while it waits for approval, or once sent until something starts downloading (then the title is unmonitored in Sonarr or Radarr, never deleted). The reason is shown to the user. |
 
 A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead.
 
 When a request is approved, denied or cancelled, the approval card here changes to show it and loses its buttons, and the user's request message is reposted at the bottom of their channel with a mention (see the user section). Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
 | `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |
+
+### The admin feed
+
+`#requestarr-feed` has one small card per request, moved to the bottom on every change: new requests, someone following, approved, denied, cancelled, already available, downloading, stuck or failed, available. Its buttons are only those valid now: **Approve**, **Deny** and **Already available** while it waits; **Cancel request** while it waits or until something starts downloading; **Add seasons** on TV. Your reply comes privately. Account events stay in `#requestarr-admin`.
 
 ### `/admin help`
 
@@ -147,6 +156,8 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 
 - onboarding and access
 - approvals and the queue
+- the admin feed
+- downloads, webhooks and polling
 - limits
 - anime, sub/dub and priority: the Sonarr tags and release profiles, `anime.priority`, and separate sub and dub instances
 - media server requests

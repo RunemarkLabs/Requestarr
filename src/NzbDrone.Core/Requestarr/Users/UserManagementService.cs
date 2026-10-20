@@ -372,6 +372,19 @@ namespace Requestarr.Core.Users
 
             _logger.Info("Requestarr user {0} left the Discord server; suspending", user.DisplayName);
             await SuspendAsync(discordUserId, Actor.System, "member left the server");
+
+            // An account event: the admins hear about it in the admin channel (never the feed).
+            if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
+            {
+                try
+                {
+                    await _gateway.SendMessageAsync(adminChannel, new InteractionReply { Content = DiscordText.MemberLeftAdminNotice(user.DisplayName) });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Could not tell the admins that {0} left", user.DisplayName);
+                }
+            }
         }
 
         public ServiceResult LinkMediaServer(ulong discordUserId, MediaServerProvider provider, string username, Actor actor)

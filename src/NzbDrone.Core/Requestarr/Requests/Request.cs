@@ -24,6 +24,18 @@ namespace Requestarr.Core.Requests
         Available = 5
     }
 
+    // What Sonarr / Radarr are doing with a sent request (Status stays Approved until it's all there).
+    public enum DownloadProgress
+    {
+        None = 0,
+        Downloading = 1,
+        Stalled = 2,
+        Failed = 3,
+
+        // Status Available because it was downloaded and imported (not already in the library).
+        Imported = 4
+    }
+
     public class Request : ModelBase
     {
         public int OwnerUserId { get; set; }
@@ -56,9 +68,27 @@ namespace Requestarr.Core.Requests
 
         public AnimeLanguage? Language { get; set; }
 
+        // Download progress, from Sonarr's / Radarr's webhook and the backup poll. TV: the requested
+        // seasons whose aired episodes all have files. ProgressSizeLeft / ProgressSince spot a download
+        // that stops moving.
+        public DownloadProgress Progress { get; set; }
+        public string ProgressDetail { get; set; }
+        public long? ProgressSizeLeft { get; set; }
+        public DateTime? ProgressSince { get; set; }
+        public List<int> AvailableSeasons { get; set; } = new();
+
+        // The request's card in the admin feed channel, reposted on every change.
+        public string FeedMessageId { get; set; }
+
+        // The poster as the backend gave it when the request was made, for the feed card thumbnail.
+        public string PosterUrl { get; set; }
+
         public int? ExternalId => ContentType == ContentType.Tv ? TvdbId : TmdbId;
 
         public bool IsActive => Status == RequestStatus.Pending || Status == RequestStatus.Approved || Status == RequestStatus.Available;
+
+        // Sent and not finished: Sonarr / Radarr are searching, downloading, or partly there.
+        public bool IsTracked => Status == RequestStatus.Approved && ExternalItemId.HasValue;
 
         public string Label => Titles.WithYear(Title, Year);
     }

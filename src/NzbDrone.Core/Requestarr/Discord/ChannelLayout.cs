@@ -10,6 +10,7 @@ namespace Requestarr.Core.Discord
     public static class ChannelLayout
     {
         public const string AdminChannelName = "requestarr-admin";
+        public const string FeedChannelName = "requestarr-feed";
         public const string RequestCategoryName = "Requestarr Requests";
         public const string UserChannelPrefix = "requests-";
         public const string UserRolePrefix = "requestarr-";

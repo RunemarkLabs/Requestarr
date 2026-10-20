@@ -23,6 +23,20 @@ namespace Requestarr.Core.Backends
         public List<int> Tags { get; set; } = new();
     }
 
+    // One entry in Sonarr's / Radarr's download queue for a title. SeasonNumber is TV only.
+    public record QueueEntry(int? SeasonNumber, string Title, string Status, string TrackedStatus, string TrackedState, long Size, long SizeLeft, string Message);
+
+    // One episode as Sonarr keeps it.
+    public record EpisodeInfo(int SeasonNumber, int EpisodeNumber, DateTime? AirDateUtc, bool HasFile, bool Monitored);
+
+    // What EnsureWebhookAsync did to Requestarr's webhook connection on an instance.
+    public enum WebhookChange
+    {
+        Unchanged,
+        Created,
+        Updated
+    }
+
     // A title as returned by a backend's own lookup (Radarr / Sonarr metadata; no third-party keys).
     public class MediaLookupResult
     {
@@ -91,6 +105,19 @@ namespace Requestarr.Core.Backends
         Task<BackendStatus> GetStatusAsync(BackendSettings settings);
         Task<List<NamedItem>> GetQualityProfilesAsync(BackendSettings settings);
         Task<List<string>> GetRootFoldersAsync(BackendSettings settings);
+
+        // The download queue for one library item (movie or series).
+        Task<List<QueueEntry>> GetQueueAsync(BackendSettings settings, int itemId);
+
+        // Requestarr's own webhook connection (found by its name only; the owner's connections are
+        // never changed). Ensure creates or updates it; Test asks the instance to call it and
+        // returns the instance's error, or null when the call got through.
+        Task<WebhookChange> EnsureWebhookAsync(BackendSettings settings, string url);
+        Task<bool> RemoveWebhookAsync(BackendSettings settings);
+        Task<string> TestWebhookAsync(BackendSettings settings);
+
+        // Stops (or resumes) searching for a library item. Nothing is deleted.
+        Task SetMonitoredAsync(BackendSettings settings, int itemId, bool monitored);
     }
 
     public interface IRadarrApi : IBackendApi
@@ -98,6 +125,9 @@ namespace Requestarr.Core.Backends
         Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term);
         Task<MediaLookupResult> LookupTmdbAsync(BackendSettings settings, int tmdbId);
         Task<int> AddMovieAsync(BackendSettings settings, MediaLookupResult movie, int qualityProfileId, string rootFolder);
+
+        // Whether the library movie has a file; null when it is no longer in the library.
+        Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId);
     }
 
     public interface ISonarrApi : IBackendApi
@@ -113,6 +143,13 @@ namespace Requestarr.Core.Backends
 
         // Replaces a series' tags (the rest of the series is sent back unchanged).
         Task SetSeriesTagsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> tags);
+
+        // Every episode of a library series; null when it is no longer in the library.
+        Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId);
+
+        // Monitors more seasons of a library series (and optionally new ones as they air), then
+        // searches for each added season. Seasons already monitored are left as they are.
+        Task AddSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons, bool monitorFuture);
     }
 
     // Shared v3 API plumbing (Sonarr 4 and Radarr 5 both use /api/v3).
@@ -141,6 +178,134 @@ namespace Requestarr.Core.Backends
             return ((await GetAsync<List<RootFolderResource>>(settings, "rootfolder")) ?? new List<RootFolderResource>()).Select(r => r.Path).ToList();
         }
 
+        public const string WebhookName = "Requestarr (availability)";
+
+        // The events that can change a request: grabbed, imported, upgraded, and a download that
+        // needs a person ("manual interaction required"). Flags an instance's version lacks are skipped.
+        private static readonly string[] WebhookEvents = { "onGrab", "onDownload", "onUpgrade", "onImportComplete", "onManualInteractionRequired" };
+
+        protected abstract string ItemResource { get; }
+
+        protected abstract string QueueItemParameter { get; }
+
+        public async Task<List<QueueEntry>> GetQueueAsync(BackendSettings settings, int itemId)
+        {
+            var records = await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "queue/details", (QueueItemParameter, itemId), ("includeEpisode", true));
+
+            return (records ?? new List<Newtonsoft.Json.Linq.JObject>()).Select(r => new QueueEntry(
+                (int?)r["seasonNumber"] ?? (int?)r["episode"]?["seasonNumber"],
+                (string)r["title"],
+                Text(r["status"]),
+                Text(r["trackedDownloadStatus"]),
+                Text(r["trackedDownloadState"]),
+                (long?)r["size"] ?? 0,
+                (long?)r["sizeleft"] ?? 0,
+                QueueMessage(r))).ToList();
+        }
+
+        public async Task<WebhookChange> EnsureWebhookAsync(BackendSettings settings, string url)
+        {
+            var ours = await FindWebhookAsync(settings);
+            var body = ours ?? (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "notification/schema"))?.FirstOrDefault(n => (string)n["implementation"] == "Webhook")
+                       ?? throw new BackendException($"{settings.Url}: no Webhook connection type");
+            var changed = ours == null;
+
+            body["name"] = WebhookName;
+            changed |= SetField(body, "url", url);
+            changed |= SetField(body, "method", 1);
+
+            foreach (var flag in body.Properties().Where(p => p.Name.StartsWith("on") && p.Value.Type == Newtonsoft.Json.Linq.JTokenType.Boolean).ToList())
+            {
+                var wanted = WebhookEvents.Contains(flag.Name);
+
+                if ((bool)flag.Value != wanted)
+                {
+                    body[flag.Name] = wanted;
+                    changed = true;
+                }
+            }
+
+            if (!changed)
+            {
+                return WebhookChange.Unchanged;
+            }
+
+            // forceSave: keep it even while the instance can't reach Requestarr (Test reports that).
+            if (ours == null)
+            {
+                body.Remove("id");
+                body["tags"] = new Newtonsoft.Json.Linq.JArray();
+                await PostAsync(settings, "notification", body, ("forceSave", true));
+                return WebhookChange.Created;
+            }
+
+            await PutAsync(settings, $"notification/{(int)ours["id"]}", body, ("forceSave", true));
+            return WebhookChange.Updated;
+        }
+
+        public async Task<bool> RemoveWebhookAsync(BackendSettings settings)
+        {
+            var ours = await FindWebhookAsync(settings);
+
+            if (ours == null)
+            {
+                return false;
+            }
+
+            await DeleteAsync(settings, $"notification/{(int)ours["id"]}");
+            return true;
+        }
+
+        public async Task<string> TestWebhookAsync(BackendSettings settings)
+        {
+            var ours = await FindWebhookAsync(settings) ?? throw new BackendException($"{settings.Url}: Requestarr's webhook connection is missing");
+
+            try
+            {
+                await PostAsync(settings, "notification/test", ours);
+                return null;
+            }
+            catch (BackendException ex)
+            {
+                return ex.Message;
+            }
+        }
+
+        public async Task SetMonitoredAsync(BackendSettings settings, int itemId, bool monitored)
+        {
+            var item = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, $"{ItemResource}/{itemId}");
+            item["monitored"] = monitored;
+            await PutAsync(settings, $"{ItemResource}/{itemId}", item);
+        }
+
+        private async Task<Newtonsoft.Json.Linq.JObject> FindWebhookAsync(BackendSettings settings) =>
+            (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "notification"))?.FirstOrDefault(n => (string)n["name"] == WebhookName && (string)n["implementation"] == "Webhook");
+
+        private static string QueueMessage(Newtonsoft.Json.Linq.JObject record)
+        {
+            var messages = record["statusMessages"]?.SelectMany(m => m["messages"]?.Select(x => (string)x) ?? Enumerable.Empty<string>());
+
+            return Text(record["errorMessage"]) ?? messages?.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? Text(record["statusMessages"]?.FirstOrDefault()?["title"]);
+        }
+
+        private static bool SetField(Newtonsoft.Json.Linq.JObject body, string name, object value)
+        {
+            if (body["fields"]?.FirstOrDefault(f => (string)f["name"] == name) is not Newtonsoft.Json.Linq.JObject field)
+            {
+                return false;
+            }
+
+            var token = Newtonsoft.Json.Linq.JToken.FromObject(value);
+
+            if (Newtonsoft.Json.Linq.JToken.DeepEquals(field["value"], token))
+            {
+                return false;
+            }
+
+            field["value"] = token;
+            return true;
+        }
+
         protected async Task<T> GetAsync<T>(BackendSettings settings, string resource, params (string Key, object Value)[] query)
             where T : new()
         {
@@ -162,22 +327,29 @@ namespace Requestarr.Core.Backends
             }
         }
 
-        protected Task<string> PostAsync(BackendSettings settings, string resource, object body) => SendAsync(settings, resource, body, put: false);
+        protected Task<string> PostAsync(BackendSettings settings, string resource, object body, params (string Key, object Value)[] query) => SendAsync(settings, resource, body, System.Net.Http.HttpMethod.Post, query);
 
-        protected Task<string> PutAsync(BackendSettings settings, string resource, object body) => SendAsync(settings, resource, body, put: true);
+        protected Task<string> PutAsync(BackendSettings settings, string resource, object body, params (string Key, object Value)[] query) => SendAsync(settings, resource, body, System.Net.Http.HttpMethod.Put, query);
 
-        private async Task<string> SendAsync(BackendSettings settings, string resource, object body, bool put)
+        protected Task<string> DeleteAsync(BackendSettings settings, string resource) => SendAsync(settings, resource, null, System.Net.Http.HttpMethod.Delete);
+
+        private async Task<string> SendAsync(BackendSettings settings, string resource, object body, System.Net.Http.HttpMethod method, params (string Key, object Value)[] query)
         {
             var builder = Builder(settings, resource);
-            var request = builder.Post().Build();
 
-            if (put)
+            foreach (var (key, value) in query)
             {
-                request.Method = System.Net.Http.HttpMethod.Put;
+                builder.AddQueryParam(key, value);
             }
 
-            request.Headers.ContentType = "application/json";
-            request.SetContent(Json.ToJson(body));
+            var request = builder.Post().Build();
+            request.Method = method;
+
+            if (body != null)
+            {
+                request.Headers.ContentType = "application/json";
+                request.SetContent(Json.ToJson(body));
+            }
 
             try
             {
@@ -247,6 +419,23 @@ namespace Requestarr.Core.Backends
         public RadarrApi(IHttpClient httpClient)
             : base(httpClient)
         {
+        }
+
+        protected override string ItemResource => "movie";
+
+        protected override string QueueItemParameter => "movieId";
+
+        public async Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId)
+        {
+            try
+            {
+                var movie = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, $"movie/{movieId}");
+                return movie == null || (int?)movie["id"] is null or 0 ? null : (bool?)movie["hasFile"] ?? false;
+            }
+            catch (BackendException ex) when (ex.InnerException is HttpException { Response.StatusCode: System.Net.HttpStatusCode.NotFound })
+            {
+                return null;
+            }
         }
 
         public async Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term)
@@ -325,6 +514,55 @@ namespace Requestarr.Core.Backends
         public SonarrApi(IHttpClient httpClient)
             : base(httpClient)
         {
+        }
+
+        protected override string ItemResource => "series";
+
+        protected override string QueueItemParameter => "seriesId";
+
+        public async Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId)
+        {
+            try
+            {
+                var episodes = await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "episode", ("seriesId", seriesId));
+
+                return (episodes ?? new List<Newtonsoft.Json.Linq.JObject>())
+                    .Select(e => new EpisodeInfo((int)e["seasonNumber"], (int)e["episodeNumber"], Date(e["airDateUtc"]), (bool?)e["hasFile"] ?? false, (bool?)e["monitored"] ?? false))
+                    .ToList();
+            }
+            catch (BackendException ex) when (ex.InnerException is HttpException { Response.StatusCode: System.Net.HttpStatusCode.NotFound })
+            {
+                return null;
+            }
+        }
+
+        public async Task AddSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons, bool monitorFuture)
+        {
+            var series = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, $"series/{seriesId}");
+            var added = new List<int>();
+
+            foreach (var season in series["seasons"]?.OfType<Newtonsoft.Json.Linq.JObject>() ?? Enumerable.Empty<Newtonsoft.Json.Linq.JObject>())
+            {
+                if (seasons.Contains((int)season["seasonNumber"]) && !((bool?)season["monitored"] ?? false))
+                {
+                    season["monitored"] = true;
+                    added.Add((int)season["seasonNumber"]);
+                }
+            }
+
+            series["monitored"] = true;
+
+            if (monitorFuture)
+            {
+                series["monitorNewItems"] = "all";
+            }
+
+            await PutAsync(settings, $"series/{seriesId}", series);
+
+            foreach (var season in added)
+            {
+                await PostAsync(settings, "command", new { name = "SeasonSearch", seriesId, seasonNumber = season });
+            }
         }
 
         public async Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term)

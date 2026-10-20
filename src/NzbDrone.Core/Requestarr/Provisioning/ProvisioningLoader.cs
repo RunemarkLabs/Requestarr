@@ -220,6 +220,21 @@ namespace Requestarr.Core.Provisioning
                 }
             }
 
+            if (document.Availability != null)
+            {
+                var url = document.Availability.WebhookUrl;
+
+                if (url.IsNotNullOrWhiteSpace() && (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var parsed) || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps) || parsed.Query.Length > 0))
+                {
+                    yield return "availability.webhookUrl must be an http:// or https:// address without a query, for example http://requestarr:9797";
+                }
+
+                if (document.Availability.PollMinutes is < Requestarr.Core.Availability.AvailabilitySettingsStore.MinPollMinutes)
+                {
+                    yield return $"availability.pollMinutes must be at least {Requestarr.Core.Availability.AvailabilitySettingsStore.MinPollMinutes}";
+                }
+            }
+
             if (document.Backends != null)
             {
                 var all = new List<(string Type, BackendInstanceProvisioning Instance)>();

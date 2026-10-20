@@ -17,6 +17,19 @@ namespace Requestarr.Core.Provisioning
 
         // Optional: cast and episode counts from The Movie Database.
         public TmdbProvisioning Tmdb { get; set; }
+
+        // Optional: how Sonarr and Radarr tell Requestarr about downloads (webhook plus a backup poll).
+        public AvailabilityProvisioning Availability { get; set; }
+    }
+
+    public class AvailabilityProvisioning
+    {
+        // The address Sonarr and Radarr use to reach Requestarr, with any URL base, for example
+        // http://requestarr:9797 on the same Docker network. Left out: polling only.
+        public string WebhookUrl { get; set; }
+
+        // Minutes between backup polls (default 15, at least 5).
+        public int? PollMinutes { get; set; }
     }
 
     public class TmdbProvisioning

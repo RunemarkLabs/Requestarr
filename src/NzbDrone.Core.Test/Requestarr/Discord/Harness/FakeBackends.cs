@@ -33,6 +33,57 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<List<string>> GetRootFoldersAsync(BackendSettings settings) => Run(() => RootFolders.ToList());
 
+        // Download queue per library item, Requestarr's webhook per instance URL, and monitoring.
+        public Dictionary<int, List<QueueEntry>> Queues { get; } = new();
+        public Dictionary<string, string> Webhooks { get; } = new();
+        public List<string> OwnerConnections { get; } = new() { "Owner's Discord", "Owner's webhook" };
+        public bool WebhookUnreachable { get; set; }
+        public int WebhookWrites { get; private set; }
+        public Dictionary<int, bool> Monitored { get; } = new();
+        public bool FailMonitor { get; set; }
+
+        public Task<List<QueueEntry>> GetQueueAsync(BackendSettings settings, int itemId) => Run(() => Queues.GetValueOrDefault(itemId)?.ToList() ?? new List<QueueEntry>());
+
+        public Task<WebhookChange> EnsureWebhookAsync(BackendSettings settings, string url) => Run(() =>
+        {
+            if (Webhooks.TryGetValue(settings.Url, out var current) && current == url)
+            {
+                return WebhookChange.Unchanged;
+            }
+
+            var change = Webhooks.ContainsKey(settings.Url) ? WebhookChange.Updated : WebhookChange.Created;
+            Webhooks[settings.Url] = url;
+            WebhookWrites++;
+            return change;
+        });
+
+        public Task<bool> RemoveWebhookAsync(BackendSettings settings) => Run(() =>
+        {
+            var removed = Webhooks.Remove(settings.Url);
+            WebhookWrites += removed ? 1 : 0;
+            return removed;
+        });
+
+        public Task<string> TestWebhookAsync(BackendSettings settings) =>
+            Run(() => WebhookUnreachable ? $"Unable to send test message: Connection refused ({Webhooks.GetValueOrDefault(settings.Url)})" : null);
+
+        public Task SetMonitoredAsync(BackendSettings settings, int itemId, bool monitored) => Run(() =>
+        {
+            if (FailMonitor)
+            {
+                throw new BackendException("Connection refused");
+            }
+
+            Monitored[itemId] = monitored;
+            return true;
+        });
+
+        public void Downloading(int itemId, long size = 1000, long left = 600, int? season = null) =>
+            Queues[itemId] = new List<QueueEntry> { new(season, "Release", "downloading", "ok", "downloading", size, left, null) };
+
+        public void QueueIssue(int itemId, string status, string trackedStatus, string trackedState, string message, int? season = null) =>
+            Queues[itemId] = new List<QueueEntry> { new(season, "Release", status, trackedStatus, trackedState, 1000, 500, message) };
+
         protected Task<T> Run<T>(Func<T> action)
         {
             if (Unreachable)
@@ -139,6 +190,20 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<int> AddMovieAsync(BackendSettings settings, MediaLookupResult movie, int qualityProfileId, string rootFolder) =>
             Run(() => Add(settings, movie, qualityProfileId, rootFolder, null, null, false));
+
+        // Library movies that have a file (imported), and ones removed from the library.
+        public HashSet<int> Files { get; } = new();
+        public HashSet<int> Gone { get; } = new();
+
+        public Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId) =>
+            Run(() => Gone.Contains(movieId) ? (bool?)null : Files.Contains(movieId));
+
+        // Radarr imported it: the file is there and the queue is empty.
+        public void Imported(int movieId)
+        {
+            Files.Add(movieId);
+            Queues.Remove(movieId);
+        }
     }
 
     // The Movie Database stand-in: cast per (type, TMDB ID), and a record of calls.
@@ -253,6 +318,39 @@ namespace Requestarr.Core.Test.Discord.Harness
             Writes++;
             return true;
         });
+
+        // Episodes per library series (aired or not, with a file or not), and seasons added later.
+        public Dictionary<int, List<EpisodeInfo>> Episodes { get; } = new();
+        public List<(int SeriesId, List<int> Seasons, bool Future)> SeasonAdds { get; } = new();
+        public bool FailSeasonAdds { get; set; }
+
+        public Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId) =>
+            Run(() => Episodes.GetValueOrDefault(seriesId)?.ToList() ?? new List<EpisodeInfo>());
+
+        public Task AddSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons, bool monitorFuture) => Run(() =>
+        {
+            if (FailSeasonAdds)
+            {
+                throw new BackendException("Connection refused");
+            }
+
+            SeasonAdds.Add((seriesId, seasons.ToList(), monitorFuture));
+            return true;
+        });
+
+        // A season of a library series: `aired` episodes already aired (the first `withFiles` of them
+        // downloaded), plus `upcoming` episodes still to air.
+        public void Season(int seriesId, int season, int aired, int withFiles, int upcoming = 0)
+        {
+            var list = Episodes.TryGetValue(seriesId, out var existing) ? existing : Episodes[seriesId] = new List<EpisodeInfo>();
+            list.RemoveAll(e => e.SeasonNumber == season);
+
+            for (var i = 1; i <= aired + upcoming; i++)
+            {
+                var airs = i <= aired ? DateTime.UtcNow.AddDays(-30 + i) : DateTime.UtcNow.AddDays(i);
+                list.Add(new EpisodeInfo(season, i, airs, i <= withFiles && i <= aired, true));
+            }
+        }
 
         // Puts a catalog title in the library as if the owner had added it.
         public int AddToLibrary(int tvdbId, string seriesType = "standard", params int[] tags)

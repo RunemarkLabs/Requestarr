@@ -13,8 +13,8 @@ namespace Requestarr.Core.Test.Polish
     [TestFixture]
     public class Item7HelpFixture : PolishScenario
     {
-        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "mine", "limits", "plex" };
-        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "limits", "mediaserver", "anime", "visibility" };
+        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "plex" };
+        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "feed", "downloads", "limits", "mediaserver", "anime", "visibility" };
 
         private static string[] Topics(InteractionRun run) => run.LastReply.SelectMenu.Options.Select(o => o.Value).ToArray();
 
@@ -43,7 +43,7 @@ namespace Requestarr.Core.Test.Polish
         public async Task topics_a_user_cannot_use_are_not_shown()
         {
             await SetAccess(Alice, "tv", "off");
-            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "mine", "limits", "plex");
+            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "downloads", "mine", "limits", "plex");
 
             await Harness.SendAsync(AdminCommand("user mediaserver", Alice).WithOption("service", "plex").WithOption("username", "alice_plex"));
             Topics(await UserHelp(Alice)).Should().NotContain("plex");
@@ -82,7 +82,7 @@ namespace Requestarr.Core.Test.Polish
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand("help").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             Topics(run).Should().Equal(AllUserTopics);
-            Topics(run).Should().NotContain(AllAdminTopics.Except(new[] { "limits", "anime" }));
+            Topics(run).Should().NotContain(AllAdminTopics.Except(new[] { "limits", "anime", "downloads" }));
             run.LastReply.SelectMenu.Options.Select(o => o.Label).Should().NotContain(HelpCatalog.AdminTopics.Where(t => t.Key != "limits").Select(t => t.Title));
             run.LastReply.SelectMenu.CustomId.Should().Be("help:user");
         }

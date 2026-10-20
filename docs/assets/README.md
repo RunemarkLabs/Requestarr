@@ -12,3 +12,7 @@ Requestarr shows it, small, only while a TMDB key is set:
 It is never more prominent than Requestarr's own branding.
 
 Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. The logo is TMDB's trademark and is used under TMDB's API terms of use; it is not covered by this repository's GPL-3.0 licence.
+
+## feed-card-width.png
+
+A fully transparent 800×1 image. Every card in the admin feed (`#requestarr-feed`) uses it as its embed image, because Discord sizes an embed to its content: with it, all cards are drawn the same width, whatever their text. It shows nothing.

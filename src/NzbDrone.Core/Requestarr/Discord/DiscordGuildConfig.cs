@@ -14,6 +14,10 @@ namespace Requestarr.Core.Discord
         public string AdminQueueChannelId { get; set; }
         public string AdminPanelMessageId { get; set; }
         public List<string> RequestCategoryIds { get; set; } = new();
+
+        // The admin-only feed: one card per request. Seeded with open requests once per channel.
+        public string FeedChannelId { get; set; }
+        public bool FeedSeeded { get; set; }
     }
 
     public interface IDiscordGuildConfigRepository : IBasicRepository<DiscordGuildConfig>

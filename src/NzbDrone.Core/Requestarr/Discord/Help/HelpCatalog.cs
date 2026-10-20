@@ -88,7 +88,8 @@ namespace Requestarr.Core.Discord.Help
                 Intro = _ => $"**{DiscordText.AllSeasons}**: requests every season now, and new seasons as they air, straight away. Specials aren't included.\n" +
                              $"**{DiscordText.ChooseSeasonsLabel}**: pick the seasons you want, and optionally \"{DiscordText.AlsoFutureSeasons}\". Specials are only included if you pick them. " +
                              $"Requestarr then says what you chose in plain words; press **{DiscordText.RequestLabel}** to send it or **{DiscordText.BackLabel}** to change it.\n" +
-                             "Either way, the final status says exactly which seasons were requested."
+                             "Either way, the final status says exactly which seasons were requested.\n" +
+                             $"Later, **{DiscordText.AddSeasonsLabel}** on the request's message adds more seasons (or new seasons as they air) at any time. No approval and no limit; it works on requests you follow too. Seasons are never removed there."
             },
             new HelpTopic
             {
@@ -107,6 +108,15 @@ namespace Requestarr.Core.Discord.Help
                 Summary = "Someone already asked for it",
                 Visible = v => v.Types.Any(),
                 Intro = _ => $"If someone already requested a title, its card shows **{DiscordText.FollowLabel}**. Following doesn't use your limit, and you're told when it's added."
+            },
+            new HelpTopic
+            {
+                Key = "downloads",
+                Title = "Downloads and availability",
+                Summary = "Downloading, stuck, ready to watch",
+                Visible = v => v.Types.Any(),
+                Intro = _ => $"Once a request is sent, its message keeps you posted: {DiscordText.FinalDownloading}, {DiscordText.FinalStalled} or {DiscordText.FinalDownloadFailed} (Sonarr or Radarr usually tries another release by itself), and {DiscordText.FinalReady} when it's ready to watch.\n" +
+                             "For TV, a season counts as available when every episode that has aired is there, and the message says which seasons are ready. Each update replaces the message at the bottom of your channel and mentions you; people following the request get the same."
             },
             new HelpTopic
             {
@@ -155,6 +165,24 @@ namespace Requestarr.Core.Discord.Help
                 Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. `/request` in this channel requests as you, skipping approval and limits.",
                 Commands = new[] { "admin queue", "admin approve", "admin deny", "admin available", "admin cancel" },
                 Buttons = new[] { PanelButtons.PendingQueue }
+            },
+            new HelpTopic
+            {
+                Key = "feed",
+                Title = "The admin feed",
+                Summary = "Every request, newest last",
+                Intro = _ => $"#{ChannelLayout.FeedChannelName} has one small card per request: who asked, which instance, the state, and for TV the seasons. Every change moves its card to the bottom, so the newest activity is last. " +
+                             $"Its buttons are only the ones that make sense now: **{DiscordText.ApproveLabel}**, **{DiscordText.DenyLabel}** and **{DiscordText.AlreadyAvailableLabel}** while it waits; **{DiscordText.CancelLabel}** while it waits or until something starts downloading (a sent title is then unmonitored in Sonarr or Radarr, never deleted); **{DiscordText.AddSeasonsLabel}** on TV. " +
+                             "Approval cards stay in this channel too, and acting in either place updates both and the user's message. Account events (new users, access changes, suspensions, Plex links) stay in this channel, not the feed."
+            },
+            new HelpTopic
+            {
+                Key = "downloads",
+                Title = "Downloads, webhooks and polling",
+                Summary = "How Requestarr hears about downloads",
+                Intro = _ => $"With `availability.webhookUrl` set (the address Sonarr and Radarr use to reach Requestarr), Requestarr adds its own connection, \"{Requestarr.Core.Backends.ArrApiBase.WebhookName}\", to each Sonarr and Radarr; it never changes your own connections. " +
+                             "It also checks every few minutes (`availability.pollMinutes`, 15 by default) in case a call is missed, and `pollingOnly: true` on an instance skips the webhook. If an instance can't reach Requestarr, System → Status says so and the poll still works. " +
+                             "A download counts as stuck when Sonarr or Radarr flag it (stalled, import blocked) or it doesn't move for 6 hours."
             },
             new HelpTopic
             {

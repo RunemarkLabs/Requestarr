@@ -17,7 +17,7 @@ namespace Requestarr.Core.Discord
         ulong? AdminRoleId { get; }
     }
 
-    // Makes sure the admin channel and a request-channel category exist. Existing ones are
+    // Makes sure the admin channel, the admin feed channel and a request-channel category exist. Existing ones are
     // reused (by stored ID, provisioned ID, then name) and only missing ones are created.
     public class GuildSetupService : IGuildSetupService
     {
@@ -66,6 +66,25 @@ namespace Requestarr.Core.Discord
             await EnsureAdminAccess(adminChannel.Value, adminRoleId);
             config.AdminChannelId = adminChannel.ToString();
             config.AdminQueueChannelId = adminChannel.ToString();
+
+            // The admin feed sits next to the admin channel; a new (or different) one is seeded again.
+            var feedChannel = await ExistingOrNull(Parse(config.FeedChannelId)) ?? await _gateway.FindTextChannelAsync(ChannelLayout.FeedChannelName);
+
+            if (feedChannel == null)
+            {
+                var overwrites = ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, adminRoleId);
+                feedChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.FeedChannelName, null, DiscordText.FeedChannelTopic, overwrites);
+                _logger.Info("Created Discord admin feed channel {0}", feedChannel);
+                _audit.Record(Actor.System, "discord.feed-channel.create", "channel", feedChannel.ToString());
+            }
+
+            await EnsureAdminAccess(feedChannel.Value, adminRoleId);
+
+            if (config.FeedChannelId != feedChannel.ToString())
+            {
+                config.FeedChannelId = feedChannel.ToString();
+                config.FeedSeeded = false;
+            }
 
             var categories = new List<string>();
 

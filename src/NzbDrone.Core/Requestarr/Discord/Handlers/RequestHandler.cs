@@ -219,7 +219,7 @@ namespace Requestarr.Core.Discord.Handlers
             if (detail.Error == null && (detail.Value.Item.LibraryId.HasValue || detail.Value.Active != null))
             {
                 await responder.EditAsync(RequestCards.Detail(ContentType.Tv, detail.Value));
-                await responder.Ephemeral(detail.Value.Item.LibraryId.HasValue ? DiscordText.AlreadyThereNote : DiscordText.NothingChanged(RequestCards.StateLine(detail.Value)));
+                await responder.Ephemeral(RequestCards.InLibraryAndDone(detail.Value) ? DiscordText.AlreadyThereNote : DiscordText.NothingChanged(RequestCards.StateLine(detail.Value)));
                 return;
             }
 
@@ -250,10 +250,10 @@ namespace Requestarr.Core.Discord.Handlers
             var state = detail.Value;
 
             // Nothing active to follow any more (denied, cancelled, added), or already yours.
-            if (state.Active == null || state.CallerOwnsActive || state.CallerFollows || state.Item.LibraryId.HasValue)
+            if (state.Active == null || state.CallerOwnsActive || state.CallerFollows || RequestCards.InLibraryAndDone(state))
             {
                 await responder.EditAsync(RequestCards.Detail(type.Value, state));
-                await responder.Ephemeral(state.Item.LibraryId.HasValue ? DiscordText.AlreadyThereNote
+                await responder.Ephemeral(RequestCards.InLibraryAndDone(state) ? DiscordText.AlreadyThereNote
                     : state.Active == null ? DiscordText.NothingToFollow
                     : DiscordText.NothingChanged(RequestCards.StateLine(state)));
                 return;

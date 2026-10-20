@@ -54,6 +54,7 @@ namespace Requestarr.Core.Discord.Gateway
         private readonly Lazy<IGuildSetupService> _guildSetup;
         private readonly Lazy<IUserManagementService> _users;
         private readonly Lazy<IPanelService> _panels;
+        private readonly Lazy<Requestarr.Core.Requests.IRequestFeed> _feed;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
         private readonly SemaphoreSlim _startLock = new(1, 1);
@@ -67,6 +68,7 @@ namespace Requestarr.Core.Discord.Gateway
                                  Lazy<IGuildSetupService> guildSetup,
                                  Lazy<IUserManagementService> users,
                                  Lazy<IPanelService> panels,
+                                 Lazy<Requestarr.Core.Requests.IRequestFeed> feed,
                                  IEventAggregator eventAggregator,
                                  Logger logger)
         {
@@ -75,6 +77,7 @@ namespace Requestarr.Core.Discord.Gateway
             _guildSetup = guildSetup;
             _users = users;
             _panels = panels;
+            _feed = feed;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -225,6 +228,7 @@ namespace Requestarr.Core.Discord.Gateway
                 // Replaces every registered command, so commands from older versions disappear.
                 await guild.BulkOverwriteApplicationCommandAsync(DiscordCommandDefinitions.Build().ToArray());
                 await _panels.Value.EnsureAllAsync();
+                await _feed.Value.SeedAsync();
 
                 _logger.Info("Discord bot ready in server '{0}'", guild.Name);
                 _ready.TrySetResult();
