@@ -57,6 +57,12 @@ The card also says if the title is:
   - **All seasons:** requests every season now, and new seasons as they air, straight away. Specials aren't included.
   - **Choose seasons:** tick seasons in the list, including **Specials** if you want them. Shows with more than 24 seasons have pages: use **◀ / ▶** to move between them, and your ticks are kept. The message shows everything picked so far. **Also new seasons** turns monitoring of future seasons on or off. Press **Continue**, and Requestarr says what you chose in plain words, for example "seasons 1–2 and 36 only; new seasons won't be added". Press **Request** to send it, or **Back** to change your picks.
 
+**Anime: Dub or Sub.** For anime (Sonarr's genre **Anime**), the card first asks **Dub** (English audio) or **Sub** (original audio with subtitles), then the usual season choice. Every step after that shows the language, and so does the final status.
+
+- A series is one language on the server. The card says what an existing series is set to, and the server's rule: dub wins, sub wins, or the first request decides.
+- If the series is already set to the other language and yours wins, the card shows **Switch to Dub** (or **Switch to Sub**). Switching tells everyone on the request. Episodes already downloaded stay as they are; new and missing ones come in the new language.
+- If yours loses, you follow the existing request, and the status says which language it stays.
+
 **The final status** is always one of:
 
 | Status | Meaning |
@@ -69,7 +75,12 @@ The card also says if the title is:
 
 For TV, the status repeats which seasons were requested.
 
-**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, 🎉 **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. Nothing else is posted, so the outcome isn't repeated. If the request message can't be edited (it was deleted, or the request is from before this version), you get a separate message instead.
+**After the admin decides**, your old request message is replaced by a fresh one at the bottom of your channel that mentions you, so you get a ping: ✅ **Approved**, 🎉 **Already available**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. It only has the buttons that still apply. The same happens if an anime series is switched to another language, and to the messages of anyone following the request. Nothing else is posted, so the outcome isn't repeated.
+
+- Your own **Cancel request** changes the message in place, without a new message.
+- A message you're still working through (results, seasons, confirmation) is never moved.
+- If the old message can't be deleted, it just loses its buttons.
+- If there's no message to replace (it was deleted, or the request is from before this version), you get a separate message instead.
 
 **Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
@@ -90,12 +101,13 @@ Opens help that only you can see. It starts with a short overview, then you pick
 
 - requesting and searching by ID
 - TV seasons
+- anime: sub or dub
 - following an existing request
 - my requests and cancelling
 - limits
 - linking Plex
 
-You only see topics you can use: no seasons topic without TV access, no Plex topic once you're linked.
+You only see topics you can use: no seasons or anime topic without TV access, no Plex topic once you're linked.
 
 ## For admins
 
@@ -126,7 +138,7 @@ All admin commands are under `/admin` and only work in `#requestarr-admin`.
 
 A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead.
 
-When a request is approved, denied or cancelled, the user's request message and the approval card here both change to show it, and their buttons disappear. Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
+When a request is approved, denied or cancelled, the approval card here changes to show it and loses its buttons, and the user's request message is reposted at the bottom of their channel with a mention (see the user section). Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
 | `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |
 
 ### `/admin help`
@@ -136,6 +148,7 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 - onboarding and access
 - approvals and the queue
 - limits
+- anime, sub/dub and priority: the Sonarr tags and release profiles, `anime.priority`, and separate sub and dub instances
 - media server requests
 - the admin role and command visibility
 - **What users see**: the full user help, so you can walk someone through theirs

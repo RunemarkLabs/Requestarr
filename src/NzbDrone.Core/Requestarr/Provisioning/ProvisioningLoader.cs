@@ -28,6 +28,7 @@ namespace Requestarr.Core.Provisioning
         private static readonly string[] AuthRequired = { "enabled", "disabledforlocaladdresses" };
         private static readonly string[] LogLevels = { "info", "debug", "trace" };
         private static readonly string[] SeriesTypes = { "standard", "anime", "daily" };
+        private static readonly string[] AnimePriorities = { "dub", "sub", "first" };
 
         private readonly IAppFolderInfo _appFolderInfo;
         private readonly IDiskProvider _diskProvider;
@@ -135,7 +136,7 @@ namespace Requestarr.Core.Provisioning
             }
         }
 
-        private static IEnumerable<string> Validate(ProvisioningDocument document)
+        public static IEnumerable<string> Validate(ProvisioningDocument document)
         {
             if (document.Version != 1)
             {
@@ -254,6 +255,18 @@ namespace Requestarr.Core.Provisioning
                         else if (!SeriesTypes.Contains(instance.SeriesType.ToLowerInvariant()))
                         {
                             yield return $"{label}: seriesType must be one of: {string.Join(", ", SeriesTypes)}";
+                        }
+                    }
+
+                    if (instance.Anime != null)
+                    {
+                        if (type != "sonarr")
+                        {
+                            yield return $"{label}: anime only applies to sonarr";
+                        }
+                        else if (instance.Anime.Priority.IsNotNullOrWhiteSpace() && !AnimePriorities.Contains(instance.Anime.Priority.Trim().ToLowerInvariant()))
+                        {
+                            yield return $"{label}: anime.priority must be one of: {string.Join(", ", AnimePriorities)}";
                         }
                     }
                 }

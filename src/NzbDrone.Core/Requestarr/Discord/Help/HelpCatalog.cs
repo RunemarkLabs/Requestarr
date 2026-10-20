@@ -92,6 +92,16 @@ namespace Requestarr.Core.Discord.Help
             },
             new HelpTopic
             {
+                Key = "anime",
+                Title = "Anime: sub or dub",
+                Summary = "Pick dubbed or subtitled anime",
+                Visible = v => v.Types.Contains(ContentType.Tv),
+                Intro = _ => $"For anime, the card asks **{DiscordText.Label(Requests.AnimeLanguage.Dub)}** (English audio) or **{DiscordText.Label(Requests.AnimeLanguage.Sub)}** (original audio with subtitles) before seasons.\n" +
+                             "A series is one language on the server. The card says which it's set to and the server's rule: dub wins, sub wins, or the first request decides. " +
+                             "Asking for the language that wins switches the series (episodes already downloaded stay; new and missing ones come in the new language). Asking for the other one makes you a follower."
+            },
+            new HelpTopic
+            {
                 Key = "follow",
                 Title = "Following an existing request",
                 Summary = "Someone already asked for it",
@@ -161,6 +171,16 @@ namespace Requestarr.Core.Discord.Help
                 Summary = "Link Plex accounts",
                 Intro = _ => "Users ask with Link Plex on their panel; the card here has Approve and Deny. You can also link an account directly.",
                 Commands = new[] { "admin mediaserver approve", "admin mediaserver deny", "admin user mediaserver" }
+            },
+            new HelpTopic
+            {
+                Key = "anime",
+                Title = "Anime, sub/dub and priority",
+                Summary = "How anime requests are set up in Sonarr",
+                Intro = _ => $"On each Sonarr, Requestarr creates two tags (`{Anime.AnimeDefaults.DubTag}`, `{Anime.AnimeDefaults.SubTag}`) and two release profiles (\"{Anime.AnimeDefaults.DubProfile}\", \"{Anime.AnimeDefaults.SubProfile}\"). It never touches anything else. " +
+                             "Anime is always added as Sonarr's Anime series type; you can switch a series to Standard in Sonarr.\n" +
+                             "Each instance has a priority in provisioning (`anime.priority`: dub, sub or first) and adjustable release terms; `anime.enabled: false` turns sub/dub off there. " +
+                             "Separate sub and dub instances work through per-user instances, but need different root folders (and ideally separate media server libraries), or the show appears twice."
             },
             new HelpTopic
             {

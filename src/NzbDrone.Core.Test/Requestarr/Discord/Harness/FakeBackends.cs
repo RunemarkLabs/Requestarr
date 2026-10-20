@@ -58,9 +58,27 @@ namespace Requestarr.Core.Test.Discord.Harness
             Adds.Add(new Added(settings.Url, item, profile, root, seriesType, seasons?.ToList(), future, tags?.ToList() ?? new List<int>()));
             var libraryId = Adds.Count + 100;
             OnAdded(libraryId, seriesType, tags);
-            Catalog.Single(c => c == item || (c.TmdbId != null && c.TmdbId == item.TmdbId) || (c.TvdbId != null && c.TvdbId == item.TvdbId)).LibraryId = libraryId;
+            Library[(settings.Url, Key(item))] = libraryId;
             return libraryId;
         }
+
+        // Titles added through an instance are in that instance's library only (a catalog LibraryId
+        // means the owner has it everywhere).
+        protected Dictionary<(string Url, string Key), int> Library { get; } = new();
+
+        protected MediaLookupResult CopyFor(BackendSettings settings, MediaLookupResult item)
+        {
+            var copy = Copy(item);
+
+            if (copy != null && !copy.LibraryId.HasValue && Library.TryGetValue((settings.Url, Key(copy)), out var id))
+            {
+                copy.LibraryId = id;
+            }
+
+            return copy;
+        }
+
+        private static string Key(MediaLookupResult item) => item.TvdbId.HasValue ? $"tv{item.TvdbId}" : $"movie{item.TmdbId}";
 
         protected virtual void OnAdded(int libraryId, string seriesType, IReadOnlyCollection<int> tags)
         {
@@ -115,9 +133,9 @@ namespace Requestarr.Core.Test.Discord.Harness
         }
 
         public Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term) =>
-            Run(() => Catalog.Where(c => c.Title.Contains(term, StringComparison.OrdinalIgnoreCase)).Select(Copy).ToList());
+            Run(() => Catalog.Where(c => c.Title.Contains(term, StringComparison.OrdinalIgnoreCase)).Select(c => CopyFor(settings, c)).ToList());
 
-        public Task<MediaLookupResult> LookupTmdbAsync(BackendSettings settings, int tmdbId) => Run(() => Copy(Catalog.FirstOrDefault(c => c.TmdbId == tmdbId)));
+        public Task<MediaLookupResult> LookupTmdbAsync(BackendSettings settings, int tmdbId) => Run(() => CopyFor(settings, Catalog.FirstOrDefault(c => c.TmdbId == tmdbId)));
 
         public Task<int> AddMovieAsync(BackendSettings settings, MediaLookupResult movie, int qualityProfileId, string rootFolder) =>
             Run(() => Add(settings, movie, qualityProfileId, rootFolder, null, null, false));
@@ -176,11 +194,11 @@ namespace Requestarr.Core.Test.Discord.Harness
         }
 
         public Task<List<MediaLookupResult>> LookupAsync(BackendSettings settings, string term) =>
-            Run(() => Catalog.Where(c => c.Title.Contains(term, StringComparison.OrdinalIgnoreCase)).Select(Copy).ToList());
+            Run(() => Catalog.Where(c => c.Title.Contains(term, StringComparison.OrdinalIgnoreCase)).Select(c => CopyFor(settings, c)).ToList());
 
         public Task<MediaLookupResult> LookupTvdbAsync(BackendSettings settings, int tvdbId) => Run(() =>
         {
-            var copy = Copy(Catalog.FirstOrDefault(c => c.TvdbId == tvdbId));
+            var copy = CopyFor(settings, Catalog.FirstOrDefault(c => c.TvdbId == tvdbId));
 
             if (copy?.LibraryId != null)
             {

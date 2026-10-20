@@ -274,7 +274,10 @@ namespace Requestarr.Core.Requests
             if (anime is { Enabled: true })
             {
                 var tags = await _anime.TagsAsync(state.Instance);
-                var existing = state.Active?.Language ?? (item.LibraryId.HasValue ? _anime.LanguageOf(item.TagIds, tags) : null);
+
+                // In the library, Sonarr's tag is the truth (like any title there, it's good news);
+                // otherwise the open request's language.
+                var existing = item.LibraryId.HasValue ? _anime.LanguageOf(item.TagIds, tags) : state.Active?.Language;
                 language ??= AnimeDefaults.Default(anime.Priority, existing);
 
                 if (existing.HasValue && existing != language)
@@ -551,7 +554,7 @@ namespace Requestarr.Core.Requests
         {
             var label = Titles.WithYear(state.Item.Title, state.Item.Year);
 
-            if (state.Active == null)
+            if (state.Item.LibraryId.HasValue || state.Active == null)
             {
                 return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority), null, RequestOutcome.AlreadyAvailable);
             }
@@ -600,14 +603,17 @@ namespace Requestarr.Core.Requests
                 await RefreshOrNotify(request, item, DiscordText.AnimeSwitchedNotice(request.Label, language), DiscordText.AnimeSwitchedNote(language), skipUserId: caller.User?.Id);
             }
 
-            if (state.Active == null)
+            if (item.LibraryId.HasValue || state.Active == null)
             {
                 return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language), null, RequestOutcome.AlreadyAvailable);
             }
 
+            // Re-read: the loop above changed its language.
+            var active = _requests.Find(state.Active.Id);
+
             if (state.CallerOwnsActive)
             {
-                return new RequestResult(true, DiscordText.AnimeSwitchedYours(label, language), state.Active, RequestOutcome.Pending);
+                return new RequestResult(true, DiscordText.AnimeSwitchedYours(label, language), active, RequestOutcome.Pending);
             }
 
             if (!state.CallerFollows)
@@ -616,7 +622,7 @@ namespace Requestarr.Core.Requests
                 _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"switched it to {DiscordText.Label(language)}");
             }
 
-            return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, state.Active.Id), state.Active, RequestOutcome.Following);
+            return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, active.Id), active, RequestOutcome.Following);
         }
 
         public void AttachMessage(int requestId, ulong channelId, ulong messageId)

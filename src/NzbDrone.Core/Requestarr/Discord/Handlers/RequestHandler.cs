@@ -304,8 +304,9 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            // The message now about this request: the owner's while pending, a follower's while following.
-            if (result.Outcome == RequestOutcome.Pending && result.Request.OwnerUserId == caller.User.Id)
+            // The message now about this request: the owner's once pending or sent (a sent anime series
+            // can still switch language), a follower's while following.
+            if (result.Outcome is RequestOutcome.Pending or RequestOutcome.Sent && result.Request.OwnerUserId == caller.User.Id)
             {
                 _requests.AttachMessage(result.Request.Id, interaction.ChannelId, messageId);
             }
