@@ -1,6 +1,6 @@
 """Remove everything Requestarr created in the Discord test server, for a clean UAT start.
 
-Deletes: #requestarr-admin, the "Requestarr Requests" categories and every channel in them
+Deletes: #requestarr-admin, #requestarr-feed, the "Requestarr Requests" categories and every channel in them
 (including archived ones), and the per-user "requestarr-*" roles.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
 
@@ -15,7 +15,7 @@ import urllib.error
 import urllib.request
 
 API = "https://discord.com/api/v10"
-ADMIN_CHANNEL = "requestarr-admin"
+ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed")
 CATEGORY = "Requestarr Requests"
 USER_ROLE_PREFIX = "requestarr-"
 
@@ -44,7 +44,7 @@ def main():
 
     channels = call("GET", f"/guilds/{guild}/channels")
     categories = {c["id"] for c in channels if c["type"] == 4 and c["name"].startswith(CATEGORY)}
-    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] == ADMIN_CHANNEL)]
+    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] in ADMIN_CHANNELS)]
     doomed += [c for c in channels if c["id"] in categories]
 
     for channel in doomed:
@@ -57,7 +57,7 @@ def main():
             print(f"deleted role {role['name']}")
 
     left = call("GET", f"/guilds/{guild}/channels")
-    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] == ADMIN_CHANNEL]
+    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] in ADMIN_CHANNELS]
     print(f"Requestarr channels left in the server: {len(remaining)}")
     sys.exit(1 if remaining else 0)
 
