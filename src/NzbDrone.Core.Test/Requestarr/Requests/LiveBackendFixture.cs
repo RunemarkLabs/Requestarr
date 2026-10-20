@@ -128,6 +128,49 @@ namespace Requestarr.Core.Test.Requests
             LogCard("movie card", movie.LastReply);
         }
 
+        // Choose seasons on a long show: seasons 1, 2 and the last one, picked across pages, then
+        // read back from the test Sonarr.
+        [Test]
+        public async Task long_show_seasons_1_2_and_last_read_back_from_sonarr()
+        {
+            await AddUser(Alice);
+            await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", "tv").WithOption("level", "auto"));
+
+            var results = (await Harness.SendAsync(Search(Alice, "tv", "the simpsons"))).LastReply;
+            var tvdbId = int.Parse(results.SelectMenu.Options.First(o => o.Label == "The Simpsons (1989)").Value);
+
+            var step = (await Click($"{RequestRoutes.TvChoose}:{tvdbId}")).LastReply;
+            Log($"[pages] page 1: {step.SelectMenu.Options.Count} options ({step.SelectMenu.Options.First().Label} … {step.SelectMenu.Options.Last().Label}); buttons {string.Join(" ", step.Buttons.Select(b => $"[{b.Label}]"))}");
+            step = (await Pick(step.SelectMenu.CustomId, "s1", "s2")).LastReply;
+
+            var page = 1;
+            while (step.Buttons.FirstOrDefault(b => b.Label.EndsWith("▶")) is { } next)
+            {
+                step = (await Click(next.CustomId)).LastReply;
+                page++;
+                Log($"[pages] page {page}: {step.SelectMenu.Options.First().Label} … {step.SelectMenu.Options.Last().Label}");
+            }
+
+            var last = step.SelectMenu.Options.Last().Value;
+            step = (await Pick(step.SelectMenu.CustomId, last)).LastReply;
+            Log($"[pages] {step.Content.Split('\n').Last()}");
+
+            var confirm = (await Click(step.Buttons.Single(b => b.Label == DiscordText.ContinueLabel).CustomId)).LastReply;
+            Log($"[confirm] {confirm.Content.Replace("\n", " | ")}");
+            var final = (await Click(confirm.Buttons.First().CustomId)).LastReply;
+            Log($"[final] {final.Content.Replace("\n", " | ")}");
+
+            var series = (await Get(Mocker.Resolve<IHttpClient>(), SonarrUrl, SonarrKey, "series")).Children<JObject>().Single(s => (int)s["tvdbId"] == tvdbId);
+            var monitored = series["seasons"].Where(x => (bool)x["monitored"]).Select(x => (int)x["seasonNumber"]).ToList();
+            Log($"[sonarr] {series["title"]}: {series["seasons"].Count()} seasons in Sonarr; monitored {string.Join(", ", monitored.Select(n => $"S{n}"))}; monitorNewItems={series["monitorNewItems"]}");
+
+            monitored.Should().Equal(1, 2, int.Parse(last.Substring(1)));
+            ((string)series["monitorNewItems"]).Should().Be("none");
+        }
+
+        private Task<InteractionRun> Pick(string customId, params string[] values) =>
+            Harness.SendAsync(FakeInteraction.SelectMenu(customId, values).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+
         private Task<InteractionRun> Click(string customId) =>
             Harness.SendAsync(FakeInteraction.Button(customId).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
