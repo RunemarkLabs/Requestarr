@@ -109,37 +109,50 @@ namespace Requestarr.Core.Discord.Gateway
             return _interaction.RespondWithModalAsync(builder.Build());
         }
 
+        // Each menu takes a row of its own (Discord's limit is 5 rows); buttons follow, 5 to a row.
         public static MessageComponent Components(InteractionReply reply)
         {
-            var hasButtons = reply.Buttons != null && reply.Buttons.Any();
+            var menus = new[] { reply.SelectMenu }.Concat(reply.MoreMenus ?? new List<InteractionSelectMenu>()).Where(m => m != null).ToList();
+            var buttons = reply.Buttons ?? new List<InteractionButton>();
 
-            if (!hasButtons && reply.SelectMenu == null)
+            if (!buttons.Any() && !menus.Any())
             {
                 return null;
             }
 
             var builder = new ComponentBuilder();
+            var row = 0;
 
-            if (reply.SelectMenu != null)
+            foreach (var source in menus.Take(5))
             {
                 var menu = new SelectMenuBuilder()
-                    .WithCustomId(reply.SelectMenu.CustomId)
-                    .WithPlaceholder(DiscordLimits.Truncate(reply.SelectMenu.Placeholder, 150))
-                    .WithMinValues(reply.SelectMenu.MinValues)
-                    .WithMaxValues(Math.Min(reply.SelectMenu.MaxValues, reply.SelectMenu.Options.Count));
+                    .WithCustomId(source.CustomId)
+                    .WithPlaceholder(DiscordLimits.Truncate(source.Placeholder, 150))
+                    .WithMinValues(source.MinValues);
 
-                foreach (var option in reply.SelectMenu.Options.Take(DiscordLimits.ChoicesPerMenu))
+                if (source.Kind == SelectMenuKind.User)
                 {
-                    var label = DiscordLimits.Truncate(option.Label, DiscordLimits.OptionLabelLength);
-                    menu.AddOption(label, option.Value, DiscordLimits.Truncate(option.Description, DiscordLimits.OptionLabelLength), isDefault: option.Default);
+                    menu.WithType(ComponentType.UserSelect).WithMaxValues(source.MaxValues);
+                }
+                else
+                {
+                    menu.WithMaxValues(Math.Min(source.MaxValues, source.Options.Count));
+
+                    foreach (var option in source.Options.Take(DiscordLimits.ChoicesPerMenu))
+                    {
+                        var label = DiscordLimits.Truncate(option.Label, DiscordLimits.OptionLabelLength);
+                        menu.AddOption(label, option.Value, DiscordLimits.Truncate(option.Description, DiscordLimits.OptionLabelLength), isDefault: option.Default);
+                    }
                 }
 
-                builder.WithSelectMenu(menu);
+                builder.WithSelectMenu(menu, row++);
             }
 
-            foreach (var button in reply.Buttons.Take(25))
+            var index = 0;
+
+            foreach (var button in buttons.Take((5 - row) * 5))
             {
-                builder.WithButton(DiscordLimits.Truncate(button.Label, 80), button.CustomId, Map(button.Style), disabled: button.Disabled);
+                builder.WithButton(DiscordLimits.Truncate(button.Label, 80), button.CustomId, Map(button.Style), disabled: button.Disabled, row: row + (index++ / 5));
             }
 
             return builder.Build();

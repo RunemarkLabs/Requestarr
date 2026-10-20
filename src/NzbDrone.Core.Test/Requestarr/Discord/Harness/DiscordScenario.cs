@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -76,7 +77,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
 
             Harness = new InteractionHarness(
-                Mocker.Resolve<UserCommandHandler>(),
+                Mocker.Resolve<AdminConsoleHandler>(),
                 Mocker.Resolve<MediaServerHandler>(),
                 Mocker.Resolve<RequestHandler>(),
                 Mocker.Resolve<ApprovalHandler>(),
@@ -118,9 +119,154 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         protected IUserManagementService Users => Mocker.Resolve<IUserManagementService>();
 
-        // An /admin command as the server owner, in the admin channel ("user add" means /admin user add).
-        protected FakeInteraction AdminCommand(string command, ulong member) =>
-            FakeInteraction.SlashCommand("admin " + command).WithOption("member", member).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+        // One of the old /admin commands ("user add", "user access", ...) for a member, done the way it
+        // is done now (see OldAdminCommand). As the server owner, in the admin channel.
+        protected OldAdminCommand AdminCommand(string command, ulong member) => OldAdmin(command).WithOption("member", member);
+
+        protected OldAdminCommand OldAdmin(string command) => new(command, RunOldAdminAsync);
+
+        // An interaction by the server owner in the admin channel.
+        protected FakeInteraction AsAdmin(FakeInteraction interaction) => interaction.By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+
+        // /admin user {member}: the member's card.
+        protected Task<InteractionRun> MemberCard(ulong member) =>
+            Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin user").WithOption("member", member)));
+
+        // A button on a member card ("adm-suspend" means adm-suspend:{member}).
+        protected Task<InteractionRun> MemberButton(ulong member, string route, string extra = null) =>
+            Harness.SendAsync(AsAdmin(FakeInteraction.Button($"{route}:{member}{(extra != null ? ":" + extra : string.Empty)}")));
+
+        // A choice from one of the member card's menus.
+        protected Task<InteractionRun> MemberMenu(ulong member, string route, string value) =>
+            Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu($"{route}:{member}", value)));
+
+        // A form opened from a member card, submitted.
+        protected Task<InteractionRun> MemberForm(string customId, params (string Field, string Value)[] fields)
+        {
+            var form = FakeInteraction.ModalSubmit(customId);
+
+            foreach (var (field, value) in fields)
+            {
+                form.WithField(field, value);
+            }
+
+            return Harness.SendAsync(AsAdmin(form));
+        }
+
+        // A button on a request card (/admin request), and the deny / cancel forms it opens.
+        protected Task<InteractionRun> RequestCardButton(string customId) => Harness.SendAsync(AsAdmin(FakeInteraction.Button(customId)));
+
+        protected Task<InteractionRun> RequestCardForm(string customId, string reason) =>
+            Harness.SendAsync(AsAdmin(FakeInteraction.ModalSubmit(customId).WithField(RequestRoutes.ReasonField, reason ?? string.Empty)));
+
+        private async Task<InteractionRun> RunOldAdminAsync(OldAdminCommand old)
+        {
+            var member = old.Has("member") ? Convert.ToUInt64(old.Options["member"]) : 0UL;
+            var id = old.Get<int>("id");
+
+            switch (old.Command)
+            {
+                case "user add":
+                {
+                    var add = await MemberButton(member, AdminRoutes.Add);
+
+                    foreach (var type in new[] { "movie", "tv", "music" })
+                    {
+                        if (old.Has(type) && UserFor(member) != null)
+                        {
+                            await MemberMenu(member, AdminRoutes.Access, $"{type}:{old.Get<string>(type)}");
+                        }
+                    }
+
+                    return add;
+                }
+
+                case "user remove":
+                    await MemberButton(member, AdminRoutes.Remove);
+                    return await MemberButton(member, AdminRoutes.RemoveConfirm);
+
+                case "user suspend":
+                    return await MemberButton(member, AdminRoutes.Suspend);
+
+                case "user unsuspend":
+                    return await MemberButton(member, AdminRoutes.Unsuspend);
+
+                case "user info":
+                    return await MemberCard(member);
+
+                case "user access":
+                {
+                    var type = old.Get<string>("type");
+                    var run = await MemberMenu(member, AdminRoutes.Access, $"{type}:{old.Get<string>("level")}");
+
+                    if (old.Has("instance"))
+                    {
+                        var instance = Mocker.Resolve<IBackendService>().FindByName(old.Get<string>("instance"));
+                        run = await MemberMenu(member, AdminRoutes.Instance, $"{type}:{instance?.Id.ToString() ?? old.Get<string>("instance")}");
+                    }
+
+                    return run;
+                }
+
+                case "user quota":
+                {
+                    var type = old.Get<string>("type");
+                    await MemberMenu(member, AdminRoutes.Limit, type);
+                    var fields = new List<(string, string)> { (AdminRoutes.LimitField, old.Get<long>("limit").ToString()) };
+
+                    if (old.Has("days"))
+                    {
+                        fields.Add((AdminRoutes.DaysField, old.Get<long>("days").ToString()));
+                    }
+
+                    return await MemberForm($"{AdminRoutes.LimitForm}:{member}:{type}", fields.ToArray());
+                }
+
+                case "user mediaserver":
+                    await MemberButton(member, AdminRoutes.Plex);
+                    return await MemberForm($"{AdminRoutes.PlexForm}:{member}", (AdminRoutes.PlexField, old.Get<string>("username")));
+
+                case "queue" when old.Has("user"):
+                    return await MemberButton(Convert.ToUInt64(old.Options["user"]), AdminRoutes.Requests);
+
+                case "queue":
+                {
+                    var queue = await Harness.SendAsync(AsAdmin(FakeInteraction.Button(PanelRoutes.AdminQueue)));
+                    return old.Has("type") ? await Harness.SendAsync(AsAdmin(FakeInteraction.Button($"{AdminRoutes.Queue}:{old.Get<string>("type")}"))) : queue;
+                }
+
+                case "approve":
+                    return await RequestCardButton($"{RequestRoutes.Approve}:{id}");
+
+                case "available":
+                    return await RequestCardButton($"{RequestRoutes.Available}:{id}");
+
+                case "deny":
+                {
+                    var click = await RequestCardButton($"{RequestRoutes.Deny}:{id}");
+                    return click.Responder.LastModal == null ? click : await RequestCardForm($"{RequestRoutes.DenyReason}:{id}", old.Get<string>("reason"));
+                }
+
+                case "cancel":
+                {
+                    var click = await RequestCardButton($"{RequestRoutes.AdminCancel}:{id}");
+                    return click.Responder.LastModal == null ? click : await RequestCardForm($"{RequestRoutes.CancelReason}:{id}", old.Get<string>("reason"));
+                }
+
+                case "mediaserver approve":
+                case "mediaserver deny":
+                {
+                    var request = Mocker.Resolve<IMediaServerAccessRequestRepository>().Find(id);
+                    var discordId = request == null ? 0UL : ulong.Parse(Mocker.Resolve<IUserIdentityRepository>().GetForUser(request.UserId).First(i => i.Provider == UserIdentity.DiscordProvider).ExternalId);
+                    return await MemberButton(discordId, AdminRoutes.Link, $"{id}:{(old.Command.EndsWith("approve") ? "a" : "d")}");
+                }
+
+                case "help":
+                    return await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin help")));
+            }
+
+            throw new ArgumentException($"no such old admin command: {old.Command}");
+        }
 
         // /request {type} {query} by a user in their own channel.
         protected FakeInteraction Search(ulong userId, string type, string query) =>

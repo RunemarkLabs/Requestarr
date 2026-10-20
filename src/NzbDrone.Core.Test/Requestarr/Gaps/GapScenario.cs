@@ -49,7 +49,8 @@ namespace Requestarr.Core.Test.Gaps
             return message;
         }
 
+        // A form opened from the request's approval card, submitted.
         protected Task<InteractionRun> AdminModal(string customId, string field, string value) =>
-            Harness.SendAsync(FakeInteraction.ModalSubmit(customId).WithField(field, value).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            Harness.SendAsync(FakeInteraction.ModalSubmit(customId).WithField(field, value).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).OnMessage(ApprovalCardOf(customId)));
     }
 }

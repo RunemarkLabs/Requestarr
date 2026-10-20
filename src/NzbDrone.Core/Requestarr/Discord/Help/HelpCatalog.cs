@@ -151,19 +151,22 @@ namespace Requestarr.Core.Discord.Help
             new HelpTopic
             {
                 Key = "onboarding",
-                Title = "Onboarding and access",
-                Summary = "Add people and set what they may request",
-                Intro = _ => "Adding someone creates their role, private channel and pinned panel. Access per type is off, needs approval, or auto-approve; `instance` sends one user's requests to a specific Sonarr or Radarr.",
-                Commands = new[] { "admin user add", "admin user access", "admin user info", "admin user suspend", "admin user unsuspend", "admin user remove" },
-                Buttons = new[] { PanelButtons.Users }
+                Title = "Members: adding and managing",
+                Summary = "Add people, set access, suspend, remove",
+                Intro = _ => $"**{DiscordText.PanelMembers}** on the admin panel opens Discord's member picker; `/admin user` opens one member's card directly. The card shows only what applies now: **{DiscordText.AddMemberLabel}** for someone new (their role, private channel and panel; Movies and TV start as needs approval, Music off), " +
+                             $"then menus for access per type (off, needs approval, auto-approve), limits, and which Sonarr or Radarr their requests go to, and buttons to link Plex, **{DiscordText.SuspendLabel}** or **{DiscordText.UnsuspendLabel}**, **{DiscordText.RemoveLabel}** (it asks first) and see **{DiscordText.TheirRequestsLabel}**. " +
+                             $"**{DiscordText.PanelUsers}** lists everyone and opens the same card. Every change shows on the card at once.",
+                Commands = new[] { "admin user" },
+                Buttons = new[] { PanelButtons.Members, PanelButtons.Users }
             },
             new HelpTopic
             {
                 Key = "approvals",
                 Title = "Approvals and the queue",
                 Summary = "Approve or deny requests",
-                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. `/request` in this channel requests as you, skipping approval and limits.",
-                Commands = new[] { "admin queue", "admin approve", "admin deny", "admin available", "admin cancel" },
+                Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. " +
+                             $"`/admin request` opens any request's card by number or title, with the same buttons as its feed card; **{DiscordText.PanelPendingQueue}** lists what waits, filters by type, and opens the cards. **{DiscordText.CancelLabel}** asks for an optional reason shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
+                Commands = new[] { "admin request" },
                 Buttons = new[] { PanelButtons.PendingQueue }
             },
             new HelpTopic
@@ -189,16 +192,16 @@ namespace Requestarr.Core.Discord.Help
                 Key = "limits",
                 Title = "Limits",
                 Summary = "Requests per rolling window",
-                Intro = _ => "A quota is per user and per type, over a rolling window (7 days unless you set `days`). `limit:0` removes it. Users see theirs under My limits.",
-                Commands = new[] { "admin user quota" }
+                Intro = _ => $"A limit is per member and per type, over a rolling window (7 days unless you set the days). Set it from the member card's **{DiscordText.SetLimitPlaceholder}** menu; 0 removes it. Users see theirs under My limits.",
+                Commands = new[] { "admin user" }
             },
             new HelpTopic
             {
                 Key = "mediaserver",
                 Title = "Media server requests",
                 Summary = "Link Plex accounts",
-                Intro = _ => "Users ask with Link Plex on their panel; the card here has Approve and Deny. You can also link an account directly.",
-                Commands = new[] { "admin mediaserver approve", "admin mediaserver deny", "admin user mediaserver" }
+                Intro = _ => $"Users ask with Link Plex on their panel; the card here has Approve and Deny, and the member's card shows the waiting request with **{DiscordText.ApproveLinkLabel}** and **{DiscordText.DenyLinkLabel}**. **{DiscordText.AdminLinkPlexLabel}** on a member card links an account directly.",
+                Commands = new[] { "admin user" }
             },
             new HelpTopic
             {

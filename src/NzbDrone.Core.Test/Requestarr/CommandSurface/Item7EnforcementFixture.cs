@@ -31,7 +31,7 @@ namespace Requestarr.Core.Test.CommandSurface
         [Test]
         public async Task admin_command_from_a_non_admin_is_refused_even_if_discord_showed_it()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminOnly);
             UserFor(Bob).Status.Should().Be(UserStatus.Active);
@@ -40,7 +40,7 @@ namespace Requestarr.Core.Test.CommandSurface
         [Test]
         public async Task admin_command_outside_the_admin_channel_is_refused_for_the_owner_too()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin queue").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.Button(PanelRoutes.AdminQueue).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
         }

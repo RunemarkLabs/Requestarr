@@ -73,7 +73,7 @@ namespace Requestarr.Core.Test.Requests
             var config = await FreshSetup(Settings());
             var role = ulong.Parse(config.AdminRoleId);
 
-            var interaction = FakeInteraction.SlashCommand("admin user info").By(Bob).WithRoles(role).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
+            var interaction = FakeInteraction.SlashCommand("admin user").WithOption("member", Alice).By(Bob).WithRoles(role).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
 
             Mocker.Resolve<ICallerResolver>().Resolve(interaction).IsAdmin.Should().BeTrue();
         }
@@ -102,7 +102,7 @@ namespace Requestarr.Core.Test.Requests
         {
             await AddUser(Alice);
 
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin queue").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.Button(PanelRoutes.AdminQueue).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminOnly);
         }

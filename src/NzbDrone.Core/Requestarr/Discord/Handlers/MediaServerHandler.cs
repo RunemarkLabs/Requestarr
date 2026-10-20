@@ -5,7 +5,7 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
 {
-    // /admin mediaserver approve|deny and the Approve / Deny buttons on access-request cards.
+    // The Approve / Deny buttons on access-request cards (the member card can decide them too).
     // Users ask for access with the Link Plex button on their panel (PanelHandler).
     public class MediaServerHandler : IInteractionHandler
     {
@@ -20,8 +20,6 @@ namespace Requestarr.Core.Discord.Handlers
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
-            (InteractionKind.SlashCommand, "admin mediaserver approve"),
-            (InteractionKind.SlashCommand, "admin mediaserver deny"),
             (InteractionKind.Button, MediaServerRoutes.Approve),
             (InteractionKind.Button, MediaServerRoutes.Deny)
         };
@@ -29,21 +27,6 @@ namespace Requestarr.Core.Discord.Handlers
         public async Task HandleAsync(DiscordInteraction interaction, IInteractionResponder responder)
         {
             var caller = _callers.Resolve(interaction);
-
-            if (interaction.Kind == InteractionKind.SlashCommand)
-            {
-                if (caller.AdminDenial != null)
-                {
-                    await responder.Ephemeral(caller.AdminDenial);
-                    return;
-                }
-
-                var id = (int)(interaction.GetInteger("id") ?? 0);
-                var approveCommand = interaction.CommandName == "admin mediaserver approve";
-                await responder.DeferAsync();
-                await responder.Reply(await _users.DecideAccessRequestAsync(id, approveCommand, HandlerSupport.ActorFor(interaction, caller), interaction.DisplayName ?? interaction.Username));
-                return;
-            }
 
             // Buttons: the custom ID only says which request; authority comes from the clicking member.
             if (caller.AdminDenial != null)

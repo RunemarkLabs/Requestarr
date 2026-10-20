@@ -47,14 +47,18 @@ namespace Requestarr.Core.Test.Requests
         protected Task<InteractionRun> RequestTv(ulong user, int tvdbId, params string[] picks) =>
             Harness.SendAsync(FakeInteraction.SelectMenu($"{RequestRoutes.Seasons}:{tvdbId}", picks).By(user).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(user)));
 
+        // A button on the request's approval card in the admin channel.
         protected Task<InteractionRun> AdminButton(string customId) =>
-            Harness.SendAsync(FakeInteraction.Button(customId).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            Harness.SendAsync(FakeInteraction.Button(customId).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).OnMessage(ApprovalCardOf(customId)));
 
-        protected Task<InteractionRun> Admin(string command) =>
-            Harness.SendAsync(FakeInteraction.SlashCommand("admin " + command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+        // The approval card a "req-…:{id}" custom ID belongs to (null when it has none).
+        protected ulong? ApprovalCardOf(string customId) =>
+            int.TryParse(customId.Split(':').Last(), out var id) && ulong.TryParse(RequestStore.Find(id)?.AdminMessageId, out var card) ? card : null;
 
-        protected FakeInteraction AdminSlash(string command) =>
-            FakeInteraction.SlashCommand("admin " + command).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel);
+        // An old /admin command ("queue", "approve", ...), done the way it is done now (see OldAdminCommand).
+        protected Task<InteractionRun> Admin(string command) => OldAdmin(command).RunAsync();
+
+        protected OldAdminCommand AdminSlash(string command) => OldAdmin(command);
 
         protected Request LastRequest => RequestStore.All().OrderBy(r => r.Id).Last();
 

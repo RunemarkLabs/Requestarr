@@ -133,7 +133,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         {
             await PendingMovie(Alice, Dune);
 
-            var run = await FeedClick(1, "req-admin-cancel:1");
+            var run = await FeedCancel(1);
 
             Reload(1).Status.Should().Be(RequestStatus.Cancelled);
             run.LastReply.Content.Should().Be(DiscordText.AdminCancelled(Reload(1)));
@@ -146,9 +146,10 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         {
             var request = await SentMovie();
 
-            var run = await FeedClick(request.Id, $"req-admin-cancel:{request.Id}");
+            var run = await FeedCancel(request.Id, "changed my mind");
 
             Reload(request.Id).Status.Should().Be(RequestStatus.Cancelled);
+            Reload(request.Id).DecisionReason.Should().Be("changed my mind");
             Radarr.Monitored[101].Should().BeFalse("it is unmonitored in Radarr, not deleted");
             run.LastReply.Content.Should().Contain("stays in Radarr").And.Contain("no longer monitored").And.Contain("Nothing was deleted");
             AuditTrail.Last(a => a.Action == "request.cancel").Detail.Should().StartWith("unmonitored on Radarr");
@@ -160,7 +161,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             var request = await SentMovie();
             Radarr.FailMonitor = true;
 
-            var run = await FeedClick(request.Id, $"req-admin-cancel:{request.Id}");
+            var run = await FeedCancel(request.Id);
 
             Reload(request.Id).Status.Should().Be(RequestStatus.Approved);
             run.LastReply.Content.Should().Be(DiscordText.CancelNotStopped(Reload(request.Id), "Radarr"));

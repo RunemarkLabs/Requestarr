@@ -112,7 +112,7 @@ namespace Requestarr.Core.Test.Gaps
             users = Mocker.Resolve<UserManagementService>();
             Mocker.SetConstant(users);
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
-            var handlers = new IInteractionHandler[] { Mocker.Resolve<UserCommandHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>() };
+            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>() };
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
 
             try
@@ -125,7 +125,7 @@ namespace Requestarr.Core.Test.Gaps
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
                 var target = members.First(m => !m.IsBot && m.Id != guild.OwnerId);
 
-                await Send(dispatcher, FakeInteraction.SlashCommand("admin user add").WithOption("member", target.Id).By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                await Send(dispatcher, FakeInteraction.Button($"adm-add:{target.Id}").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 var channel = ulong.Parse(users.FindByDiscordId(target.Id).PrivateChannelId);
                 Log($"[setup] {target.Username} added; request channel {channel}");
 
@@ -145,7 +145,7 @@ namespace Requestarr.Core.Test.Gaps
 
                 await Send(dispatcher, FakeInteraction.Button("req-approve:1").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 await Send(dispatcher, FakeInteraction.ModalSubmit("req-deny-reason:2").WithField(RequestRoutes.ReasonField, "not something this server collects").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
-                var cancelRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin cancel").WithOption("id", 3L).WithOption("reason", "we already have it").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                var cancelRun = await Send(dispatcher, FakeInteraction.ModalSubmit("req-cancel-reason:3").WithField(RequestRoutes.ReasonField, "we already have it").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[in library] admin closed request #3 with /admin cancel; admin reply: {cancelRun.LastReply.Content}");
                 var discRun = await Send(dispatcher, FakeInteraction.Button("req-available:5").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[on disc] admin pressed Already available on request #5; card now: {discRun.Responder.Replies.First().Content}");

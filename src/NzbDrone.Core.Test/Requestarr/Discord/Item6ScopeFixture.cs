@@ -22,7 +22,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_command_by_non_admin_should_be_rejected()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminOnly);
             run.LastReply.Ephemeral.Should().BeTrue();
@@ -32,7 +32,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_command_in_a_user_channel_should_be_rejected_even_for_admin()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
             UserFor(Bob).Status.Should().Be(UserStatus.Active);
@@ -41,7 +41,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task admin_role_member_can_run_admin_commands_in_admin_channel()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin user suspend").WithOption("member", Bob).By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            var run = await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             run.LastReply.Content.Should().Be(DiscordText.UserSuspendedDone("bob"));
         }
@@ -49,7 +49,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task commands_from_another_server_should_be_rejected()
         {
-            var run = await Harness.SendAsync(AdminCommand("user info", Alice).InGuild(123));
+            var run = await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin user").WithOption("member", Alice)).InGuild(123));
 
             run.LastReply.Content.Should().Be(DiscordText.WrongServer);
         }

@@ -15,6 +15,7 @@ using Requestarr.Core.Test.Requests;
 namespace Requestarr.Core.Test.CommandSurface
 {
     // Item 4: every admin command lives under /admin, hidden from non-admins; old commands are gone.
+    // Task 3b: /admin has exactly three subcommands (user, request, help).
     [TestFixture]
     public class Item4AdminPrefixFixture : RequestScenario
     {
@@ -35,27 +36,16 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             var admin = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().Single(c => c.Name.Value == "admin");
 
-            var paths = new List<string>();
+            admin.Options.Value.Should().OnlyContain(o => o.Type == ApplicationCommandOptionType.SubCommand);
+            admin.Options.Value.Select(o => o.Name).Should().Equal("user", "request", "help");
 
-            foreach (var option in admin.Options.Value)
-            {
-                if (option.Type == ApplicationCommandOptionType.SubCommandGroup)
-                {
-                    paths.AddRange(option.Options.Select(o => $"{option.Name} {o.Name}"));
-                }
-                else
-                {
-                    paths.Add(option.Name);
-                }
-            }
+            var user = admin.Options.Value.Single(o => o.Name == "user").Options.Single();
+            (user.Name, user.Type, user.IsRequired).Should().Be(("member", ApplicationCommandOptionType.User, true));
 
-            var expected = new[]
-            {
-                "user add", "user remove", "user suspend", "user unsuspend", "user access", "user quota", "user info", "user mediaserver",
-                "help", "queue", "approve", "available", "cancel", "deny", "mediaserver approve", "mediaserver deny"
-            };
-
-            paths.Should().BeEquivalentTo(expected);
+            var request = admin.Options.Value.Single(o => o.Name == "request").Options.Single();
+            (request.Name, request.Type, request.IsAutocomplete, request.IsRequired).Should().Be(("request", ApplicationCommandOptionType.String, true, true));
+            admin.Options.Value.Single(o => o.Name == "help").Options.Should().BeNullOrEmpty();
+            DiscordCommandDefinitions.Leaves().Select(l => l.Path).Should().Equal("request", "help", "admin user", "admin request", "admin help");
         }
 
         [Test]
@@ -79,6 +69,20 @@ namespace Requestarr.Core.Test.CommandSurface
         [TestCase("quota")]
         [TestCase("mediaserver request")]
         [TestCase("request movie")]
+        [TestCase("admin user add")]
+        [TestCase("admin user access")]
+        [TestCase("admin user quota")]
+        [TestCase("admin user suspend")]
+        [TestCase("admin user remove")]
+        [TestCase("admin user info")]
+        [TestCase("admin user mediaserver")]
+        [TestCase("admin queue")]
+        [TestCase("admin approve")]
+        [TestCase("admin deny")]
+        [TestCase("admin available")]
+        [TestCase("admin cancel")]
+        [TestCase("admin mediaserver approve")]
+        [TestCase("admin mediaserver deny")]
         public async Task old_top_level_commands_are_no_longer_handled(string old)
         {
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand(old).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));

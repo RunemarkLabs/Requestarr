@@ -4,7 +4,7 @@ Requestarr registers exactly three Discord commands:
 
 - **`/request`** for everyone.
 - **`/help`** for everyone.
-- **`/admin`** for admins only. It's hidden from members without Manage Server.
+- **`/admin`** for admins only: `/admin user`, `/admin request` and `/admin help`. It's hidden from members without Manage Server.
 
 Everything else is a button, on a pinned panel or on a card.
 
@@ -116,45 +116,39 @@ You only see topics you can use: no seasons or anime topic without TV access, no
 
 ## For admins
 
-All admin commands are under `/admin` and only work in `#requestarr-admin`.
+There are three admin commands, all under `/admin`, visible only to members with Manage Server, and working only in `#requestarr-admin`. Everything else is a button, menu or short form on the admin panel, on the cards these commands open, on approval cards and on the admin feed. Every click is checked again on the server; what you see is only a hint.
 
-### Users
+### `/admin user member:@someone`
 
-| Command | What it does |
+Opens that member's card, visible only to you, with only what applies to them now. Every change updates the card at once; the result comes privately.
+
+| Member | The card offers |
 |---|---|
-| `/admin user add member:@someone [movie] [tv] [music]` | Adds a member. Creates their role, private channel and panel, and sets their access. Defaults: Movies and TV need approval; Music is off. |
-| `/admin user access member:@someone type:{Movies\|TV\|Music} level:{Off\|Needs approval\|Auto-approve} [instance:{name}]` | Changes one content type. `instance` sends that user's requests of that type to a specific Sonarr or Radarr. The user's panel updates. |
-| `/admin user quota member:@someone type:{…} limit:{n} [days:{n}]` | Limits requests per rolling window (default 7 days). `limit:0` removes the limit. |
-| `/admin user info member:@someone` | Shows status, channel, access levels, quotas, and the linked media server account. |
-| `/admin user suspend member:@someone` | Locks their channel. |
-| `/admin user unsuspend member:@someone` | Unlocks it. If they rejoined the server, their role is given back. |
-| `/admin user remove member:@someone` | Archives their channel, deletes their role, and keeps their history. |
-| `/admin user mediaserver member:@someone service:Plex username:{name}` | Links their Plex account. Their Link Plex button disappears. |
+| Not a Requestarr user (or removed) | **Add to Requestarr**: creates their role, private channel and panel. Movies and TV start as needs approval, Music off. |
+| Active | **Change access…** (each type: off, needs approval, auto-approve; the current one is marked), **Set a limit…** (a type, then requests per window and days; 0 removes it), **Send requests to…** (only when a type has several Sonarr or Radarr instances), **Link Plex…**, **Suspend**, **Remove** (asks first), **Their requests**. |
+| Suspended | The same, with **Unsuspend** instead of Suspend. Unsuspend gives their role back if they rejoined. |
+| Waiting for a Plex link they asked for | Also **Approve Plex link** and **Deny Plex link**. |
 
-### Requests
+### `/admin request request:{number or title}`
 
-| Command | What it does |
+Opens a request's card, visible only to you, with the same buttons as its feed card in its current state. Type its number (`12` or `#12`) or part of its title; the title autocompletes from existing requests, and several matches give a list to pick from.
+
+| Request | Buttons |
 |---|---|
-| `/admin queue [user] [type]` | Lists requests waiting for approval. |
-| `/admin approve id:{number}` | Approves a request and sends it to the user's Sonarr or Radarr. The **Approve** button on a request card does the same. |
-| `/admin deny id:{number} [reason]` | Denies a request. The reason is shown to the user. The **Deny** button asks for a reason. |
-| `/admin available id:{number}` | Closes a pending request as **already available**, for when you already have the title. The **Already available** button on a request card does the same. |
-| `/admin cancel id:{number} [reason]` | Cancels a request for the user, for example a duplicate: while it waits for approval, or once sent until something starts downloading (then the title is unmonitored in Sonarr or Radarr, never deleted). The reason is shown to the user. |
+| Waiting for approval | **Approve**, **Deny** (asks for a reason), **Already available**, **Cancel request** (asks for an optional reason), and **Add seasons** on TV |
+| Sent, nothing downloading yet | **Cancel request** (the title is unmonitored in Sonarr or Radarr, never deleted), **Add seasons** on TV |
+| Downloading, available | **Add seasons** on TV |
+| Denied, cancelled | none |
 
-A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead.
+The card changes in place when you act on it. A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead. A late click changes nothing: you're told why, and the card shows the request as it is.
 
-When a request is approved, denied or cancelled, the approval card here changes to show it and loses its buttons, and the user's request message is reposted at the bottom of their channel with a mention (see the user section). Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
-| `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |
-
-### The admin feed
-
-`#requestarr-feed` has one small card per request, moved to the bottom on every change: new requests, someone following, approved, denied, cancelled, already available, downloading, stuck or failed, available. Its buttons are only those valid now: **Approve**, **Deny** and **Already available** while it waits; **Cancel request** while it waits or until something starts downloading; **Add seasons** on TV. Your reply comes privately. Account events stay in `#requestarr-admin`.
+`/request …` in the admin channel makes a request as yourself. Admin requests skip approval and quotas and use the default instance.
 
 ### `/admin help`
 
 Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 
-- onboarding and access
+- members: adding and managing
 - approvals and the queue
 - the admin feed
 - downloads, webhooks and polling
@@ -166,24 +160,40 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 
 `/help` always shows user help, even to an admin.
 
-### Media server access
-
-| Command | What it does |
-|---|---|
-| `/admin mediaserver approve id:{number}` | Approves a user's access request: links the account. Plex invites follow in a later release. |
-| `/admin mediaserver deny id:{number}` | Denies it. |
-
-The **Approve** and **Deny** buttons on the access-request card do the same.
-
 ### Admin panel
 
-Pinned in `#requestarr-admin`.
+Pinned in `#requestarr-admin`. What it opens is visible only to you.
 
 | Button | What it does |
 |---|---|
-| **Pending queue** | Lists requests waiting for approval. |
-| **Users** | Lists every user with their status, channel and access. |
+| **Pending queue** | What's waiting for approval. Buttons show only Movies, TV or Music; a menu opens any of them as a request card. |
+| **Users** | Every user with their status, channel and access; a menu opens their member card. |
+| **Add or find a member** | Discord's member picker: pick anyone in the server to open their member card and add them from there. |
 | **Help** | Opens admin help, the same as `/admin help`. |
+
+### Approval cards and the admin feed
+
+Requests that need approval post a card in `#requestarr-admin` with **Approve**, **Deny** and **Already available**. When a request is approved, denied or cancelled, the card changes to show it and loses its buttons, and the user's request message is reposted at the bottom of their channel with a mention (see the user section).
+
+`#requestarr-feed` has one small card per request, moved to the bottom on every change: new requests, someone following, approved, denied, cancelled, already available, downloading, stuck or failed, available. Its buttons are the same as the request card's. Your reply comes privately. Account events stay in `#requestarr-admin`.
+
+Media server access requests post a card here with **Approve** and **Deny**; the member's card offers the same.
+
+### Where the old admin commands went
+
+| Before | Now |
+|---|---|
+| `/admin user add` | **Add or find a member** on the panel, or `/admin user`: **Add to Requestarr**, then **Change access…** |
+| `/admin user access` | Member card: **Change access…**, and **Send requests to…** for the instance |
+| `/admin user quota` | Member card: **Set a limit…** |
+| `/admin user info` | `/admin user` (the card itself), or **Users** on the panel |
+| `/admin user suspend` / `unsuspend` | Member card: **Suspend** / **Unsuspend** |
+| `/admin user remove` | Member card: **Remove** (asks first) |
+| `/admin user mediaserver` | Member card: **Link Plex…** |
+| `/admin queue [user] [type]` | **Pending queue** on the panel (type buttons); a member card's **Their requests** for one person |
+| `/admin approve` / `deny` / `available` / `cancel` | The buttons on the approval card, the feed card, or the card from `/admin request` |
+| `/admin mediaserver approve` / `deny` | The access-request card's buttons, or the member card's **Approve Plex link** / **Deny Plex link** |
+| `/admin help` | unchanged |
 
 ## Limits
 

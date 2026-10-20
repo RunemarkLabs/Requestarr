@@ -74,7 +74,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public void server_owner_should_be_admin()
         {
-            var caller = Mocker.Resolve<ICallerResolver>().Resolve(AdminCommand("user info", Alice).Build());
+            var caller = Mocker.Resolve<ICallerResolver>().Resolve(AsAdmin(FakeInteraction.SlashCommand("admin user").WithOption("member", Alice)).Build());
 
             caller.IsAdmin.Should().BeTrue();
             caller.AdminDenial.Should().BeNull();
@@ -83,7 +83,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public void admin_role_member_should_be_admin()
         {
-            var interaction = FakeInteraction.SlashCommand("admin user info").By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
+            var interaction = FakeInteraction.SlashCommand("admin user").WithOption("member", Alice).By(Moderator).WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
 
             Mocker.Resolve<ICallerResolver>().Resolve(interaction).IsAdmin.Should().BeTrue();
         }
@@ -91,7 +91,7 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public void ordinary_member_should_not_be_admin()
         {
-            var interaction = FakeInteraction.SlashCommand("admin user info").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
+            var interaction = FakeInteraction.SlashCommand("admin user").WithOption("member", Alice).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).Build();
 
             Mocker.Resolve<ICallerResolver>().Resolve(interaction).IsAdmin.Should().BeFalse();
         }

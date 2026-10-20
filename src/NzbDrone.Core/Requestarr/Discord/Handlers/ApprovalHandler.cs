@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.Requests;
@@ -7,7 +6,8 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
 {
-    // /queue, /approve, /deny and the buttons on approval cards and admin feed cards (admin only).
+    // The buttons on approval cards, admin feed cards and request cards (/admin request), and the
+    // deny / cancel forms they open. Admin only, in the admin channel or the feed.
     public class ApprovalHandler : IInteractionHandler
     {
         private readonly ICallerResolver _callers;
@@ -25,143 +25,81 @@ namespace Requestarr.Core.Discord.Handlers
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
-            (InteractionKind.SlashCommand, "admin queue"),
-            (InteractionKind.SlashCommand, "admin approve"),
-            (InteractionKind.SlashCommand, "admin deny"),
-            (InteractionKind.SlashCommand, "admin cancel"),
-            (InteractionKind.SlashCommand, "admin available"),
             (InteractionKind.Button, RequestRoutes.Available),
             (InteractionKind.Button, RequestRoutes.Approve),
             (InteractionKind.Button, RequestRoutes.Deny),
             (InteractionKind.Button, RequestRoutes.AdminCancel),
-            (InteractionKind.ModalSubmit, RequestRoutes.DenyReason)
+            (InteractionKind.ModalSubmit, RequestRoutes.DenyReason),
+            (InteractionKind.ModalSubmit, RequestRoutes.CancelReason)
         };
 
         public async Task HandleAsync(DiscordInteraction interaction, IInteractionResponder responder)
         {
             var caller = _callers.Resolve(interaction);
-            var denial = interaction.Kind == InteractionKind.SlashCommand ? caller.AdminDenial : caller.AdminButtonDenial;
 
-            if (denial != null)
+            if (caller.AdminButtonDenial != null)
             {
-                await responder.Ephemeral(denial);
+                await responder.Ephemeral(caller.AdminButtonDenial);
                 return;
             }
 
-            var inFeed = caller.InFeedChannel && interaction.Kind != InteractionKind.SlashCommand;
+            if (!TryId(interaction, out var requestId))
+            {
+                await responder.Ephemeral(DiscordText.RequestNotFound);
+                return;
+            }
+
+            // Which card was clicked: the admin feed, the approval card, or a request card from
+            // /admin request (or the queue). Each is refreshed its own way.
+            var current = _requests.Find(requestId);
+            var mode = caller.InFeedChannel ? CardMode.Feed
+                : current != null && interaction.MessageId?.ToString() == current.AdminMessageId ? CardMode.Approval
+                : CardMode.Request;
 
             var admin = _users.EnsureAdminUser(interaction.UserId, interaction.Username, interaction.DisplayName);
             var actor = HandlerSupport.ActorFor(interaction, caller) with { UserId = admin.Id };
             var adminName = interaction.DisplayName ?? interaction.Username;
 
-            switch (interaction.Kind)
+            var id = requestId;
+
+            switch (interaction.Route)
             {
-                case InteractionKind.SlashCommand when interaction.CommandName == "admin queue":
-                {
-                    var filterId = interaction.GetSnowflake("user");
-                    var filterUser = filterId == null ? null : _users.FindByDiscordId(filterId.Value);
-                    var type = HandlerSupport.ParseType(interaction.GetOption<string>("type"));
-                    var pending = _requests.List(filterUser, filterUser == null, RequestStatus.Pending, type);
-
-                    await responder.Public(pending.Any()
-                        ? string.Join("\n", pending.Take(RequestHandler.MaxListLines).Select(r => DiscordText.RequestLine(r, _requests.OwnerName(r), true)))
-                        : DiscordText.QueueEmpty);
-                    break;
-                }
-
-                case InteractionKind.SlashCommand when interaction.CommandName == "admin approve":
-                    await responder.DeferAsync();
-                    await responder.Reply(await _requests.ApproveAsync((int)(interaction.GetInteger("id") ?? 0), actor, adminName));
+                case RequestRoutes.Available:
+                    await Done(responder, mode, id, () => _requests.MarkAvailableAsync(id, actor, adminName));
                     break;
 
-                case InteractionKind.SlashCommand when interaction.CommandName == "admin deny":
-                    await responder.DeferAsync();
-                    await responder.Reply(await _requests.DenyAsync((int)(interaction.GetInteger("id") ?? 0), interaction.GetOption<string>("reason"), actor, adminName));
+                case RequestRoutes.Approve:
+                    await Done(responder, mode, id, () => _requests.ApproveAsync(id, actor, adminName));
                     break;
 
-                case InteractionKind.SlashCommand when interaction.CommandName == "admin cancel":
-                    await responder.DeferAsync();
-                    await responder.Reply(await _requests.AdminCancelAsync((int)(interaction.GetInteger("id") ?? 0), interaction.GetOption<string>("reason"), actor, adminName));
+                // Deny and Cancel ask for a reason first (optional for Cancel), unless it's too late.
+                case RequestRoutes.Deny when current?.Status != RequestStatus.Pending:
+                    await Done(responder, mode, id, () => Task.FromResult(current == null ? Users.ServiceResult.Fail(DiscordText.RequestNotFound) : Users.ServiceResult.Fail(DiscordText.NotPending(id, current.Status))));
                     break;
 
-                case InteractionKind.SlashCommand when interaction.CommandName == "admin available":
-                    await responder.DeferAsync();
-                    await responder.Reply(await _requests.MarkAvailableAsync((int)(interaction.GetInteger("id") ?? 0), actor, adminName));
-                    break;
-
-                case InteractionKind.Button when interaction.Route == RequestRoutes.Available:
-                {
-                    if (!TryId(interaction, out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
-                    await Done(responder, inFeed, id, () => _requests.MarkAvailableAsync(id, actor, adminName));
-                    break;
-                }
-
-                case InteractionKind.Button when interaction.Route == RequestRoutes.AdminCancel:
-                {
-                    if (!TryId(interaction, out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
-                    await Done(responder, inFeed, id, () => _requests.AdminCancelAsync(id, null, actor, adminName));
-                    break;
-                }
-
-                case InteractionKind.Button when interaction.Route == RequestRoutes.Approve:
-                {
-                    if (!TryId(interaction, out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
-                    await Done(responder, inFeed, id, () => _requests.ApproveAsync(id, actor, adminName));
-                    break;
-                }
-
-                case InteractionKind.Button when interaction.Route == RequestRoutes.Deny:
-                {
-                    // Deny asks for a reason first.
-                    if (!TryId(interaction, out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
-                    var request = _requests.Find(id);
-
-                    if (request == null)
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
-                    if (request.Status != RequestStatus.Pending)
-                    {
-                        await Done(responder, inFeed, id, () => Task.FromResult(Users.ServiceResult.Fail(DiscordText.NotPending(id, request.Status))));
-                        return;
-                    }
-
+                case RequestRoutes.Deny:
                     await responder.ShowModalAsync(RequestCards.DenyReason(id));
                     break;
+
+                case RequestRoutes.AdminCancel when current == null || !RequestService.AdminCanCancel(current):
+                    await Done(responder, mode, id, () => _requests.AdminCancelAsync(id, null, actor, adminName));
+                    break;
+
+                case RequestRoutes.AdminCancel:
+                    await responder.ShowModalAsync(RequestCards.CancelReason(id));
+                    break;
+
+                case RequestRoutes.CancelReason:
+                {
+                    interaction.Fields.TryGetValue(RequestRoutes.ReasonField, out var reason);
+                    await Done(responder, mode, id, () => _requests.AdminCancelAsync(id, reason, actor, adminName));
+                    break;
                 }
 
-                case InteractionKind.ModalSubmit:
+                case RequestRoutes.DenyReason:
                 {
-                    if (!TryId(interaction, out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.RequestNotFound);
-                        return;
-                    }
-
                     interaction.Fields.TryGetValue(RequestRoutes.ReasonField, out var reason);
-                    await Done(responder, inFeed, id, () => _requests.DenyAsync(id, reason, actor, adminName));
+                    await Done(responder, mode, id, () => _requests.DenyAsync(id, reason, actor, adminName));
                     break;
                 }
             }
@@ -170,11 +108,28 @@ namespace Requestarr.Core.Discord.Handlers
         // Approval card: it shows the request's real state (no buttons once decided) and a late click
         // gets a private note. Feed card: a change reposts it at the bottom (the service does that),
         // so the admin gets the outcome privately; a late click reposts the card as it stands.
-        private async Task Done(IInteractionResponder responder, bool inFeed, int id, System.Func<Task<Users.ServiceResult>> action)
+        // Request card (/admin request): it changes in place to the request's card as it now stands,
+        // and the outcome comes privately.
+        private async Task Done(IInteractionResponder responder, CardMode mode, int id, System.Func<Task<Users.ServiceResult>> action)
         {
-            if (!inFeed)
+            if (mode == CardMode.Approval)
             {
                 await RefreshCard(responder, id, await action());
+                return;
+            }
+
+            if (mode == CardMode.Request)
+            {
+                await responder.DeferAsync();
+                var outcome = await action();
+                var now = _requests.Find(id);
+
+                if (now != null)
+                {
+                    await responder.EditAsync(_feed.CardFor(now));
+                }
+
+                await responder.FollowupAsync(new InteractionReply { Content = DiscordLimits.Truncate(outcome.Message, DiscordLimits.MessageLength), Ephemeral = true });
                 return;
             }
 
@@ -209,6 +164,13 @@ namespace Requestarr.Core.Discord.Handlers
             {
                 await responder.Ephemeral(result.Message);
             }
+        }
+
+        private enum CardMode
+        {
+            Approval,
+            Feed,
+            Request
         }
 
         private static bool TryId(DiscordInteraction interaction, out int id)
