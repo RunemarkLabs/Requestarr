@@ -254,6 +254,53 @@ namespace Requestarr.Core.Test.AdminConsole
                 var panelAfter = (await channel.GetPinnedMessagesAsync()).Single();
                 Log($"[plex] their panel buttons after: [{string.Join("] [", Buttons(panelAfter))}]; linked account: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username}");
                 Buttons(panelAfter).Should().NotContain(DiscordText.PanelLinkPlex);
+
+                // 9. Old /admin user mediaserver: the member card's Link Plex form (here: change the link).
+                var plexForm = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Plex}:{target.Id}")));
+                Log($"[plex form] {DiscordText.ChangePlexLabel} opened {plexForm.Responder.LastModal?.CustomId}");
+                var relinked = await Send(dispatcher, AsOwner(FakeInteraction.ModalSubmit($"{AdminRoutes.PlexForm}:{target.Id}").WithField(AdminRoutes.PlexField, "live_test_plex2")));
+                Log($"[plex form] {relinked.LastReply.Content}; linked account now: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username}");
+                Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username.Should().Be("live_test_plex2");
+
+                // 10. Old /admin queue [type] [user]: the panel's Pending queue, its type buttons, and Their requests.
+                await RequestInRealMessage(dispatcher, gateway, guild.Id, channel.Id, target.Id, 438631);
+                var queue = await Send(dispatcher, AsOwner(FakeInteraction.Button(PanelRoutes.AdminQueue)));
+                Log($"[queue] {queue.LastReply.Content.Replace("\n", " | ")} filters=[{string.Join("] [", queue.LastReply.Buttons.Select(b => b.Label))}] menu={queue.LastReply.SelectMenu?.Options.Count ?? 0} option(s)");
+                var movies = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Queue}:movie")));
+                Log($"[queue] Movies: {movies.LastReply.Content.Replace("\n", " | ")}");
+                var tv = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Queue}:tv")));
+                Log($"[queue] TV: {tv.LastReply.Content.Replace("\n", " | ")}");
+                var theirs = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Requests}:{target.Id}")));
+                Log($"[queue] Their requests: {theirs.LastReply.Content.Replace("\n", " | ")}");
+                movies.LastReply.Content.Should().Contain("Dune (2021)");
+                tv.LastReply.Content.Should().Be(DiscordText.QueueEmpty);
+                theirs.LastReply.SelectMenu.Options.Should().HaveCount(requests.All().Count());
+
+                // 11. Old /admin user suspend / unsuspend: the card's buttons; the real channel's lock read back.
+                bool CanPost(global::Discord.Rest.RestTextChannel c) => c.PermissionOverwrites.Single(o => o.TargetId == role.Id).Permissions.SendMessages != PermValue.Deny;
+                var suspended = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Suspend}:{target.Id}")));
+                var locked = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(channel.Id);
+                Log($"[suspend] {suspended.LastReply.Content}; card buttons now [{string.Join("] [", suspended.Responder.Replies.First().Buttons.Select(b => b.Label))}]; channel send for their role: {(CanPost(locked) ? "allowed" : "denied")}");
+                CanPost(locked).Should().BeFalse();
+                var unsuspended = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Unsuspend}:{target.Id}")));
+                var unlocked = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(channel.Id);
+                Log($"[unsuspend] {unsuspended.LastReply.Content}; channel send for their role: {(CanPost(unlocked) ? "allowed" : "denied")}");
+                CanPost(unlocked).Should().BeTrue();
+
+                // 12. Old /admin user info: the card itself, read once more before removal.
+                var info = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", target.Id)));
+                Log($"[info] {info.LastReply.Content.Replace("\n", " | ")}");
+                info.LastReply.Content.Should().Contain("Status: active").And.Contain("Plex `live_test_plex2`");
+
+                // 13. Old /admin user remove: Remove asks first, Yes removes; the real channel and role read back.
+                var ask = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Remove}:{target.Id}")));
+                Log($"[remove] asked: buttons [{string.Join("] [", ask.LastReply.Buttons.Select(b => b.Label))}]");
+                var removed = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.RemoveConfirm}:{target.Id}")));
+                var archived = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(channel.Id);
+                var roleGone = (await host.Client.Rest.GetGuildAsync(guild.Id)).Roles.All(r => r.Id != role.Id);
+                Log($"[remove] {removed.LastReply.Content}; channel now #{archived.Name}; role deleted: {roleGone}; card now offers [{string.Join("] [", removed.Responder.Replies.First().Buttons.Select(b => b.Label))}]");
+                archived.Name.Should().StartWith(ChannelLayout.ArchivedPrefix);
+                roleGone.Should().BeTrue();
             }
             finally
             {
