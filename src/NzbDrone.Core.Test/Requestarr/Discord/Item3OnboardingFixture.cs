@@ -222,7 +222,10 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task commands_on_unknown_or_removed_users_should_explain()
         {
-            (await Harness.SendAsync(AdminCommand("user info", Bob))).LastReply.Content.Should().Be(DiscordText.NotARequestarrUser);
+            // Someone not added yet: their card says so and offers only Add.
+            var card = (await Harness.SendAsync(AdminCommand("user info", Bob))).LastReply;
+            card.Content.Should().Be(DiscordText.MemberNotAdded("bob", Bob));
+            card.Buttons.Select(b => b.CustomId).Should().Equal($"adm-add:{Bob}");
             (await Harness.SendAsync(AdminCommand("user suspend", Bob))).LastReply.Content.Should().Be(DiscordText.NotARequestarrUser);
 
             await AddUser(Bob);

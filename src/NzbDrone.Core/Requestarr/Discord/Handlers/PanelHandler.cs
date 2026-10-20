@@ -8,7 +8,8 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Discord.Handlers
 {
-    // Buttons on the pinned user panel (own channel only) and the admin panel (admin channel only).
+    // Buttons on the pinned user panel (own channel only). The admin panel's buttons are handled by
+    // AdminConsoleHandler (and HelpHandler for Help).
     public class PanelHandler : IInteractionHandler
     {
         private readonly ICallerResolver _callers;
@@ -31,26 +32,12 @@ namespace Requestarr.Core.Discord.Handlers
             (InteractionKind.Button, PanelRoutes.MyRequests),
             (InteractionKind.Button, PanelRoutes.MyLimits),
             (InteractionKind.Button, PanelRoutes.LinkPlex),
-            (InteractionKind.ModalSubmit, PanelRoutes.LinkPlexForm),
-            (InteractionKind.Button, PanelRoutes.AdminQueue),
-            (InteractionKind.Button, PanelRoutes.AdminUsers)
+            (InteractionKind.ModalSubmit, PanelRoutes.LinkPlexForm)
         };
 
         public async Task HandleAsync(DiscordInteraction interaction, IInteractionResponder responder)
         {
             var caller = _callers.Resolve(interaction);
-
-            if (interaction.Route == PanelRoutes.AdminQueue || interaction.Route == PanelRoutes.AdminUsers)
-            {
-                if (caller.AdminDenial != null)
-                {
-                    await responder.Ephemeral(caller.AdminDenial);
-                    return;
-                }
-
-                await responder.Ephemeral(interaction.Route == PanelRoutes.AdminQueue ? Queue() : UserList());
-                return;
-            }
 
             if (caller.UserDenial != null)
             {
@@ -86,24 +73,6 @@ namespace Requestarr.Core.Discord.Handlers
                     break;
                 }
             }
-        }
-
-        private string Queue()
-        {
-            var pending = _requests.List(null, true, RequestStatus.Pending, null);
-
-            return pending.Any()
-                ? string.Join("\n", pending.Take(RequestHandler.MaxListLines).Select(r => DiscordText.RequestLine(r, _requests.OwnerName(r), true)))
-                : DiscordText.QueueEmpty;
-        }
-
-        private string UserList()
-        {
-            var users = _userStore.All().Where(u => u.Status != UserStatus.Removed && u.PrivateChannelId != null).OrderBy(u => u.DisplayName).ToList();
-
-            return users.Any()
-                ? DiscordLimits.Truncate(string.Join("\n", users.Select(u => DiscordText.UserLine(u, _access.GetForUser(u.Id)))), DiscordLimits.MessageLength)
-                : DiscordText.NoUsers;
         }
     }
 }

@@ -519,7 +519,7 @@ namespace Requestarr.Core.Discord
         public const string LinkPlexTitle = "Link your Plex account";
         public const string LinkPlexLabel = "Your Plex username or email";
         public const string CancelLabel = "Cancel request";
-        public const string NoUsers = "No Requestarr users yet. Add someone with /admin user add.";
+        public const string NoUsers = "No Requestarr users yet. Add someone with Add or find a member.";
         public const string MissingPinMessages = "The Discord bot is missing the Pin Messages permission, so panels are posted but not pinned. Turn on Pin Messages for the bot's role in Server Settings, Roles.";
         public const string NothingToRequest = "You can't request anything yet. Ask the admin for access.";
         public const string ChooseType = "Pick a type from the list (start typing in the type option).";
@@ -642,7 +642,7 @@ namespace Requestarr.Core.Discord
 
         private static string Because(string detail) => string.IsNullOrWhiteSpace(detail) ? string.Empty : $": {detail}";
 
-        // Cancelling a request that was already sent (admin, from the feed or /admin cancel).
+        // Cancelling a request that was already sent (admin, from its feed or request card).
         public static string CannotCancelDownloading(int id) =>
             $"Request #{id} is already downloading or partly there, so it can't be cancelled any more. Removing titles comes with removal votes.";
 
@@ -709,12 +709,74 @@ namespace Requestarr.Core.Discord
 
         // Account events go to the admin channel (never the feed).
         public static string MemberLeftAdminNotice(string name) =>
-            $"**{name}** left the server: their access is suspended and their channel is locked. `/admin user unsuspend` restores them if they come back.";
+            $"**{name}** left the server: their access is suspended and their channel is locked. **Unsuspend** on their card (`/admin user`) restores them if they come back.";
+
+        // The admin console: /admin user and /admin request cards, the member picker, queue and users views.
+        public const string PanelMembers = "Add or find a member";
+        public const string PickMemberPrompt = "Pick a member to add them or open their card.";
+        public const string PickMemberPlaceholder = "Pick a member";
+        public const string AddMemberLabel = "Add to Requestarr";
+        public const string ChangeAccessPlaceholder = "Change access…";
+        public const string SetLimitPlaceholder = "Set a limit…";
+        public const string ChangeInstancePlaceholder = "Send requests to…";
+        public const string AdminLinkPlexLabel = "Link Plex…";
+        public const string ChangePlexLabel = "Change Plex link…";
+        public const string SuspendLabel = "Suspend";
+        public const string UnsuspendLabel = "Unsuspend";
+        public const string RemoveLabel = "Remove";
+        public const string ConfirmRemoveLabel = "Yes, remove";
+        public const string KeepLabel = "Keep";
+        public const string TheirRequestsLabel = "Their requests";
+        public const string ApproveLinkLabel = "Approve Plex link";
+        public const string DenyLinkLabel = "Deny Plex link";
+        public const string LimitTitle = "Request limit";
+        public const string LimitField = "Requests allowed (0 = no limit)";
+        public const string DaysField = "Per how many days";
+        public const string PlexTitle = "Link a Plex account";
+        public const string PlexField = "Plex username or email";
+        public const string PickRequestPlaceholder = "Open a request";
+        public const string AllTypesLabel = "All";
+        public const string NoRequestMatches = "No request matches that. Use its number (for example `12`) or part of its title.";
+        public const string CancelReasonTitle = "Cancel request";
+        public const string CancelReasonLabel = "Reason shown to the user (optional)";
+        public const string InvalidLimit = "The limit must be a number from 0 to 1000, and the days from 1 to 365.";
+
+        public static string MemberNotAdded(string name, ulong discordId) =>
+            $"**{name}** (<@{discordId}>) isn't a Requestarr user. **{AddMemberLabel}** creates their role, private channel and panel; Movies and TV start as needs approval, Music off.";
+
+        public static string ConfirmRemove(string name) =>
+            $"Remove **{name}**? Their channel is archived and their role deleted; their request history is kept.";
+
+        public static string PendingLink(MediaServers.MediaServerProvider provider, string username) => $"Waiting for you: a {provider} link request as `{username}`.";
+
+        public static string AccessOption(ContentType type, AccessState state) => $"{Label(type)}: {Capitalize(Label(state))}";
+
+        public static string LimitOption(ContentType type, UserMediaAccess access) =>
+            $"{Label(type)} limit (now {(access?.QuotaLimit is { } limit ? $"{limit} per {(int)(access.QuotaWindow ?? TimeSpan.FromDays(7)).TotalDays} days" : "none")})";
+
+        public static string InstanceOption(ContentType type, string instance) => $"{Label(type)}: {instance}";
+
+        public static string Current => "current";
+
+        public static string InstanceLine(ContentType type, string instance) => $"• {Label(type)} requests go to {instance}";
+
+        public static string QueueHeader(string filter, int count) => $"**Pending queue**{(filter != null ? Dot + filter : string.Empty)} · {count} waiting";
+
+        public static string MemberRequestsHeader(string name, int count) => $"**{name}'s requests** · {count}";
+
+        public static string RequestMatches(string query, int count) => $"**{count} requests match \"{query}\"**. Pick one to open it.";
+
+        public static string UsersHeader(int count) => $"**Users** · {count}";
+
+        public static string RequestChoice(Request request, string owner) =>
+            DiscordLimits.Truncate($"#{request.Id} {request.Label} · {Label(request.Status)} · {owner}", DiscordLimits.OptionLabelLength);
 
         public static class Commands
         {
             public const string Admin = "Requestarr admin commands";
-            public const string AdminUser = "Manage Requestarr users";
+            public const string AdminUser = "Open a member's card: add, access, limits, Plex, suspend, remove";
+            public const string AdminRequest = "Open a request's card: approve, deny, cancel, add seasons";
+            public const string OptionRequestSearch = "Request number or part of its title";
             public const string AdminMediaServer = "Media server access requests";
             public const string RequestOne = "Request a movie or TV show";
             public const string Help = "How to use Requestarr";

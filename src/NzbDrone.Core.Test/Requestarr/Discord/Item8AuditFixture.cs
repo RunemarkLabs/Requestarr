@@ -54,7 +54,8 @@ namespace Requestarr.Core.Test.Discord
             entry.TargetType.Should().Be("user");
             entry.TargetId.Should().Be(UserFor(Alice).Id.ToString());
             entry.Timestamp.Should().BeCloseTo(System.DateTime.UtcNow, System.TimeSpan.FromMinutes(1));
-            entry.Detail.Should().Contain("Movie=AutoApprove");
+            entry.Detail.Should().Contain("Movie=NeedsApproval", "added with the defaults; the member card then sets the level");
+            AuditTrail.Single(a => a.Action == "user.access").Detail.Should().Be("Movie: NeedsApproval -> AutoApprove");
         }
 
         [Test]
@@ -69,7 +70,7 @@ namespace Requestarr.Core.Test.Discord
             await AddUser(Alice);
             var before = AuditTrail.Count;
 
-            await Harness.SendAsync(FakeInteraction.SlashCommand("admin user remove").WithOption("member", Alice).By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+            await Harness.SendAsync(FakeInteraction.Button($"adm-remove-ok:{Alice}").By(Bob).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             AuditTrail.Count.Should().Be(before);
         }

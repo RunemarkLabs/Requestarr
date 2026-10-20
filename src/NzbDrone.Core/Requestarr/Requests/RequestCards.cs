@@ -39,6 +39,7 @@ namespace Requestarr.Core.Requests
         public const string AddConfirm = "req-add-ok";
         public const string AddBack = "req-add-back";
         public const string DenyReason = "req-deny-reason";
+        public const string CancelReason = "req-cancel-reason";
         public const string ReasonField = "reason";
 
         // Season picker on cards posted before the two-path season flow; still handled.
@@ -787,6 +788,13 @@ namespace Requestarr.Core.Requests
                 Fields = new List<InteractionTextField> { new(RequestRoutes.ReasonField, DiscordText.DenyReasonLabel, Required: false) }
             };
         }
+
+        public static InteractionModal CancelReason(int requestId) => new()
+        {
+            CustomId = $"{RequestRoutes.CancelReason}:{requestId}",
+            Title = DiscordText.CancelReasonTitle,
+            Fields = new List<InteractionTextField> { new(RequestRoutes.ReasonField, DiscordText.CancelReasonLabel, Required: false) }
+        };
 
         public static InteractionButton ResultsButton(ContentType type, string query)
         {

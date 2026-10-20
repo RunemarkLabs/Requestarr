@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Configuration;
 using Requestarr.Core.Availability;
@@ -59,6 +60,21 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         protected Task<InteractionRun> FeedClick(int requestId, string customId, ulong? by = null) =>
             Harness.SendAsync(FakeInteraction.Button(customId).By(by ?? FakeDiscordGuild.Owner, by.HasValue ? "someone" : "owner").InGuild(FakeDiscordGuild.Guild).InChannel(FeedChannel)
                 .OnMessage(ulong.TryParse(Reload(requestId).FeedMessageId, out var card) ? card : 1));
+
+        // Cancel on a feed card: it asks for an optional reason first (unless it's too late).
+        protected async Task<InteractionRun> FeedCancel(int requestId, string reason = null)
+        {
+            var click = await FeedClick(requestId, $"req-admin-cancel:{requestId}");
+
+            if (click.Responder.LastModal == null)
+            {
+                return click;
+            }
+
+            click.Responder.LastModal.CustomId.Should().Be($"req-cancel-reason:{requestId}");
+            return await Harness.SendAsync(FakeInteraction.ModalSubmit($"req-cancel-reason:{requestId}").WithField(RequestRoutes.ReasonField, reason ?? string.Empty)
+                .By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(FeedChannel));
+        }
 
         protected Task<InteractionRun> FeedChoose(int requestId, string customId, params string[] values) =>
             Harness.SendAsync(FakeInteraction.SelectMenu(customId, values).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(FeedChannel)

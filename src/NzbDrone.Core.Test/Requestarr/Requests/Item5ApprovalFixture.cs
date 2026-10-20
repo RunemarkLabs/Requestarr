@@ -61,7 +61,7 @@ namespace Requestarr.Core.Test.Requests
             modalRun.Responder.LastModal.CustomId.Should().Be("req-deny-reason:1");
 
             var submit = await Harness.SendAsync(FakeInteraction.ModalSubmit("req-deny-reason:1").WithField("reason", "Already on the server in 4K")
-                .By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
+                .By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel).OnMessage(ApprovalCardOf("req-deny-reason:1")));
 
             submit.LastReply.Content.Should().Contain("denied").And.Contain("Already on the server in 4K");
             LastRequest.Status.Should().Be(RequestStatus.Denied);

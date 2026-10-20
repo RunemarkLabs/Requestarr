@@ -73,7 +73,7 @@ namespace Requestarr.Core.Test.Requests
         [Test]
         public async Task admin_commands_in_a_user_channel_are_refused()
         {
-            var run = await Harness.SendAsync(FakeInteraction.SlashCommand("admin approve").WithOption("id", 1L).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            var run = await Harness.SendAsync(FakeInteraction.Button("req-approve:1").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
 
             run.LastReply.Content.Should().Contain(DiscordText.AdminChannelOnly);
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Pending);

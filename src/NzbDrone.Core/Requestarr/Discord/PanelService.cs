@@ -35,9 +35,10 @@ namespace Requestarr.Core.Discord
         public static readonly PanelButton PendingQueue = new(PanelRoutes.AdminQueue, DiscordText.PanelPendingQueue, ButtonStyle.Primary);
         public static readonly PanelButton Users = new(PanelRoutes.AdminUsers, DiscordText.PanelUsers, ButtonStyle.Secondary);
         public static readonly PanelButton AdminHelp = new(PanelRoutes.AdminHelp, DiscordText.PanelHelp, ButtonStyle.Secondary);
+        public static readonly PanelButton Members = new(Handlers.AdminRoutes.Pick, DiscordText.PanelMembers, ButtonStyle.Success);
 
         public static readonly IReadOnlyList<PanelButton> User = new[] { MyRequests, MyLimits, LinkPlex, Help };
-        public static readonly IReadOnlyList<PanelButton> Admin = new[] { PendingQueue, Users, AdminHelp };
+        public static readonly IReadOnlyList<PanelButton> Admin = new[] { PendingQueue, Users, Members, AdminHelp };
 
         public static PanelButton ByRoute(string route) => User.Concat(Admin).Single(b => b.Route == route);
 

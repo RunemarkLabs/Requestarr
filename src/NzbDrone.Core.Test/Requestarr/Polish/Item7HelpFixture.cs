@@ -126,7 +126,7 @@ namespace Requestarr.Core.Test.Polish
         {
             var topic = await Harness.SendAsync(FakeInteraction.SelectMenu("help:admin", "onboarding").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
-            topic.LastReply.Content.Should().Contain($"`/admin user add member [movie] [tv] [music]`: {DiscordText.Commands.UserAdd}")
+            topic.LastReply.Content.Should().Contain($"`/admin user member`: {DiscordText.Commands.AdminUser}")
                 .And.Contain($"**{DiscordText.PanelUsers}** on the admin panel");
         }
 

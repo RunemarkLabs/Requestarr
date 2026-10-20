@@ -99,7 +99,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         {
             var commands = File.ReadAllText(Item4To6Fixture.RepoFile("docs", "commands.md"));
 
-            commands.Should().Contain("⬇️ **Downloading**").And.Contain("**Add seasons**").And.Contain("### The admin feed").And.Contain("never deleted");
+            commands.Should().Contain("⬇️ **Downloading**").And.Contain("**Add seasons**").And.Contain("### Approval cards and the admin feed").And.Contain("never deleted");
         }
     }
 }

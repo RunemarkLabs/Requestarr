@@ -122,7 +122,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
             var availability = Mocker.Resolve<AvailabilityService>();
-            var handlers = new IInteractionHandler[] { Mocker.Resolve<UserCommandHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>() };
+            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>() };
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
             var http = Mocker.Resolve<IHttpClient>();
 
@@ -150,7 +150,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
 
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
                 var target = members.First(m => !m.IsBot && m.Id != guild.OwnerId);
-                await Send(dispatcher, FakeInteraction.SlashCommand("admin user add").WithOption("member", target.Id).By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
+                await Send(dispatcher, FakeInteraction.Button($"adm-add:{target.Id}").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 var channel = ulong.Parse(users.FindByDiscordId(target.Id).PrivateChannelId);
                 Log($"[setup] {target.Username} added; request channel {channel}");
 

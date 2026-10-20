@@ -193,7 +193,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             }
 
             channel.Messages[index] = message.KeepEmbeds
-                ? new InteractionReply { Content = message.Content, Buttons = message.Buttons, SelectMenu = message.SelectMenu, Ephemeral = message.Ephemeral, Embeds = channel.Messages[index].Embeds }
+                ? new InteractionReply { Content = message.Content, Buttons = message.Buttons, SelectMenu = message.SelectMenu, MoreMenus = message.MoreMenus, Ephemeral = message.Ephemeral, Embeds = channel.Messages[index].Embeds }
                 : message;
             return Task.FromResult(true);
         }

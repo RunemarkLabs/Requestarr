@@ -81,7 +81,7 @@ namespace Requestarr.Core.Test.Discord
             Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();
             Mocker.SetConstant(users);
-            var dispatcher = new InteractionDispatcher(new IInteractionHandler[] { Mocker.Resolve<UserCommandHandler>() }, LogManager.GetLogger("LiveDiscord"));
+            var dispatcher = new InteractionDispatcher(new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>() }, LogManager.GetLogger("LiveDiscord"));
 
             var created = new List<string>();
 
@@ -194,7 +194,7 @@ namespace Requestarr.Core.Test.Discord
                     return;
                 }
 
-                var addRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin user add").WithOption("member", target.Id)
+                var addRun = await Send(dispatcher, FakeInteraction.Button($"adm-add:{target.Id}")
                     .By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[add] outcome={addRun.Outcome} reply: {addRun.Responder.LastReply?.Content?.Replace('\n', ' ')}");
                 addRun.Outcome.Should().Be(DispatchOutcome.Handled);
@@ -261,7 +261,7 @@ namespace Requestarr.Core.Test.Discord
                 }
 
                 // 4. /user remove
-                var removeRun = await Send(dispatcher, FakeInteraction.SlashCommand("admin user remove").WithOption("member", target.Id)
+                var removeRun = await Send(dispatcher, FakeInteraction.Button($"adm-remove-ok:{target.Id}")
                     .By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 Log($"[remove] reply: {removeRun.Responder.LastReply?.Content}");
 

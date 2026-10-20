@@ -18,12 +18,23 @@ namespace Requestarr.Core.Discord.Interactions
         public List<InteractionButton> Buttons { get; init; } = new();
         public InteractionSelectMenu SelectMenu { get; init; }
 
+        // Further menus, each on its own row under SelectMenu (cards with several choices).
+        public List<InteractionSelectMenu> MoreMenus { get; init; } = new();
+
         // Edits only: leave the message's embeds as they are.
         public bool KeepEmbeds { get; init; }
     }
 
+    // Text: the menu's own options. User: Discord's member picker (values are user IDs).
+    public enum SelectMenuKind
+    {
+        Text,
+        User
+    }
+
     public class InteractionSelectMenu
     {
+        public SelectMenuKind Kind { get; init; } = SelectMenuKind.Text;
         public string CustomId { get; init; }
         public string Placeholder { get; init; }
         public int MinValues { get; init; } = 1;
