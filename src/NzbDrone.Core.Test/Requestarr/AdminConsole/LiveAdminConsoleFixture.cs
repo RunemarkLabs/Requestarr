@@ -115,7 +115,7 @@ namespace Requestarr.Core.Test.AdminConsole
             Mocker.SetConstant(users);
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
-            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>() };
+            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>(), Mocker.Resolve<MediaServerHandler>(), Mocker.Resolve<PanelHandler>() };
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
 
             try
@@ -192,6 +192,68 @@ namespace Requestarr.Core.Test.AdminConsole
                 Log($"[discord] request #{request.Id} status={request.Status}; the user's message, read back: \"{reposted.Content.Replace("\n", " | ")}\"");
                 request.Status.Should().Be(RequestStatus.Approved);
                 reposted.Content.Should().StartWith($"<@{target.Id}> {DiscordText.FinalApproved}");
+
+                var requests = Mocker.Resolve<IRequestRepository>();
+                var feedChannel = ulong.Parse(guildSetup.GetConfig().FeedChannelId);
+                var feedRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(feedChannel);
+                var approvalCard = await adminRest.GetMessageAsync(ulong.Parse(request.AdminMessageId));
+                Log($"[approval card] #1 read back: \"{approvalCard.Content.Replace("\n", " | ")}\" buttons={Buttons(approvalCard).Count}");
+                approvalCard.Content.Should().StartWith("**Request #1: approved**");
+
+                // 6. Deny from the approval card (old /admin deny): the button opens the reason form, submitted from that card.
+                var heat = await RequestInRealMessage(dispatcher, gateway, guild.Id, channel.Id, target.Id, 949);
+                var heatRequest = requests.All().Single(r => r.TmdbId == 949);
+                var heatCard = ulong.Parse(heatRequest.AdminMessageId);
+                var denyForm = await Send(dispatcher, AsOwner(FakeInteraction.Button($"req-deny:{heatRequest.Id}")).OnMessage(heatCard));
+                Log($"[deny] approval card button opened the form {denyForm.Responder.LastModal?.CustomId}");
+                await Send(dispatcher, AsOwner(FakeInteraction.ModalSubmit($"req-deny-reason:{heatRequest.Id}").WithField(RequestRoutes.ReasonField, "not this one")).OnMessage(heatCard));
+                var heatCardNow = await adminRest.GetMessageAsync(heatCard);
+                var heatMessage = await channel.GetMessageAsync(ulong.Parse(requests.Get(heatRequest.Id).MessageId));
+                Log($"[approval card] #{heatRequest.Id} read back: \"{heatCardNow.Content.Replace("\n", " | ")}\" buttons={Buttons(heatCardNow).Count}; user message: \"{heatMessage.Content.Replace("\n", " | ")}\"");
+                requests.Get(heatRequest.Id).Status.Should().Be(RequestStatus.Denied);
+                heatCardNow.Content.Should().StartWith($"**Request #{heatRequest.Id}: denied**");
+                Buttons(heatCardNow).Should().BeEmpty();
+                _ = heat;
+
+                // 7. Cancel (old /admin cancel, with a reason) and Already available (old /admin available) from feed cards.
+                await RequestInRealMessage(dispatcher, gateway, guild.Id, channel.Id, target.Id, 27205);
+                await RequestInRealMessage(dispatcher, gateway, guild.Id, channel.Id, target.Id, 157336);
+                var inception = requests.All().Single(r => r.TmdbId == 27205);
+                var interstellar = requests.All().Single(r => r.TmdbId == 157336);
+
+                FakeInteraction InFeed(FakeInteraction i, Request r) => i.By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(feedChannel).OnMessage(ulong.Parse(requests.Get(r.Id).FeedMessageId));
+                var cancelForm = await Send(dispatcher, InFeed(FakeInteraction.Button($"req-admin-cancel:{inception.Id}"), inception));
+                Log($"[feed] Cancel on #{inception.Id}'s card opened the form {cancelForm.Responder.LastModal?.CustomId}");
+                var cancelled = await Send(dispatcher, InFeed(FakeInteraction.ModalSubmit($"req-cancel-reason:{inception.Id}").WithField(RequestRoutes.ReasonField, "duplicate"), inception));
+                Log($"[feed] private reply: {cancelled.LastReply.Content}");
+                var available = await Send(dispatcher, InFeed(FakeInteraction.Button($"req-available:{interstellar.Id}"), interstellar));
+                Log($"[feed] private reply: {available.LastReply.Content}");
+
+                foreach (var r in new[] { requests.Get(1), requests.Get(heatRequest.Id), requests.Get(inception.Id), requests.Get(interstellar.Id) })
+                {
+                    var feedCard = await feedRest.GetMessageAsync(ulong.Parse(r.FeedMessageId));
+                    Log($"[feed card] #{r.Id} {r.Label} status={r.Status}: \"{feedCard.Embeds.First().Description.Replace("\n", " | ")}\" buttons=[{string.Join("] [", Buttons(feedCard))}]");
+                }
+
+                requests.Get(inception.Id).Status.Should().Be(RequestStatus.Cancelled);
+                requests.Get(inception.Id).DecisionReason.Should().Be("duplicate");
+                requests.Get(interstellar.Id).Status.Should().Be(RequestStatus.Available);
+                (await feedRest.GetMessageAsync(ulong.Parse(requests.Get(inception.Id).FeedMessageId))).Embeds.First().Description.Should().StartWith(DiscordText.FinalCancelled);
+
+                // 8. A Plex link the member asked for (old /admin mediaserver approve): the access-request card's Approve.
+                var userPanel2 = (await channel.GetPinnedMessagesAsync()).Single();
+                Log($"[plex] their panel buttons before: [{string.Join("] [", Buttons(userPanel2))}]");
+                await Send(dispatcher, FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "live_test_plex").By(target.Id).InGuild(guild.Id).InChannel(channel.Id));
+                var accessRequest = Mocker.Resolve<IMediaServerAccessRequestRepository>().All().Single();
+                var accessCard = (await adminRest.GetMessagesAsync(10).FlattenAsync()).First(m => m.Content.StartsWith("**Media server access request**"));
+                Log($"[plex] access-request card read back: \"{accessCard.Content.Replace("\n", " | ")}\" buttons=[{string.Join("] [", Buttons(accessCard))}]");
+                var linkCard = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", target.Id)));
+                Log($"[plex] member card while waiting: buttons=[{string.Join("] [", linkCard.LastReply.Buttons.Select(b => b.Label))}]");
+                var approved = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{MediaServerRoutes.Approve}:{accessRequest.Id}")).OnMessage(accessCard.Id));
+                Log($"[plex] Approve on the access-request card: {approved.LastReply.Content.Replace("\n", " | ")}");
+                var panelAfter = (await channel.GetPinnedMessagesAsync()).Single();
+                Log($"[plex] their panel buttons after: [{string.Join("] [", Buttons(panelAfter))}]; linked account: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username}");
+                Buttons(panelAfter).Should().NotContain(DiscordText.PanelLinkPlex);
             }
             finally
             {
@@ -203,6 +265,20 @@ namespace Requestarr.Core.Test.AdminConsole
                 await host.StopAsync();
                 Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to restore the stack)");
             }
+        }
+
+        private static List<string> Buttons(IMessage message) =>
+            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
+
+        // Posts the request's message as the bot (as /request leaves it), then presses Request on it.
+        private static async Task<ulong> RequestInRealMessage(InteractionDispatcher dispatcher, IDiscordGuildGateway gateway, ulong guild, ulong channel, ulong user, int tmdbId)
+        {
+            var message = await gateway.SendMessageAsync(channel, new InteractionReply { Content = $"🎬 **Movies request** · details (tmdb:{tmdbId})" });
+            var responder = new RecordingResponder(null, channel, message, false);
+            await dispatcher.DispatchAsync(FakeInteraction.Button($"req-make:movie:{tmdbId}").By(user).InGuild(guild).InChannel(channel).OnMessage(message).Build(), responder);
+            await gateway.EditMessageAsync(channel, message, responder.LastReply);
+            Log($"[request] tmdb:{tmdbId} -> {responder.LastReply.Content.Replace("\n", " | ")}");
+            return message;
         }
 
         private static async Task<InteractionRun> Send(InteractionDispatcher dispatcher, FakeInteraction interaction)
