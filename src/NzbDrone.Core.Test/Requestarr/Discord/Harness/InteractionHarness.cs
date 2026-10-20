@@ -17,6 +17,9 @@ namespace Requestarr.Core.Test.Discord.Harness
     {
         private readonly InteractionDispatcher _dispatcher;
 
+        // When set, request messages live in this fake server (see RecordingResponder).
+        public FakeDiscordGuild Guild { get; set; }
+
         public InteractionHarness(params IInteractionHandler[] handlers)
             : this((IEnumerable<IInteractionHandler>)handlers)
         {
@@ -29,7 +32,7 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public async Task<InteractionRun> SendAsync(DiscordInteraction interaction)
         {
-            var responder = new RecordingResponder();
+            var responder = Guild == null ? new RecordingResponder() : new RecordingResponder(Guild, interaction.ChannelId, interaction.MessageId, interaction.Kind == InteractionKind.SlashCommand);
             var outcome = await _dispatcher.DispatchAsync(interaction, responder);
 
             return new InteractionRun(outcome, responder);

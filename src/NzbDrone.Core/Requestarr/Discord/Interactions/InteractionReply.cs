@@ -17,6 +17,9 @@ namespace Requestarr.Core.Discord.Interactions
         public List<InteractionEmbed> Embeds { get; init; } = new();
         public List<InteractionButton> Buttons { get; init; } = new();
         public InteractionSelectMenu SelectMenu { get; init; }
+
+        // Edits only: leave the message's embeds as they are.
+        public bool KeepEmbeds { get; init; }
     }
 
     public class InteractionSelectMenu
@@ -28,7 +31,7 @@ namespace Requestarr.Core.Discord.Interactions
         public List<InteractionSelectOption> Options { get; init; } = new();
     }
 
-    public record InteractionSelectOption(string Label, string Value, string Description = null);
+    public record InteractionSelectOption(string Label, string Value, string Description = null, bool Default = false);
 
     public record InteractionChoice(string Name, string Value);
 
@@ -54,6 +57,7 @@ namespace Requestarr.Core.Discord.Interactions
         // Side colour as 0xRRGGBB, so separate requests stand apart in the channel.
         public uint? Color { get; init; }
         public string Footer { get; init; }
+        public string FooterIconUrl { get; init; }
         public List<KeyValuePair<string, string>> Fields { get; init; } = new();
     }
 

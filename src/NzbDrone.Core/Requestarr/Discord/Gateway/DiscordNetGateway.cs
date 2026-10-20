@@ -168,7 +168,12 @@ namespace Requestarr.Core.Discord.Gateway
             await existing.ModifyAsync(m =>
             {
                 m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
-                m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
+
+                if (!message.KeepEmbeds)
+                {
+                    m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
+                }
+
                 m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
             });
 

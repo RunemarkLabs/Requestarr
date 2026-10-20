@@ -143,14 +143,20 @@ namespace Requestarr.Core.Test.Polish
         }
 
         [Test]
-        public async Task the_full_tmdb_notice_is_in_help_when_cast_is_enabled()
+        public async Task the_credits_topic_with_the_tmdb_notice_and_logo_only_appears_with_a_key()
         {
-            (await UserHelp(Alice)).LastReply.Content.Should().NotContain("TMDB");
+            Topics(await UserHelp(Alice)).Should().NotContain("credits");
+            Topics(await AdminHelp()).Should().NotContain("credits");
 
             TmdbKey.Set("test-key");
 
-            (await UserHelp(Alice)).LastReply.Content.Should().Contain(DiscordText.TmdbNotice);
-            (await AdminHelp()).LastReply.Content.Should().Contain(DiscordText.TmdbNotice);
+            Topics(await UserHelp(Alice)).Should().EndWith("credits");
+            Topics(await AdminHelp()).Should().Contain("credits");
+
+            var credits = await Harness.SendAsync(FakeInteraction.SelectMenu("help:user", "credits").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)));
+            credits.LastReply.Content.Should().Contain("is not endorsed, certified, or otherwise approved by TMDB");
+            credits.LastReply.Embeds.Single().ThumbnailUrl.Should().Be(DiscordText.TmdbLogoUrl);
+            credits.LastReply.Embeds.Single().ImageUrl.Should().BeNull("the logo stays small, less prominent than Requestarr's own mark");
         }
 
         [Test]

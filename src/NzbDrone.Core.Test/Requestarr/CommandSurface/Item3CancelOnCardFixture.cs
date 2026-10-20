@@ -65,8 +65,9 @@ namespace Requestarr.Core.Test.CommandSurface
             await AdminButton("req-approve:1");
 
             var late = (await Harness.SendAsync(CancelButton(Alice, 1))).LastReply;
-            late.Content.Should().Be(DiscordText.CannotCancel(RequestStatus.Approved));
+            late.Content.Should().Be(DiscordText.NothingChanged("Request #1 for Dune (2021) is approved."));
             late.Ephemeral.Should().BeTrue();
+            RequestStore.Get(1).Status.Should().Be(RequestStatus.Approved);
         }
     }
 }

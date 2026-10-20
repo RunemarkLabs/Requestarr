@@ -53,15 +53,16 @@ namespace Requestarr.Core.Test.Polish
         }
 
         [Test]
-        public async Task choose_seasons_lists_specials_each_season_and_future_but_never_all()
+        public async Task choose_seasons_lists_specials_and_each_season_but_never_all()
         {
             var step = (await Click(Alice, $"req-tv-choose:{DarkMatter}")).LastReply;
 
-            step.SelectMenu.CustomId.Should().Be($"req-tv-pick:{DarkMatter}");
-            step.SelectMenu.Options.Select(o => o.Value).Should().Equal("s0", "s1", "s2", "future");
+            step.SelectMenu.CustomId.Should().Be($"req-tv-pick:{DarkMatter}:0:");
+            step.SelectMenu.Options.Select(o => o.Value).Should().Equal("s0", "s1", "s2");
             step.SelectMenu.Options.Select(o => o.Label).Should().NotContain(DiscordText.AllSeasons);
-            step.SelectMenu.MaxValues.Should().Be(4);
-            step.Buttons.Single().CustomId.Should().Be($"req-tv-back:{DarkMatter}");
+            step.SelectMenu.MaxValues.Should().Be(3);
+            step.Buttons.Select(b => b.CustomId).Should().Equal($"req-tv-page:{DarkMatter}:0:f", $"req-tv-review:{DarkMatter}:", $"req-tv-back:{DarkMatter}");
+            step.Buttons[1].Disabled.Should().BeTrue("nothing is picked yet");
         }
 
         [Test]

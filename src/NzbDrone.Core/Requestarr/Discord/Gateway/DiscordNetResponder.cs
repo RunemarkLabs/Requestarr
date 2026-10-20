@@ -36,7 +36,11 @@ namespace Requestarr.Core.Discord.Gateway
                 {
                     m.Content = reply.Content;
                     m.Components = Components(reply) ?? new ComponentBuilder().Build();
-                    m.Embeds = Embeds(reply);
+
+                    if (!reply.KeepEmbeds)
+                    {
+                        m.Embeds = Embeds(reply) ?? Array.Empty<Embed>();
+                    }
                 });
             }
             else if (_interaction is SocketModal modal)
@@ -58,10 +62,32 @@ namespace Requestarr.Core.Discord.Gateway
             _interaction.ModifyOriginalResponseAsync(m =>
             {
                 m.Content = DiscordLimits.Truncate(reply.Content ?? string.Empty, DiscordLimits.MessageLength);
-                m.Embeds = Embeds(reply) ?? Array.Empty<Embed>();
+
+                if (!reply.KeepEmbeds)
+                {
+                    m.Embeds = Embeds(reply) ?? Array.Empty<Embed>();
+                }
+
                 m.Components = Components(reply) ?? new ComponentBuilder().Build();
                 m.AllowedMentions = AllowedMentions.None;
             });
+
+        public async Task<ulong?> MessageIdAsync()
+        {
+            if (_interaction is SocketMessageComponent component)
+            {
+                return component.Message?.Id;
+            }
+
+            try
+            {
+                return (await _interaction.GetOriginalResponseAsync())?.Id;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
 
         public Task SuggestAsync(IReadOnlyList<InteractionChoice> choices)
         {
@@ -105,7 +131,7 @@ namespace Requestarr.Core.Discord.Gateway
                 foreach (var option in reply.SelectMenu.Options.Take(DiscordLimits.ChoicesPerMenu))
                 {
                     var label = DiscordLimits.Truncate(option.Label, DiscordLimits.OptionLabelLength);
-                    menu.AddOption(label, option.Value, DiscordLimits.Truncate(option.Description, DiscordLimits.OptionLabelLength));
+                    menu.AddOption(label, option.Value, DiscordLimits.Truncate(option.Description, DiscordLimits.OptionLabelLength), isDefault: option.Default);
                 }
 
                 builder.WithSelectMenu(menu);
@@ -152,7 +178,7 @@ namespace Requestarr.Core.Discord.Gateway
 
                 if (e.Footer != null)
                 {
-                    builder.WithFooter(DiscordLimits.Truncate(e.Footer, 2048));
+                    builder.WithFooter(DiscordLimits.Truncate(e.Footer, 2048), e.FooterIconUrl);
                 }
 
                 foreach (var field in e.Fields.Take(25))

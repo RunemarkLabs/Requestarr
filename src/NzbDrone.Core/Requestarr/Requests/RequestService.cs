@@ -68,9 +68,18 @@ namespace Requestarr.Core.Requests
         Task<RequestResult> RequestAsync(RequestCaller caller, ContentType type, int externalId, SeasonChoice seasons = null);
         Task<ServiceResult> ApproveAsync(int requestId, Actor admin, string adminName);
         Task<ServiceResult> DenyAsync(int requestId, string reason, Actor admin, string adminName);
-        ServiceResult Cancel(RequestCaller caller, int requestId);
+        Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId);
+        Task<ServiceResult> AdminCancelAsync(int requestId, string reason, Actor admin, string adminName);
+
+        // Remembers the message a request was made in, so it can be edited after a decision.
+        void AttachMessage(int requestId, ulong channelId, ulong messageId);
+
+        // The request's real state as a request message: status line, card, and a Cancel button
+        // only while it can still be cancelled.
+        Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null);
         List<Request> List(RequestarrUser user, bool all, RequestStatus? status, ContentType? type);
         string OwnerName(Request request);
+        string DisplayName(int? userId);
         string QuotaSummary(RequestarrUser user);
         Request Find(int id);
     }
@@ -309,7 +318,7 @@ namespace Requestarr.Core.Requests
             if (caller.AsAdmin || access.State == AccessState.AutoApprove)
             {
                 request.DecidedByUserId = caller.AsAdmin ? caller.User.Id : null;
-                var sent = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
+                var (sent, _) = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
 
                 return sent
                     ? new RequestResult(true, DiscordText.RequestSent(request.Label, request.Id, state.Instance.Name), request, RequestOutcome.Sent)
@@ -345,7 +354,8 @@ namespace Requestarr.Core.Requests
             request.DecidedByUserId = admin.UserId;
             _audit.Record(admin, "request.approve", "request", request.Id.ToString());
 
-            var sent = await SendAsync(request, instance, null, admin);
+            var (sent, item) = await SendAsync(request, instance, null, admin);
+            await RefreshMessagesAsync(request, item);
 
             await Notify(request, sent
                 ? DiscordText.RequestApprovedNotice(request.Label, request.Id, instance.Name)
@@ -377,12 +387,62 @@ namespace Requestarr.Core.Requests
             _requests.Update(request);
 
             _audit.Record(admin, "request.deny", "request", request.Id.ToString(), request.DecisionReason);
+            await RefreshMessagesAsync(request);
             await Notify(request, DiscordText.RequestDeniedNotice(request.Label, request.Id, request.DecisionReason));
 
             return ServiceResult.Ok(DiscordText.AdminDenied(request));
         }
 
-        public ServiceResult Cancel(RequestCaller caller, int requestId)
+        public async Task<ServiceResult> AdminCancelAsync(int requestId, string reason, Actor admin, string adminName)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return ServiceResult.Fail(DiscordText.RequestNotFound);
+            }
+
+            if (request.Status != RequestStatus.Pending)
+            {
+                return ServiceResult.Fail(DiscordText.CannotCancel(request.Status));
+            }
+
+            request.Status = RequestStatus.Cancelled;
+            request.DecisionReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+            request.Decided = Clock();
+            request.DecidedByUserId = admin.UserId;
+            _requests.Update(request);
+
+            _audit.Record(admin, "request.cancel", "request", request.Id.ToString(), request.DecisionReason);
+            await RefreshMessagesAsync(request);
+            await Notify(request, DiscordText.RequestCancelledByAdminNotice(request.Label, request.Id, request.DecisionReason));
+
+            return ServiceResult.Ok(DiscordText.AdminCancelled(request));
+        }
+
+        public void AttachMessage(int requestId, ulong channelId, ulong messageId)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return;
+            }
+
+            request.MessageChannelId = channelId.ToString();
+            request.MessageId = messageId.ToString();
+            _requests.Update(request);
+        }
+
+        public async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null)
+        {
+            var instance = _backends.Find(request.BackendId ?? 0);
+            item ??= await TryLookup(instance, request);
+
+            return RequestCards.Status(request, item, instance?.Name);
+        }
+
+        public async Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId)
         {
             var request = _requests.Find(requestId);
 
@@ -405,6 +465,7 @@ namespace Requestarr.Core.Requests
             request.Decided = Clock();
             _requests.Update(request);
             _audit.Record(caller.Actor, "request.cancel", "request", request.Id.ToString());
+            await RefreshMessagesAsync(request);
 
             return ServiceResult.Ok(DiscordText.RequestCancelled(request.Label, request.Id));
         }
@@ -431,6 +492,8 @@ namespace Requestarr.Core.Requests
                 .ToList();
         }
 
+        public string DisplayName(int? userId) => userId.HasValue ? _users.Find(userId.Value)?.DisplayName : null;
+
         public string OwnerName(Request request) => _users.Find(request.OwnerUserId)?.DisplayName ?? $"user {request.OwnerUserId}";
 
         public string QuotaSummary(RequestarrUser user)
@@ -454,7 +517,7 @@ namespace Requestarr.Core.Requests
 
         // Adds the title to the instance: its quality profile, root folder, series type,
         // monitored, search started. Records the item ID; failures mark the request Failed.
-        private async Task<bool> SendAsync(Request request, BackendInstance instance, MediaLookupResult item, Actor actor)
+        private async Task<(bool Sent, MediaLookupResult Item)> SendAsync(Request request, BackendInstance instance, MediaLookupResult item, Actor actor)
         {
             try
             {
@@ -480,7 +543,7 @@ namespace Requestarr.Core.Requests
                 var typeDetail = request.ContentType == ContentType.Tv ? $", type {instance.Settings.SeriesType ?? "standard"}" : string.Empty;
                 _audit.Record(actor, "request.send", "request", request.Id.ToString(), $"{instance.Name} item {request.ExternalItemId}, profile {profile.Name}, root {root}{typeDetail}");
 
-                return true;
+                return (true, item);
             }
             catch (Exception ex) when (ex is BackendException || ex is InvalidOperationException)
             {
@@ -493,7 +556,7 @@ namespace Requestarr.Core.Requests
 
                 _audit.Record(actor, "request.failed", "request", request.Id.ToString(), ex.Message);
 
-                return false;
+                return (false, item);
             }
         }
 
@@ -501,7 +564,67 @@ namespace Requestarr.Core.Requests
         {
             var adminChannel = ulong.Parse(_guildSetup.GetConfig().AdminChannelId);
 
-            await _gateway.SendMessageAsync(adminChannel, RequestCards.Approval(request, ownerName, instance.Name, item));
+            var id = await _gateway.SendMessageAsync(adminChannel, RequestCards.Approval(request, ownerName, instance.Name, item));
+            request.AdminMessageId = id.ToString();
+            _requests.Update(request);
+        }
+
+        // Edits the user's request message and the admin approval card to the request's real state,
+        // without buttons that no longer apply. A message that is gone (deleted, channel removed)
+        // is skipped quietly: the notice to the user still goes out.
+        private async Task RefreshMessagesAsync(Request request, MediaLookupResult item = null)
+        {
+            if (ulong.TryParse(request.MessageChannelId, out var channel) && ulong.TryParse(request.MessageId, out var message))
+            {
+                try
+                {
+                    if (!await _gateway.EditMessageAsync(channel, message, await StatusReplyAsync(request, item)))
+                    {
+                        _logger.Debug("Request {0}: its message no longer exists, so only the notice is sent", request.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Request {0}: its message could not be edited", request.Id);
+                }
+            }
+
+            if (ulong.TryParse(request.AdminMessageId, out var card) && ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
+            {
+                try
+                {
+                    var decidedBy = DisplayName(request.DecidedByUserId);
+                    await _gateway.EditMessageAsync(adminChannel, card, new InteractionReply { Content = DiscordText.DecidedCard(request, OwnerName(request), decidedBy), KeepEmbeds = true });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Request {0}: its approval card could not be edited", request.Id);
+                }
+            }
+        }
+
+        private async Task<MediaLookupResult> TryLookup(BackendInstance instance, Request request)
+        {
+            if (instance == null || !request.ExternalId.HasValue)
+            {
+                return null;
+            }
+
+            try
+            {
+                var item = await Lookup(instance, request.ContentType, request.ExternalId.Value);
+
+                if (item != null)
+                {
+                    await _metadata.EnrichAsync(request.ContentType, new[] { item });
+                }
+
+                return item;
+            }
+            catch (BackendException)
+            {
+                return null;
+            }
         }
 
         private async Task Notify(Request request, string message)

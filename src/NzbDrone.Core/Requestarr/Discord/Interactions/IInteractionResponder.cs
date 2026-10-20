@@ -23,6 +23,10 @@ namespace Requestarr.Core.Discord.Interactions
         // belongs to (components), so one request stays one message that changes in place.
         Task EditAsync(InteractionReply reply);
 
+        // The message this interaction answers in: the component's message, or the command's
+        // own response once it exists. Null when Discord can't say.
+        Task<ulong?> MessageIdAsync();
+
         // Must be the first response: opens a form (for example a deny reason).
         Task ShowModalAsync(InteractionModal modal);
 

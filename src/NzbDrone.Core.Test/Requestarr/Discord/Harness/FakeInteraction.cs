@@ -26,6 +26,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         private ulong _guildId = DefaultGuildId;
         private ulong _channelId = DefaultChannelId;
         private string _focused;
+        private ulong? _messageId;
 
         private FakeInteraction(InteractionKind kind, string commandName, string customId)
         {
@@ -84,6 +85,13 @@ namespace Requestarr.Core.Test.Discord.Harness
             return this;
         }
 
+        // The message the component sits on (so edits land on a real fake message).
+        public FakeInteraction OnMessage(ulong? messageId)
+        {
+            _messageId = messageId;
+            return this;
+        }
+
         public FakeInteraction InGuild(ulong guildId)
         {
             _guildId = guildId;
@@ -106,7 +114,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 DisplayName = _displayName,
                 RoleIds = _roleIds.ToList(),
                 GuildId = _guildId,
-                ChannelId = _channelId
+                ChannelId = _channelId,
+                MessageId = _messageId
             };
         }
 

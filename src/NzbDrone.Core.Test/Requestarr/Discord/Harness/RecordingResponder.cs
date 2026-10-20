@@ -24,6 +24,46 @@ namespace Requestarr.Core.Test.Discord.Harness
     public class RecordingResponder : IInteractionResponder
     {
         private readonly List<RecordedResponse> _responses = new();
+        private readonly FakeDiscordGuild _guild;
+        private readonly ulong _channelId;
+
+        public RecordingResponder()
+        {
+        }
+
+        // With a fake server: the command's response, or the component's message, is a real
+        // message in that channel, so later edits by Requestarr can be read back.
+        public RecordingResponder(FakeDiscordGuild guild, ulong channelId, ulong? messageId, bool isCommand)
+        {
+            _guild = guild;
+            _channelId = channelId;
+            MessageId = messageId;
+            _createsMessage = isCommand;
+        }
+
+        private readonly bool _createsMessage;
+
+        public ulong? MessageId { get; private set; }
+
+        public Task<ulong?> MessageIdAsync() => Task.FromResult(MessageId);
+
+        private void Materialise(InteractionReply reply)
+        {
+            if (_guild == null || reply == null || reply.Ephemeral || !_guild.Channels.ContainsKey(_channelId))
+            {
+                return;
+            }
+
+            if (MessageId.HasValue && _guild.EditMessageAsync(_channelId, MessageId.Value, reply).Result)
+            {
+                return;
+            }
+
+            if (_createsMessage && !MessageId.HasValue)
+            {
+                MessageId = _guild.SendMessageAsync(_channelId, reply).Result;
+            }
+        }
 
         public IReadOnlyList<RecordedResponse> Responses => _responses;
 
@@ -44,6 +84,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             EnsureFirstResponse("respond");
             _responses.Add(new RecordedResponse(ResponseKind.Response, reply, reply.Ephemeral));
+            Materialise(reply);
             return Task.CompletedTask;
         }
 
@@ -62,6 +103,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             EnsureFirstResponse("update the message");
             _responses.Add(new RecordedResponse(ResponseKind.MessageUpdate, reply, false));
+            Materialise(reply);
             return Task.CompletedTask;
         }
 
@@ -73,6 +115,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             }
 
             _responses.Add(new RecordedResponse(ResponseKind.Edit, reply, false));
+            Materialise(reply);
             return Task.CompletedTask;
         }
 

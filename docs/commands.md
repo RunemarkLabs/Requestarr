@@ -55,7 +55,7 @@ The card also says if the title is:
 - **Movies:** press **Request**.
 - **TV:** pick one of two paths:
   - **All seasons:** requests every season now, and new seasons as they air, straight away. Specials aren't included.
-  - **Choose seasons:** pick seasons from a list, including **Specials** if you want them, and optionally **Also new seasons as they air**. Very long shows list the 24 most recent seasons. Requestarr then says what you chose in plain words, for example "season 2 only; new seasons won't be added". Press **Request** to send it or **Back** to change it.
+  - **Choose seasons:** tick seasons in the list, including **Specials** if you want them. Shows with more than 24 seasons have pages: use **◀ / ▶** to move between them, and your ticks are kept. The message shows everything picked so far. **Also new seasons** turns monitoring of future seasons on or off. Press **Continue**, and Requestarr says what you chose in plain words, for example "seasons 1–2 and 36 only; new seasons won't be added". Press **Request** to send it, or **Back** to change your picks.
 
 **The final status** is always one of:
 
@@ -68,6 +68,10 @@ The card also says if the title is:
 | ⛔ **Not requested** | Refused, with the reason (for example your limit). |
 
 For TV, the status repeats which seasons were requested.
+
+**After the admin decides**, the request message itself changes to show it: ✅ **Approved**, ⛔ **Denied** (with the reason), or 🚫 **Cancelled**. Buttons that no longer apply disappear. You still get a separate message that pings you. Requests made before this version just get the separate message.
+
+**Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
 ### Your panel
 
@@ -117,6 +121,9 @@ All admin commands are under `/admin` and only work in `#requestarr-admin`.
 | `/admin queue [user] [type]` | Lists requests waiting for approval. |
 | `/admin approve id:{number}` | Approves a request and sends it to the user's Sonarr or Radarr. The **Approve** button on a request card does the same. |
 | `/admin deny id:{number} [reason]` | Denies a request. The reason is shown to the user. The **Deny** button asks for a reason. |
+| `/admin cancel id:{number} [reason]` | Cancels a pending request for the user, for example a duplicate. The reason is shown to the user. |
+
+When a request is approved, denied or cancelled, the user's request message and the approval card here both change to show it, and their buttons disappear. Clicking **Approve** or **Deny** on a card that's already decided changes nothing: you're told why, and the card is refreshed.
 | `/request …` | In the admin channel, makes a request as yourself. Admin requests skip approval and quotas and use the default instance. |
 
 ### `/admin help`
@@ -163,4 +170,4 @@ Requestarr keeps within Discord's limits:
 
 ## The Movie Database
 
-Cast and TV episode counts come from The Movie Database when the admin configures a key (setup guide 4.6). Wherever cast appears, Requestarr shows a short "Cast from TMDB" credit. The full notice is in `/help` and `/admin help` while a key is set: This product uses the TMDB API but is not endorsed or certified by TMDB.
+Cast and TV episode counts come from The Movie Database when the admin configures a key (setup guide 4.6). Wherever cast appears, Requestarr shows a short "Cast from TMDB" credit with TMDB's small logo in the card footer. While a key is set, `/help` and `/admin help` have a **Credits** topic with TMDB's logo and its notice: Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.

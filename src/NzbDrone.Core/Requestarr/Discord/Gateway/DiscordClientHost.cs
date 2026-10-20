@@ -339,7 +339,20 @@ namespace Requestarr.Core.Discord.Gateway
                 case SocketMessageComponent component:
                 {
                     var kind = component.Data.Type == ComponentType.Button ? InteractionKind.Button : InteractionKind.SelectMenu;
-                    return Base(kind, null, component.Data.CustomId, null, component.Data.Values?.ToList());
+                    var mapped = Base(kind, null, component.Data.CustomId, null, component.Data.Values?.ToList());
+                    return new DiscordInteraction
+                    {
+                        Kind = mapped.Kind,
+                        CustomId = mapped.CustomId,
+                        Values = mapped.Values,
+                        UserId = mapped.UserId,
+                        Username = mapped.Username,
+                        DisplayName = mapped.DisplayName,
+                        RoleIds = mapped.RoleIds,
+                        GuildId = mapped.GuildId,
+                        ChannelId = mapped.ChannelId,
+                        MessageId = component.Message?.Id
+                    };
                 }
 
                 case SocketAutocompleteInteraction autocomplete:
@@ -375,7 +388,8 @@ namespace Requestarr.Core.Discord.Gateway
                         DisplayName = mapped.DisplayName,
                         RoleIds = mapped.RoleIds,
                         GuildId = mapped.GuildId,
-                        ChannelId = mapped.ChannelId
+                        ChannelId = mapped.ChannelId,
+                        MessageId = modal.Message?.Id
                     };
                 }
 
