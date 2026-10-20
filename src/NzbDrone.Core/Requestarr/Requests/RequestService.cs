@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using NLog;
 using Requestarr.Core.Anime;
 using Requestarr.Core.Audit;
+using Requestarr.Core.Availability;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
@@ -79,6 +80,16 @@ namespace Requestarr.Core.Requests
         // Closes a pending request as already available (the title is already there).
         Task<ServiceResult> MarkAvailableAsync(int requestId, Actor admin, string adminName);
 
+        // What Sonarr / Radarr now say about a sent request. A change (downloading, stuck, failed,
+        // seasons available, all there) reposts its messages and feed card; no change does nothing.
+        Task<bool> ApplyProgressAsync(Request request, ProgressSnapshot snapshot);
+
+        // More seasons for a TV request, by its owner, a follower or an admin: no approval, no quota.
+        Task<ServiceResult> AddSeasonsAsync(int requestId, RequestarrUser user, bool asAdmin, Actor actor, SeasonChoice add);
+
+        // Whether the request is one the caller can add seasons to.
+        bool CanAddSeasons(Request request, RequestarrUser user, bool asAdmin);
+
         // Remembers the message a request was made in, so it can be edited after a decision.
         void AttachMessage(int requestId, ulong channelId, ulong messageId);
 
@@ -88,6 +99,12 @@ namespace Requestarr.Core.Requests
         // The request's real state as a request message: status line, card, and a Cancel button
         // only while it can still be cancelled.
         Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null);
+
+        // The same for someone viewing their own message: a follower's says whose request it is.
+        Task<InteractionReply> StatusReplyForAsync(Request request, RequestarrUser viewer, string note = null);
+
+        // The title as the request's instance has it now (null when it can't be looked up).
+        Task<MediaLookupResult> ItemForAsync(Request request);
         List<Request> List(RequestarrUser user, bool all, RequestStatus? status, ContentType? type);
         string OwnerName(Request request);
         string DisplayName(int? userId);
@@ -112,6 +129,7 @@ namespace Requestarr.Core.Requests
         private readonly IMetadataService _metadata;
         private readonly IAnimeService _anime;
         private readonly IUserIdentityRepository _identities;
+        private readonly IRequestFeed _feed;
         private readonly Logger _logger;
 
         public RequestService(IRequestRepository requests,
@@ -127,6 +145,7 @@ namespace Requestarr.Core.Requests
                               IMetadataService metadata,
                               IAnimeService anime,
                               IUserIdentityRepository identities,
+                              IRequestFeed feed,
                               Logger logger)
         {
             _requests = requests;
@@ -142,6 +161,7 @@ namespace Requestarr.Core.Requests
             _metadata = metadata;
             _anime = anime;
             _identities = identities;
+            _feed = feed;
             _logger = logger;
         }
 
@@ -283,7 +303,7 @@ namespace Requestarr.Core.Requests
                 if (existing.HasValue && existing != language)
                 {
                     return AnimeDefaults.Winner(anime.Priority, existing.Value, language.Value) == existing.Value
-                        ? StaysAs(caller, state, existing.Value, anime.Priority)
+                        ? await StaysAs(caller, state, existing.Value, anime.Priority)
                         : await SwitchTo(caller, state, language.Value);
                 }
             }
@@ -292,7 +312,7 @@ namespace Requestarr.Core.Requests
                 language = null;
             }
 
-            if (item.LibraryId.HasValue)
+            if (RequestCards.InLibraryAndDone(state))
             {
                 return new RequestResult(true, DiscordText.AlreadyInLibrary, null, RequestOutcome.AlreadyAvailable);
             }
@@ -310,7 +330,7 @@ namespace Requestarr.Core.Requests
                     return new RequestResult(false, DiscordText.AlreadyFollowing, state.Active, RequestOutcome.Following);
                 }
 
-                _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
+                await Subscribe(state.Active, caller.User.Id, state.Item);
                 _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString());
 
                 return new RequestResult(true, DiscordText.Subscribed(state.Active.Label, state.ActiveOwner, state.Active.Id), state.Active, RequestOutcome.Following);
@@ -360,6 +380,7 @@ namespace Requestarr.Core.Requests
                 Seasons = chosen,
                 MonitorFutureSeasons = future,
                 Language = language,
+                PosterUrl = item.PosterUrl,
                 Requested = Clock()
             });
 
@@ -370,6 +391,8 @@ namespace Requestarr.Core.Requests
             {
                 request.DecidedByUserId = caller.AsAdmin ? caller.User.Id : null;
                 var (sent, _) = await SendAsync(request, state.Instance, item, caller.AsAdmin ? caller.Actor : Actor.System);
+
+                await _feed.PostAsync(request, item);
 
                 if (request.Status == RequestStatus.Available)
                 {
@@ -382,6 +405,7 @@ namespace Requestarr.Core.Requests
             }
 
             await PostApprovalCard(request, state.Instance, item, caller.Name);
+            await _feed.PostAsync(request, item);
 
             return new RequestResult(true, DiscordText.RequestPending(request.Label, request.Id), request, RequestOutcome.Pending);
         }
@@ -476,16 +500,35 @@ namespace Requestarr.Core.Requests
                 return ServiceResult.Fail(DiscordText.RequestNotFound);
             }
 
-            if (request.Status != RequestStatus.Pending)
+            if (!AdminCanCancel(request))
             {
-                return ServiceResult.Fail(DiscordText.CannotCancel(request.Status));
+                return ServiceResult.Fail(request.Status == RequestStatus.Approved ? DiscordText.CannotCancelDownloading(request.Id) : DiscordText.CannotCancel(request.Status));
             }
 
-            var available = await TryLookup(_backends.Find(request.BackendId ?? 0), request);
+            var instance = _backends.Find(request.BackendId ?? 0);
+            var wasSent = request.Status == RequestStatus.Approved;
 
-            if (available?.LibraryId != null)
+            if (wasSent)
             {
-                return await CloseAsAvailable(request, admin, available);
+                // Already in Sonarr / Radarr: stop the search there, delete nothing.
+                try
+                {
+                    await _backends.ApiFor(instance).SetMonitoredAsync(instance.Settings, request.ExternalItemId.Value, false);
+                }
+                catch (Exception ex) when (ex is BackendException || ex is InvalidOperationException || ex is NullReferenceException)
+                {
+                    _logger.Warn(ex, "Request {0}: could not unmonitor it on {1}", request.Id, instance?.Name);
+                    return ServiceResult.Fail(DiscordText.CancelNotStopped(request, instance?.Name));
+                }
+            }
+            else
+            {
+                var available = await TryLookup(instance, request);
+
+                if (available?.LibraryId != null)
+                {
+                    return await CloseAsAvailable(request, admin, available);
+                }
             }
 
             request.Status = RequestStatus.Cancelled;
@@ -494,10 +537,10 @@ namespace Requestarr.Core.Requests
             request.DecidedByUserId = admin.UserId;
             _requests.Update(request);
 
-            _audit.Record(admin, "request.cancel", "request", request.Id.ToString(), request.DecisionReason);
+            _audit.Record(admin, "request.cancel", "request", request.Id.ToString(), wasSent ? $"unmonitored on {instance.Name}{(request.DecisionReason != null ? "; " + request.DecisionReason : string.Empty)}" : request.DecisionReason);
             await RefreshOrNotify(request, null, DiscordText.RequestCancelledByAdminNotice(request.Label, request.Id, request.DecisionReason));
 
-            return ServiceResult.Ok(DiscordText.AdminCancelled(request));
+            return ServiceResult.Ok(wasSent ? DiscordText.AdminCancelledSent(request, instance.Name) : DiscordText.AdminCancelled(request));
         }
 
         public async Task<ServiceResult> MarkAvailableAsync(int requestId, Actor admin, string adminName)
@@ -534,6 +577,136 @@ namespace Requestarr.Core.Requests
             return ServiceResult.Ok(DiscordText.AdminMarkedAvailable(request));
         }
 
+        // The admin can cancel while it waits for approval, or once sent while nothing is
+        // downloading or there yet (later, removal is the way: task 4).
+        public static bool AdminCanCancel(Request request) =>
+            request.Status == RequestStatus.Pending ||
+            (request.Status == RequestStatus.Approved && request.Progress == DownloadProgress.None && !(request.AvailableSeasons?.Any() ?? false));
+
+        public async Task<bool> ApplyProgressAsync(Request request, ProgressSnapshot snapshot)
+        {
+            if (snapshot == null || !request.IsTracked)
+            {
+                return false;
+            }
+
+            if (snapshot.SizeLeft != request.ProgressSizeLeft)
+            {
+                request.ProgressSizeLeft = snapshot.SizeLeft;
+                request.ProgressSince = Clock();
+            }
+
+            var seasons = snapshot.AvailableSeasons.Distinct().OrderBy(s => s).ToList();
+            var detail = snapshot.Progress is DownloadProgress.Stalled or DownloadProgress.Failed ? snapshot.Detail : null;
+            var changed = snapshot.Complete || snapshot.Progress != request.Progress || !seasons.SequenceEqual(request.AvailableSeasons ?? new List<int>()) || detail != request.ProgressDetail;
+
+            if (!changed)
+            {
+                _requests.Update(request);
+                return false;
+            }
+
+            var instance = _backends.Find(request.BackendId ?? 0);
+            request.AvailableSeasons = seasons;
+            request.ProgressDetail = detail;
+
+            if (snapshot.Complete)
+            {
+                request.Status = RequestStatus.Available;
+                request.Progress = DownloadProgress.Imported;
+                request.Fulfilled = Clock();
+                request.ProgressSizeLeft = null;
+                _requests.Update(request);
+                _audit.Record(Actor.System, "request.fulfilled", "request", request.Id.ToString(), request.ContentType == ContentType.Tv ? $"seasons {DiscordText.PlainSeasons(seasons)}" : null);
+                await RefreshOrNotify(request, null, DiscordText.RequestFulfilledNotice(request.Label, request.Id));
+                return true;
+            }
+
+            request.Progress = snapshot.Progress;
+            _requests.Update(request);
+            _audit.Record(Actor.System, "request.progress", "request", request.Id.ToString(), $"{snapshot.Progress}{(seasons.Any() ? $", {DiscordText.PlainSeasons(seasons)} available" : string.Empty)}{(detail != null ? ": " + detail : string.Empty)}");
+            await RefreshOrNotify(request, null, DiscordText.RequestProgressNotice(request, instance?.Name));
+
+            return true;
+        }
+
+        public bool CanAddSeasons(Request request, RequestarrUser user, bool asAdmin) =>
+            request is { ContentType: ContentType.Tv, IsActive: true } &&
+            (asAdmin || (user != null && (request.OwnerUserId == user.Id || _subscribers.ForRequest(request.Id).Any(s => s.UserId == user.Id))));
+
+        public async Task<ServiceResult> AddSeasonsAsync(int requestId, RequestarrUser user, bool asAdmin, Actor actor, SeasonChoice add)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return ServiceResult.Fail(DiscordText.RequestNotFound);
+            }
+
+            if (!CanAddSeasons(request, user, asAdmin))
+            {
+                return ServiceResult.Fail(request.ContentType != ContentType.Tv || request.IsActive ? DiscordText.NotYourRequest : DiscordText.CannotAddSeasons(request.Status));
+            }
+
+            var seasons = (add?.Seasons ?? Array.Empty<int>()).Except(request.Seasons).Distinct().OrderBy(s => s).ToList();
+            var future = (add?.Future ?? false) && !request.MonitorFutureSeasons;
+
+            if (!seasons.Any() && !future)
+            {
+                return ServiceResult.Fail(DiscordText.NothingNewToAdd);
+            }
+
+            var instance = _backends.Find(request.BackendId ?? 0);
+
+            // Sent already: Sonarr monitors and searches the new seasons now. Pending: they go with it on approval.
+            if (request.Status != RequestStatus.Pending && request.ExternalItemId.HasValue)
+            {
+                if (instance == null || !instance.Enable)
+                {
+                    return ServiceResult.Fail(DiscordText.NoBackend(ContentType.Tv));
+                }
+
+                try
+                {
+                    await _sonarr.AddSeasonsAsync(instance.Settings, request.ExternalItemId.Value, seasons, future);
+                }
+                catch (BackendException ex)
+                {
+                    _logger.Warn(ex, "Adding seasons to request {0} on {1} failed", request.Id, instance.Name);
+                    return ServiceResult.Fail(DiscordText.BackendUnavailable(instance.Name));
+                }
+            }
+
+            request.Seasons = request.Seasons.Concat(seasons).Distinct().OrderBy(s => s).ToList();
+            request.MonitorFutureSeasons |= future;
+
+            if (request.Status == RequestStatus.Available)
+            {
+                // Fulfilled before: the new seasons are on their way, so it's tracked again.
+                request.Status = RequestStatus.Approved;
+                request.Progress = DownloadProgress.None;
+            }
+
+            _requests.Update(request);
+
+            var added = DiscordText.AddedSeasons(seasons, future);
+            _audit.Record(actor, "request.seasons.add", "request", request.Id.ToString(), added);
+            await RefreshOrNotify(request, null, DiscordText.SeasonsAddedNotice(request.Label, request.Id, added), skipUserId: user?.Id);
+
+            return ServiceResult.Ok(DiscordText.SeasonsAdded(request, added, request.Status == RequestStatus.Pending));
+        }
+
+        // A follower joins: no quota cost; the admin feed shows who follows.
+        private async Task Subscribe(Request request, int userId, MediaLookupResult item, bool postFeed = true)
+        {
+            _subscribers.Insert(new RequestSubscriber { RequestId = request.Id, UserId = userId, Added = Clock() });
+
+            if (postFeed)
+            {
+                await _feed.PostAsync(request, item);
+            }
+        }
+
         public void AttachFollowerMessage(int requestId, int userId, ulong channelId, ulong messageId)
         {
             var subscriber = _subscribers.ForRequest(requestId).FirstOrDefault(s => s.UserId == userId);
@@ -550,7 +723,7 @@ namespace Requestarr.Core.Requests
 
         // The requested language loses to the series' current one: follow it (or, in the library,
         // the good news that it is there).
-        private RequestResult StaysAs(RequestCaller caller, TitleState state, AnimeLanguage existing, AnimePriority priority)
+        private async Task<RequestResult> StaysAs(RequestCaller caller, TitleState state, AnimeLanguage existing, AnimePriority priority)
         {
             var label = Titles.WithYear(state.Item.Title, state.Item.Year);
 
@@ -566,7 +739,7 @@ namespace Requestarr.Core.Requests
 
             if (!state.CallerFollows)
             {
-                _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
+                await Subscribe(state.Active, caller.User.Id, state.Item);
                 _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"asked for {DiscordText.Label(existing == AnimeLanguage.Dub ? AnimeLanguage.Sub : AnimeLanguage.Dub)}, stays {DiscordText.Label(existing)}");
             }
 
@@ -595,6 +768,14 @@ namespace Requestarr.Core.Requests
 
             _audit.Record(caller.Actor, "anime.switch", "title", $"tv:{item.TvdbId}", $"{label} on {state.Instance.Name} now {DiscordText.Label(language)}");
 
+            // Someone else's open request: the switcher follows it (joined before the reposts below,
+            // so the feed card is posted once, already showing them).
+            if (!item.LibraryId.HasValue && state.Active != null && !state.CallerOwnsActive && !state.CallerFollows)
+            {
+                await Subscribe(state.Active, caller.User.Id, item, postFeed: false);
+                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"switched it to {DiscordText.Label(language)}");
+            }
+
             // Every request for this title on the instance: its language changes and its people are told.
             foreach (var request in _requests.ForTitle(ContentType.Tv, item.TvdbId.Value).Where(r => r.BackendId == state.Instance.Id && r.IsActive))
             {
@@ -616,12 +797,6 @@ namespace Requestarr.Core.Requests
                 return new RequestResult(true, DiscordText.AnimeSwitchedYours(label, language), active, RequestOutcome.Pending);
             }
 
-            if (!state.CallerFollows)
-            {
-                _subscribers.Insert(new RequestSubscriber { RequestId = state.Active.Id, UserId = caller.User.Id, Added = Clock() });
-                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), $"switched it to {DiscordText.Label(language)}");
-            }
-
             return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, active.Id), active, RequestOutcome.Following);
         }
 
@@ -640,6 +815,11 @@ namespace Requestarr.Core.Requests
         }
 
         public Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item = null) => StatusReplyAsync(request, item, null, null, null);
+
+        public Task<InteractionReply> StatusReplyForAsync(Request request, RequestarrUser viewer, string note = null) =>
+            StatusReplyAsync(request, null, null, note, viewer != null && viewer.Id != request.OwnerUserId ? OwnerName(request) : null);
+
+        public Task<MediaLookupResult> ItemForAsync(Request request) => TryLookup(_backends.Find(request.BackendId ?? 0), request);
 
         private async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item, string mention, string note, string followerOf)
         {
@@ -836,6 +1016,7 @@ namespace Requestarr.Core.Requests
             }
 
             await RefreshFollowers(request, item, instance, note, skipUserId, notice);
+            await _feed.PostAsync(request, item);
 
             if (ulong.TryParse(request.AdminMessageId, out var card) && ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
             {

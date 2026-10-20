@@ -30,6 +30,11 @@ discord:
 tmdb:
   apiKey: ${TMDB_API_KEY:-}
 
+# Downloads: Sonarr and Radarr call Requestarr's webhook on the Compose network; the poll backs it up.
+availability:
+  webhookUrl: http://requestarr:9797
+  pollMinutes: 5
+
 # Any number of instances per type; names must be unique.
 backends:
   sonarr:

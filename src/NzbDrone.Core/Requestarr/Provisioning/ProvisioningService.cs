@@ -29,6 +29,7 @@ namespace Requestarr.Core.Provisioning
         private readonly IDiscordSettingsStore _discordSettings;
         private readonly IBackendService _backends;
         private readonly ITmdbSettingsStore _tmdb;
+        private readonly Requestarr.Core.Availability.IAvailabilitySettingsStore _availability;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -38,6 +39,7 @@ namespace Requestarr.Core.Provisioning
                                    IDiscordSettingsStore discordSettings,
                                    IBackendService backends,
                                    ITmdbSettingsStore tmdb,
+                                   Requestarr.Core.Availability.IAvailabilitySettingsStore availability,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -47,6 +49,7 @@ namespace Requestarr.Core.Provisioning
             _discordSettings = discordSettings;
             _backends = backends;
             _tmdb = tmdb;
+            _availability = availability;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -178,6 +181,11 @@ namespace Requestarr.Core.Provisioning
             {
                 applied.Add("The Movie Database key (cast enabled)");
             }
+
+            _availability.Set(document.Availability?.WebhookUrl, document.Availability?.PollMinutes);
+            applied.Add(_availability.WebhookUrl != null
+                ? $"availability (webhooks to {_availability.WebhookUrl}, backup poll every {_availability.PollMinutes} min)"
+                : $"availability (polling every {_availability.PollMinutes} min; no webhookUrl)");
 
             _backends.SyncFromProvisioning(document.Backends);
 

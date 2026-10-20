@@ -36,7 +36,7 @@ namespace Requestarr.Core.Test.Polish
 
             final.Content.Should().StartWith(DiscordText.FinalSent).And.NotContain("You chose");
             final.Content.Should().Contain("Seasons: all seasons (1–2) and new seasons as they air, without specials.");
-            final.Buttons.Should().BeEmpty();
+            final.Buttons.Select(b => b.CustomId).Should().Equal("req-add:1"); // task 3: only Add seasons once sent
             Sonarr.Adds.Should().ContainSingle();
         }
 

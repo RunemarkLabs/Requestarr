@@ -37,7 +37,7 @@ namespace Requestarr.Core.Test.AnimeDub
             Latest(Alice).Content.Should().StartWith($"<@{Alice}> {DiscordText.FinalPending}")
                 .And.Contain(DiscordText.LanguageLine(AnimeLanguage.Dub))
                 .And.Contain("Episodes already downloaded stay as they are");
-            Latest(Alice).Buttons.Single().CustomId.Should().Be($"req-cancel:{RequestFor().Id}", "a pending request keeps its Cancel");
+            Latest(Alice).Buttons.Select(b => b.CustomId).Should().Equal(new[] { $"req-cancel:{RequestFor().Id}", $"req-add:{RequestFor().Id}" }, "a pending request keeps its Cancel (and TV can add seasons)");
             Mocker.Resolve<IAuditRepository>().All().Should().Contain(a => a.Action == "anime.switch");
         }
 

@@ -578,6 +578,139 @@ namespace Requestarr.Core.Discord
         };
 
         // Slash command descriptions (Discord: up to 100 characters)
+        // Availability: what Sonarr / Radarr are doing with a sent request.
+        public const string FinalDownloading = "⬇️ **Downloading**";
+        public const string FinalStalled = "⚠️ **Download stuck**";
+        public const string FinalDownloadFailed = "⚠️ **Download failed**";
+        public const string FinalReady = "🎉 **Available**";
+        public const string FinalPartlyAvailable = "🎉 **Partly available**";
+
+        // Seasons as a plain list ("specials and seasons 1–3"), without the new-seasons wording.
+        public static string PlainSeasons(IReadOnlyCollection<int> seasons)
+        {
+            var regular = (seasons ?? Array.Empty<int>()).Where(s => s > 0).Distinct().OrderBy(s => s).ToList();
+            var parts = new List<string>();
+
+            if (seasons?.Contains(0) == true)
+            {
+                parts.Add("specials");
+            }
+
+            if (regular.Any())
+            {
+                parts.Add($"{(regular.Count == 1 ? "season" : "seasons")} {Ranges(regular)}");
+            }
+
+            return parts.Any() ? string.Join(" and ", parts) : "nothing yet";
+        }
+
+        public static string RequestSearchingStatus(Request request, string instance) =>
+            $"Request #{request.Id} for {request.Label} is in {instance ?? "the server"}, which is looking for a release.";
+
+        public static string RequestDownloadingStatus(Request request, string instance) =>
+            $"Request #{request.Id} for {request.Label} is downloading in {instance ?? "the server"}.";
+
+        public static string RequestStalledStatus(Request request, string instance) =>
+            $"Request #{request.Id} for {request.Label} stopped downloading in {instance ?? "the server"}{Because(request.ProgressDetail)}. The admin can see this too.";
+
+        public static string RequestDownloadFailedStatus(Request request, string instance) =>
+            $"The download for request #{request.Id} ({request.Label}) failed{Because(request.ProgressDetail)}. {instance ?? "The server"} usually tries another release by itself.";
+
+        public static string RequestReadyStatus(Request request) => request.ContentType == ContentType.Tv
+            ? $"Good news: {request.Label} is ready to watch: {PlainSeasons(request.AvailableSeasons)}. Request #{request.Id} is complete."
+            : $"Good news: {request.Label} is ready to watch. Request #{request.Id} is complete.";
+
+        public static string AvailableSoFar(Request request) => $"Available now: **{PlainSeasons(request.AvailableSeasons)}**. The rest is still on its way.";
+
+        public static string RequestFulfilledNotice(string label, int id) => $"🎉 Good news! {label} (request #{id}) is ready to watch.";
+
+        // Fallback notices, for people with no request message to repost.
+        public static string RequestProgressNotice(Request request, string instance) => request.Progress switch
+        {
+            DownloadProgress.Downloading when request.AvailableSeasons?.Any() == true => $"{request.Label} (request #{request.Id}): {PlainSeasons(request.AvailableSeasons)} available now; the rest is downloading.",
+            DownloadProgress.Downloading => $"{request.Label} (request #{request.Id}) is downloading in {instance ?? "the server"}.",
+            DownloadProgress.Stalled => $"{request.Label} (request #{request.Id}) stopped downloading{Because(request.ProgressDetail)}.",
+            DownloadProgress.Failed => $"The download for {request.Label} (request #{request.Id}) failed{Because(request.ProgressDetail)}; {instance ?? "the server"} usually tries another release.",
+            _ when request.AvailableSeasons?.Any() == true => $"{request.Label} (request #{request.Id}): {PlainSeasons(request.AvailableSeasons)} available now.",
+            _ => $"{request.Label} (request #{request.Id}) is waiting for a release in {instance ?? "the server"}."
+        };
+
+        public static string NoProgressFor(int hours) => $"no progress for {hours} hours";
+
+        public static string WebhookUnreachable(string url, string error, int minutes) =>
+            $"can't reach Requestarr at {url} ({error}). Downloads are still tracked: Requestarr checks every {minutes} minutes.";
+
+        private static string Because(string detail) => string.IsNullOrWhiteSpace(detail) ? string.Empty : $": {detail}";
+
+        // Cancelling a request that was already sent (admin, from the feed or /admin cancel).
+        public static string CannotCancelDownloading(int id) =>
+            $"Request #{id} is already downloading or partly there, so it can't be cancelled any more. Removing titles comes with removal votes.";
+
+        public static string CancelNotStopped(Request request, string instance) =>
+            $"Request #{request.Id} wasn't cancelled: {instance ?? "the server"} couldn't be told to stop searching for it. Nothing changed; try again in a moment.";
+
+        public static string AdminCancelledSent(Request request, string instance) =>
+            $"Cancelled request #{request.Id} for {request.Label}. It stays in {instance} but is no longer monitored there, so nothing more is searched for or downloaded. Nothing was deleted.";
+
+        // Adding seasons to a TV request.
+        public const string AddSeasonsLabel = "Add seasons";
+        public const string AddTheseSeasonsLabel = "Add these seasons";
+        public const string AddSeasonsPrompt = "Pick the seasons to add. Adding needs no approval and doesn't count against limits.";
+        public const string EverythingRequested = "Every season is already requested, and new seasons are added as they air.";
+        public const string NothingNewToAdd = "Those seasons are already requested; nothing was added.";
+
+        public static string AddSeasonsHeader(Request request) => $"📺 **Add seasons**{Dot}{request.Label}";
+
+        public static string AlreadyRequested(Request request) =>
+            $"Already requested: **{SeasonList(request.Seasons, request.MonitorFutureSeasons)}**{(request.AvailableSeasons?.Any() == true ? $" ({PlainSeasons(request.AvailableSeasons)} available)" : string.Empty)}.";
+
+        public static string CannotAddSeasons(RequestStatus status) => $"Seasons can only be added to an open request; this one is {Label(status)}.";
+
+        public static string AddedSeasons(IReadOnlyCollection<int> seasons, bool future) =>
+            seasons.Any() ? $"{PlainSeasons(seasons)}{(future ? ", plus new seasons as they air" : string.Empty)}" : "new seasons as they air";
+
+        public static string SeasonsAdded(Request request, string added, bool pending) => pending
+            ? $"Added {added} to request #{request.Id}. They go to Sonarr with the request once it's approved."
+            : $"Added {added} to request #{request.Id}. Sonarr is searching for them now.";
+
+        public static string SeasonsAddedNotice(string label, int id, string added) => $"{Capitalize(added)} added to request #{id} for {label}.";
+
+        public static string SeasonsAddedNote(string added) => $"➕ {Capitalize(added)} added.";
+
+        // The admin feed: one compact card per request.
+        // A transparent 800x1 image: Discord sizes embeds to their content, so every feed card uses it
+        // to be drawn the same width.
+        public const string FeedCardWidthUrl = "https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/docs/assets/feed-card-width.png";
+
+        public const string FeedChannelTopic = "Requestarr activity: one card per request, newest at the bottom. Admins only.";
+
+        public static string FeedState(Request request) => request.Status switch
+        {
+            RequestStatus.Pending => FinalPending,
+            RequestStatus.Approved => request.Progress switch
+            {
+                DownloadProgress.Downloading => request.AvailableSeasons?.Any() == true ? $"{FinalPartlyAvailable}, rest downloading" : FinalDownloading,
+                DownloadProgress.Stalled => $"{FinalStalled}{Because(request.ProgressDetail)}",
+                DownloadProgress.Failed => $"{FinalDownloadFailed}{Because(request.ProgressDetail)}",
+                _ => request.AvailableSeasons?.Any() == true ? FinalPartlyAvailable : "✅ **Sent**, searching"
+            },
+            RequestStatus.Available => request.Progress == DownloadProgress.Imported ? FinalReady : FinalAvailable,
+            RequestStatus.Denied => $"{FinalDenied}{Because(request.DecisionReason)}",
+            RequestStatus.Cancelled => FinalCancelled,
+            _ => $"{FinalFailed}{Because(request.DecisionReason)}"
+        };
+
+        public static string FeedMeta(Request request, string owner, string instance) =>
+            $"{(request.ContentType == ContentType.Tv ? "📺 TV" : "🎬 Movie")}{Dot}{owner}{(instance != null ? Dot + instance : string.Empty)}";
+
+        public static string FeedFollowers(IReadOnlyCollection<string> names) => $"Following: {string.Join(", ", names)}";
+
+        public static string FeedFooter(Request request) => $"Request #{request.Id}";
+
+        // Account events go to the admin channel (never the feed).
+        public static string MemberLeftAdminNotice(string name) =>
+            $"**{name}** left the server: their access is suspended and their channel is locked. `/admin user unsuspend` restores them if they come back.";
+
         public static class Commands
         {
             public const string Admin = "Requestarr admin commands";

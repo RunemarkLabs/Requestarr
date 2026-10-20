@@ -28,6 +28,16 @@ namespace Requestarr.Core.Requests
         public const string Approve = "req-approve";
         public const string Available = "req-available";
         public const string Deny = "req-deny";
+
+        // Admin cancel from the feed (pending, or sent but nothing downloading yet).
+        public const string AdminCancel = "req-admin-cancel";
+
+        // Adding seasons to a TV request: open the picker, page, pick, add, back.
+        public const string AddSeasons = "req-add";
+        public const string AddPage = "req-add-page";
+        public const string AddPick = "req-add-pick";
+        public const string AddConfirm = "req-add-ok";
+        public const string AddBack = "req-add-back";
         public const string DenyReason = "req-deny-reason";
         public const string ReasonField = "reason";
 
@@ -127,7 +137,7 @@ namespace Requestarr.Core.Requests
         // What the card says about a title's current state, or null when it can be requested.
         public static string StateLine(TitleState state)
         {
-            if (state.Item.LibraryId.HasValue)
+            if (InLibraryAndDone(state))
             {
                 return DiscordText.StateInLibrary;
             }
@@ -142,6 +152,10 @@ namespace Requestarr.Core.Requests
                 : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id);
         }
 
+        // In the library with nothing on its way. A sent request still downloading is listed by
+        // Sonarr / Radarr already, but isn't there yet: others can follow it to hear when it is.
+        public static bool InLibraryAndDone(TitleState state) => state.Item.LibraryId.HasValue && state.Active?.IsTracked != true;
+
         public static InteractionReply Detail(ContentType type, TitleState state, string query = null)
         {
             var item = state.Item;
@@ -149,7 +163,7 @@ namespace Requestarr.Core.Requests
             var lines = new List<string> { DiscordText.BlockHeader(type, DiscordText.StepDetails) };
             var buttons = new List<InteractionButton>();
 
-            if (item.LibraryId.HasValue)
+            if (InLibraryAndDone(state))
             {
                 lines.Add(DiscordText.StateInLibrary);
             }
@@ -386,6 +400,11 @@ namespace Requestarr.Core.Requests
                 reply.Buttons.Add(CancelButton(result.Request.Id));
             }
 
+            if (type == ContentType.Tv && result.Request is { IsActive: true } && result.Outcome is RequestOutcome.Sent or RequestOutcome.Pending or RequestOutcome.Following)
+            {
+                reply.Buttons.Add(AddSeasonsButton(result.Request.Id));
+            }
+
             return reply;
         }
 
@@ -399,7 +418,15 @@ namespace Requestarr.Core.Requests
             var (status, color, message) = request.Status switch
             {
                 RequestStatus.Pending => (DiscordText.FinalPending, PendingColor, DiscordText.RequestPending(request.Label, request.Id)),
-                RequestStatus.Approved => (DiscordText.FinalApproved, SentColor, DiscordText.RequestApprovedStatus(request.Label, request.Id, instance)),
+                RequestStatus.Approved => request.Progress switch
+                {
+                    DownloadProgress.Downloading => (DiscordText.FinalDownloading, SentColor, DiscordText.RequestDownloadingStatus(request, instance)),
+                    DownloadProgress.Stalled => (DiscordText.FinalStalled, PendingColor, DiscordText.RequestStalledStatus(request, instance)),
+                    DownloadProgress.Failed => (DiscordText.FinalDownloadFailed, PendingColor, DiscordText.RequestDownloadFailedStatus(request, instance)),
+                    _ when request.AvailableSeasons?.Any() == true => (DiscordText.FinalPartlyAvailable, SentColor, DiscordText.RequestSearchingStatus(request, instance)),
+                    _ => (DiscordText.FinalApproved, SentColor, DiscordText.RequestApprovedStatus(request.Label, request.Id, instance))
+                },
+                RequestStatus.Available when request.Progress == DownloadProgress.Imported => (DiscordText.FinalReady, SentColor, DiscordText.RequestReadyStatus(request)),
                 RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id)),
                 RequestStatus.Denied => (DiscordText.FinalDenied, RefusedColor, DiscordText.RequestDeniedStatus(request.Label, request.Id, request.DecisionReason)),
                 RequestStatus.Cancelled => (DiscordText.FinalCancelled, CancelledColor, request.DecidedByUserId.HasValue
@@ -418,6 +445,11 @@ namespace Requestarr.Core.Requests
             if (request.ContentType == ContentType.Tv)
             {
                 lines.Add(DiscordText.SeasonsLine(DiscordText.Seasons(request)));
+
+                if (request.Status == RequestStatus.Approved && request.AvailableSeasons?.Any() == true)
+                {
+                    lines.Add(DiscordText.AvailableSoFar(request));
+                }
             }
 
             if (request.Language.HasValue)
@@ -437,13 +469,158 @@ namespace Requestarr.Core.Requests
                 KeepEmbeds = item == null
             };
 
-            // Only the buttons valid now: Cancel for the owner of a pending request.
+            // Only the buttons valid now: Cancel for the owner of a pending request; Add seasons on
+            // any open TV request (owner and followers).
             if (request.Status == RequestStatus.Pending && followerOf == null)
             {
                 reply.Buttons.Add(CancelButton(request.Id));
             }
 
+            if (request.ContentType == ContentType.Tv && request.IsActive)
+            {
+                reply.Buttons.Add(AddSeasonsButton(request.Id));
+            }
+
             return reply;
+        }
+
+        public static InteractionButton AddSeasonsButton(int requestId) =>
+            new() { CustomId = $"{RequestRoutes.AddSeasons}:{requestId}", Label = DiscordText.AddSeasonsLabel, Style = ButtonStyle.Secondary };
+
+        // The admin feed card: small, one per request, only the buttons valid now.
+        public static InteractionReply FeedCard(Request request, MediaLookupResult item, string owner, string instance, IReadOnlyCollection<string> followers)
+        {
+            var lines = new List<string> { DiscordText.FeedState(request), DiscordText.FeedMeta(request, owner, instance) };
+
+            if (request.ContentType == ContentType.Tv)
+            {
+                lines.Add(DiscordText.SeasonsLine(DiscordText.Seasons(request)));
+
+                if (request.Status == RequestStatus.Approved && request.AvailableSeasons?.Any() == true)
+                {
+                    lines.Add(DiscordText.AvailableSoFar(request));
+                }
+            }
+
+            if (request.Language.HasValue)
+            {
+                lines.Add(DiscordText.LanguageLine(request.Language.Value));
+            }
+
+            if (followers.Any())
+            {
+                lines.Add(DiscordText.FeedFollowers(followers));
+            }
+
+            var reply = new InteractionReply
+            {
+                Embeds = new List<InteractionEmbed>
+                {
+                    new()
+                    {
+                        Title = request.Label,
+                        Description = DiscordLimits.Truncate(string.Join("\n", lines), 1000),
+                        ThumbnailUrl = request.PosterUrl ?? item?.PosterUrl,
+                        ImageUrl = DiscordText.FeedCardWidthUrl,
+                        Color = FeedColor(request),
+                        Footer = DiscordText.FeedFooter(request)
+                    }
+                }
+            };
+
+            if (request.Status == RequestStatus.Pending)
+            {
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.Approve}:{request.Id}", Label = DiscordText.ApproveLabel, Style = ButtonStyle.Success });
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.Deny}:{request.Id}", Label = DiscordText.DenyLabel, Style = ButtonStyle.Danger });
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.Available}:{request.Id}", Label = DiscordText.AlreadyAvailableLabel, Style = ButtonStyle.Secondary });
+            }
+
+            if (RequestService.AdminCanCancel(request))
+            {
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AdminCancel}:{request.Id}", Label = DiscordText.CancelLabel, Style = ButtonStyle.Secondary });
+            }
+
+            if (request.ContentType == ContentType.Tv && request.IsActive)
+            {
+                reply.Buttons.Add(AddSeasonsButton(request.Id));
+            }
+
+            return reply;
+        }
+
+        private static uint FeedColor(Request request) => request.Status switch
+        {
+            RequestStatus.Pending => PendingColor,
+            RequestStatus.Approved when request.Progress is DownloadProgress.Stalled or DownloadProgress.Failed => RefusedColor,
+            RequestStatus.Approved => FollowingColor,
+            RequestStatus.Available => SentColor,
+            RequestStatus.Cancelled => CancelledColor,
+            _ => RefusedColor
+        };
+
+        // Add seasons: only seasons not requested yet are offered (removing seasons is never done
+        // here), a page at a time; picks ride in the custom IDs.
+        public static IReadOnlyList<int> AddableSeasons(Request request, MediaLookupResult item) =>
+            (item.HasSpecials ? new[] { 0 } : Array.Empty<int>()).Concat(item.Seasons).Except(request.Seasons).Distinct().OrderBy(s => s).ToList();
+
+        public static InteractionReply AddSeasonsPicker(Request request, MediaLookupResult item, int page, SeasonChoice picks)
+        {
+            var addable = AddableSeasons(request, item);
+            var canFuture = !request.MonitorFutureSeasons;
+            picks ??= new SeasonChoice(false, Array.Empty<int>(), false);
+            var lines = new List<string> { DiscordText.AddSeasonsHeader(request), DiscordText.AlreadyRequested(request) };
+            var buttons = new List<InteractionButton>();
+
+            if (!addable.Any() && !canFuture)
+            {
+                lines.Add(DiscordText.EverythingRequested);
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddBack}:{request.Id}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary });
+                return new InteractionReply { Content = string.Join("\n", lines), Buttons = buttons };
+            }
+
+            var pages = Math.Max(1, (addable.Count + SeasonsPerPage - 1) / SeasonsPerPage);
+            page = Math.Clamp(page, 0, pages - 1);
+            var onPage = addable.Skip(page * SeasonsPerPage).Take(SeasonsPerPage).ToList();
+            var spec = EncodeSeasons(picks);
+
+            lines.Add(DiscordText.AddSeasonsPrompt);
+            lines.Add(picks.Seasons.Any() || picks.Future ? DiscordText.PickedSoFar(DiscordText.AddedSeasons(picks.Seasons, picks.Future)) : DiscordText.NothingPickedYet);
+
+            if (page > 0)
+            {
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddPage}:{request.Id}:{page - 1}:{spec}", Label = "◀", Style = ButtonStyle.Secondary });
+            }
+
+            if (page < pages - 1)
+            {
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddPage}:{request.Id}:{page + 1}:{spec}", Label = "▶", Style = ButtonStyle.Secondary });
+            }
+
+            if (canFuture)
+            {
+                var toggled = EncodeSeasons(picks with { Future = !picks.Future });
+                buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddPage}:{request.Id}:{page}:{toggled}", Label = DiscordText.FutureToggle(picks.Future), Style = picks.Future ? ButtonStyle.Primary : ButtonStyle.Secondary });
+            }
+
+            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddConfirm}:{request.Id}:{spec}", Label = DiscordText.AddTheseSeasonsLabel, Style = ButtonStyle.Success, Disabled = !picks.Seasons.Any() && !picks.Future });
+            buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.AddBack}:{request.Id}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary });
+
+            return new InteractionReply
+            {
+                Content = string.Join("\n", lines),
+                KeepEmbeds = true,
+                SelectMenu = onPage.Any()
+                    ? new InteractionSelectMenu
+                    {
+                        CustomId = $"{RequestRoutes.AddPick}:{request.Id}:{page}:{spec}",
+                        Placeholder = DiscordText.SeasonsPlaceholder,
+                        MinValues = 0,
+                        MaxValues = onPage.Count,
+                        Options = onPage.Select(n => new InteractionSelectOption(n == 0 ? DiscordText.Specials : DiscordText.SeasonLabel(n), $"s{n}", n == 0 ? DiscordText.SpecialsHint : null, picks.Seasons.Contains(n))).ToList()
+                    }
+                    : null,
+                Buttons = buttons
+            };
         }
 
         // A step that ends the block early (nothing found, backend down, access off).

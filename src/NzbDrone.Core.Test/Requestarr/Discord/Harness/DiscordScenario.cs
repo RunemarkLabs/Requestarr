@@ -5,6 +5,7 @@ using NUnit.Framework;
 using NzbDrone.Core.Test.Framework;
 using Requestarr.Core.Anime;
 using Requestarr.Core.Audit;
+using Requestarr.Core.Availability;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Gateway;
@@ -68,7 +69,9 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
+            Mocker.SetConstant<IRequestFeed>(Mocker.Resolve<RequestFeed>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
+            Mocker.SetConstant<IAvailabilitySettingsStore>(new AvailabilitySettingsStore());
 
             Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
 
@@ -78,7 +81,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<RequestHandler>(),
                 Mocker.Resolve<ApprovalHandler>(),
                 Mocker.Resolve<PanelHandler>(),
-                Mocker.Resolve<HelpHandler>());
+                Mocker.Resolve<HelpHandler>(),
+                Mocker.Resolve<SeasonsHandler>());
         }
 
         // Fake The Movie Database (no key) by default; live fixtures may use the real client.

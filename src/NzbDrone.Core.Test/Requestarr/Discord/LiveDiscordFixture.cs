@@ -60,11 +60,13 @@ namespace Requestarr.Core.Test.Discord
             IGuildSetupService guildSetup = null;
             IUserManagementService users = null;
             IPanelService panels = null;
+            Requestarr.Core.Requests.IRequestFeed feed = null;
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
+                new Lazy<Requestarr.Core.Requests.IRequestFeed>(() => feed),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 
@@ -72,6 +74,7 @@ namespace Requestarr.Core.Test.Discord
             Mocker.SetConstant<IDiscordClientHost>(host);
             Mocker.SetConstant<IDiscordGuildGateway>(gateway);
             guildSetup = Mocker.Resolve<GuildSetupService>();
+            feed = Mocker.Resolve<Requestarr.Core.Requests.RequestFeed>();
             Mocker.SetConstant(guildSetup);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             panels = Mocker.Resolve<PanelService>();

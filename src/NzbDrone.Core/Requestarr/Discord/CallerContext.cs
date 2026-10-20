@@ -12,6 +12,7 @@ namespace Requestarr.Core.Discord
         public bool RightServer { get; init; }
         public bool IsAdmin { get; init; }
         public bool InAdminChannel { get; init; }
+        public bool InFeedChannel { get; init; }
         public RequestarrUser User { get; init; }
         public bool InOwnChannel { get; init; }
 
@@ -20,6 +21,13 @@ namespace Requestarr.Core.Discord
             !RightServer ? DiscordText.WrongServer :
             !IsAdmin ? DiscordText.AdminOnly :
             !InAdminChannel ? DiscordText.AdminChannelOnly :
+            null;
+
+        // Buttons on admin cards: the admin channel or the admin feed.
+        public string AdminButtonDenial =>
+            !RightServer ? DiscordText.WrongServer :
+            !IsAdmin ? DiscordText.AdminOnly :
+            !InAdminChannel && !InFeedChannel ? DiscordText.AdminChannelOnly :
             null;
 
         // Same for a user command in the caller's own channel.
@@ -71,6 +79,7 @@ namespace Requestarr.Core.Discord
                 RightServer = true,
                 IsAdmin = isAdmin,
                 InAdminChannel = config?.AdminChannelId != null && config.AdminChannelId == interaction.ChannelId.ToString(),
+                InFeedChannel = config?.FeedChannelId != null && config.FeedChannelId == interaction.ChannelId.ToString(),
                 User = user,
                 InOwnChannel = user?.PrivateChannelId != null && user.PrivateChannelId == interaction.ChannelId.ToString()
             };

@@ -91,6 +91,13 @@ namespace NzbDrone.Core.Jobs
                         TypeName = typeof(HousekeepingCommand).FullName
                     },
 
+                    // Requestarr: the backup availability poll (the service decides when it's due).
+                    new ScheduledTask
+                    {
+                        Interval = 5,
+                        TypeName = typeof(Requestarr.Core.Availability.AvailabilityCheckCommand).FullName
+                    },
+
                     new ScheduledTask
                     {
                         Interval = GetBackupInterval(),
