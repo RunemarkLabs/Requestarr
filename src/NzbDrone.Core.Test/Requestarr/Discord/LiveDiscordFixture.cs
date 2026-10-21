@@ -182,7 +182,7 @@ namespace Requestarr.Core.Test.Discord
 
                 // 3. /user add on a real member, from the server owner in the admin channel
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
-                var target = members.FirstOrDefault(m => !m.IsBot && m.Id != guild.OwnerId) ?? members.First(m => m.Id == guild.OwnerId);
+                var target = LiveTestMembers.Pick(members)[0];
                 Log($"[add] target member {target.Username} ({target.Id}){(target.Id == guild.OwnerId ? " (owner: no other human member)" : string.Empty)}");
 
                 // This test's database is fresh, so a member already onboarded by the UAT stack would get a second

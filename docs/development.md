@@ -129,10 +129,13 @@ await harness.SendAsync(FakeInteraction.Button("request-approve:42").By(adminId)
 
 See `src/NzbDrone.Core.Test/Requestarr/Discord/Harness`. `FakeRadarr` and `FakeSonarr` stand in for the backends in the same scenarios.
 
-Three live checks are tagged `ManualTest`, so they never run in CI. Both read their keys from `docker/secrets.env`:
+Live checks are tagged `ManualTest`, so they never run in CI. They read their keys from `docker/secrets.env`.
+
+They only ever onboard, suspend or request as the members named in `DISCORD_TEST_MEMBERS` (comma-separated Discord usernames of your test accounts). Everyone else in the test server is left alone, so people who join it to try Requestarr are never touched. Set it in your shell, or in `docker/secrets.env`; with no named member in the server, the checks that need one are skipped. `LiveAnnouncementsFixture` shortens the outage thresholds to 15 and 30 seconds; set `LIVE_REAL_THRESHOLDS=1` to wait the real 3 and 30 minutes.
 
 ```bash
 set -a; . docker/secrets.env; set +a
+export DISCORD_TEST_MEMBERS=yourtestaccount
 cd _tests/net10.0
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveDiscordFixture" --logger "console;verbosity=detailed"
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveBackendFixture" --logger "console;verbosity=detailed"

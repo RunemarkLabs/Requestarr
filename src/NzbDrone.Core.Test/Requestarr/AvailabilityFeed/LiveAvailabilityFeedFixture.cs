@@ -158,7 +158,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 feedRest.PermissionOverwrites.Single(o => o.TargetId == guild.Id).Permissions.ViewChannel.Should().Be(global::Discord.PermValue.Deny);
 
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
-                var target = members.First(m => !m.IsBot && m.Id != guild.OwnerId);
+                var target = LiveTestMembers.Pick(members)[0];
                 await Send(dispatcher, FakeInteraction.Button($"adm-add:{target.Id}").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 var channel = ulong.Parse(users.FindByDiscordId(target.Id).PrivateChannelId);
                 Log($"[setup] {target.Username} added; request channel {channel}");

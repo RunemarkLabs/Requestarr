@@ -4,6 +4,11 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.1.1
+
+### Internal
+- Live checks only use the test accounts named in `DISCORD_TEST_MEMBERS`, and can wait the real outage thresholds.
+
 ## 0.1.0
 
 ### For users

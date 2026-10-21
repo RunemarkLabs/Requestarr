@@ -39,8 +39,10 @@ namespace Requestarr.Core.Test.Announcements
     [ManualTest]
     public class LiveAnnouncementsFixture : DbTest
     {
-        private static readonly TimeSpan ShortAlert = TimeSpan.FromSeconds(15);
-        private static readonly TimeSpan ShortAnnounce = TimeSpan.FromSeconds(30);
+        // LIVE_REAL_THRESHOLDS=1 waits the product's real 3 and 30 minutes instead.
+        private static readonly bool Real = Environment.GetEnvironmentVariable("LIVE_REAL_THRESHOLDS") == "1";
+        private static readonly TimeSpan ShortAlert = Real ? ConnectionMonitor.DefaultAlertAfter : TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan ShortAnnounce = Real ? ConnectionMonitor.DefaultAnnounceAfter : TimeSpan.FromSeconds(30);
 
         private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
         private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
@@ -170,7 +172,7 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[role] {Name(membersRole)}: roles in the server now {restGuild.Roles.Count}");
 
                 // 2. Membership on a real member: add, suspend, unsuspend.
-                var member = (await restGuild.GetUsersAsync().FlattenAsync()).Where(m => !m.IsBot && m.Id != guild.OwnerId).OrderBy(m => m.Id).First();
+                var member = LiveTestMembers.Pick(await restGuild.GetUsersAsync().FlattenAsync())[0];
                 async Task<bool> HasRole() => (await host.Client.Rest.GetGuildUserAsync(guild.Id, member.Id)).RoleIds.Contains(membersRole);
                 await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Add}:{member.Id}")));
                 var afterAdd = await HasRole();
@@ -192,7 +194,8 @@ namespace Requestarr.Core.Test.Announcements
                 userNotes.ForEach(m => Log($"[upgrade]   users, read back: \"{m.Content.Replace("\n", " | ")}\""));
                 adminNotes.Should().NotBeEmpty();
                 adminNotes[0].Content.Should().StartWith($"📋 **Requestarr {current}: what's new**");
-                userNotes.Should().ContainSingle();
+                var hasUserLines = Changelog.Parse(announcements.ChangelogText()).Single(v => v.Version == current).Users.Count > 0;
+                userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
                 var next = new Version(current.Major, current.Minor, current.Build + 1);
                 announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
@@ -206,16 +209,16 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade]   admin, read back: \"{adminAfter.Last().Content.Replace("\n", " | ")}\"");
                 Log($"[upgrade]   users, read back: \"{usersAfter.Last().Content.Replace("\n", " | ")}\"");
                 adminAfter.Should().HaveCount(adminNotes.Count + 1, "once per version, even across restarts");
-                usersAfter.Should().HaveCount(2);
+                usersAfter.Should().HaveCount(userNotes.Count + 1);
                 usersAfter.Last().Content.Should().NotContain("admins").And.NotContain("Internal");
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
                 Docker("stop");
                 sonarrStopped = true;
                 var sonarr = Mocker.Resolve<IBackendRepository>().All().Single(b => b.Name == "Sonarr (test)");
-                Log($"[outage] Sonarr stopped; alert after {ShortAlert.TotalSeconds}s, Announce offered after {ShortAnnounce.TotalSeconds}s (shortened on the monitor; defaults 3 and 30 minutes)");
+                Log($"[outage] Sonarr stopped; alert after {ShortAlert.TotalSeconds}s, Announce offered after {ShortAnnounce.TotalSeconds}s {(Real ? "(the product defaults)" : "(shortened on the monitor; defaults 3 and 30 minutes)")}");
 
-                for (var i = 0; i < 20 && !Mocker.Resolve<IBackendRepository>().Get(sonarr.Id).DownAnnounceOffered; i++)
+                for (var i = 0; i < 480 && !Mocker.Resolve<IBackendRepository>().Get(sonarr.Id).DownAnnounceOffered; i++)
                 {
                     await monitor.CheckAllAsync();
                     await Task.Delay(TimeSpan.FromSeconds(5));
