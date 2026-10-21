@@ -29,11 +29,11 @@ namespace Requestarr.Core.Test.Requests
         }
 
         [Test]
-        public async Task admin_queue_should_show_owner_and_filter_by_user_and_type()
+        public async Task admin_queue_walks_everything_and_a_members_requests_are_on_their_card()
         {
-            (await Admin("queue")).LastReply.Content.Should().Contain("· bob").And.Contain("· alice");
+            var walk = (await Admin("queue")).LastReply.Content;
+            walk.Should().StartWith(DiscordText.WalkHeader(1, 3)).And.Contain("**alice** (asked)");
             (await Harness.SendAsync(AdminSlash("queue").WithOption("user", Bob))).LastReply.Content.Should().Contain("#2 ·").And.Contain("#3 ·").And.NotContain("#1 ·");
-            (await Harness.SendAsync(AdminSlash("queue").WithOption("type", "tv"))).LastReply.Content.Should().Contain("#3 ·").And.NotContain("#1 ·");
         }
 
         [Test]
@@ -46,16 +46,15 @@ namespace Requestarr.Core.Test.Requests
         }
 
         [Test]
-        public async Task queue_should_list_pending_and_filter()
+        public async Task queue_should_count_what_waits_and_end_when_nothing_does()
         {
-            (await Admin("queue")).LastReply.Content.Should().Contain("#1 ·").And.Contain("#2 ·").And.Contain("#3 ·");
-            (await Harness.SendAsync(AdminSlash("queue").WithOption("type", "tv"))).LastReply.Content.Should().Contain("#3 ·").And.NotContain("#1 ·");
+            (await Admin("queue")).LastReply.Content.Should().StartWith(DiscordText.WalkHeader(1, 3));
 
             await Harness.SendAsync(AdminSlash("approve").WithOption("id", 1L));
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L));
             await Harness.SendAsync(AdminSlash("deny").WithOption("id", 3L));
 
-            (await Admin("queue")).LastReply.Content.Should().Contain(DiscordText.QueueEmpty);
+            (await Admin("queue")).LastReply.Content.Should().Be(DiscordText.WalkDone);
         }
 
         [Test]

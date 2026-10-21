@@ -387,7 +387,6 @@ namespace Requestarr.Core.Discord
         public const string DenyReasonLabel = "Reason (shown to the user)";
         public const string NoReason = "no reason given";
         public const string NoRequests = "No requests match.";
-        public const string QueueEmpty = "Nothing is waiting for approval.";
         public const string StateInLibrary = "🎉 Good news: this is already in the library, ready for you.";
 
         public static string AccessOff(ContentType type) => $"You can't request {Label(type).ToLowerInvariant()}. Ask the admin if you'd like access.";
@@ -716,9 +715,6 @@ namespace Requestarr.Core.Discord
         public const string PickMemberPrompt = "Pick a member to add them or open their card.";
         public const string PickMemberPlaceholder = "Pick a member";
         public const string AddMemberLabel = "Add to Requestarr";
-        public const string ChangeAccessPlaceholder = "Change access…";
-        public const string SetLimitPlaceholder = "Set a limit…";
-        public const string ChangeInstancePlaceholder = "Send requests to…";
         public const string AdminLinkPlexLabel = "Link Plex…";
         public const string ChangePlexLabel = "Change Plex link…";
         public const string SuspendLabel = "Suspend";
@@ -760,8 +756,6 @@ namespace Requestarr.Core.Discord
 
         public static string InstanceLine(ContentType type, string instance) => $"• {Label(type)} requests go to {instance}";
 
-        public static string QueueHeader(string filter, int count) => $"**Pending queue**{(filter != null ? Dot + filter : string.Empty)} · {count} waiting";
-
         public static string MemberRequestsHeader(string name, int count) => $"**{name}'s requests** · {count}";
 
         public static string RequestMatches(string query, int count) => $"**{count} requests match \"{query}\"**. Pick one to open it.";
@@ -771,11 +765,92 @@ namespace Requestarr.Core.Discord
         public static string RequestChoice(Request request, string owner) =>
             DiscordLimits.Truncate($"#{request.Id} {request.Label} · {Label(request.Status)} · {owner}", DiscordLimits.OptionLabelLength);
 
+        // Connection states: what the admins are told, and what users see while an instance is down.
+        public static ContentType TypeOf(Backends.BackendInstance instance) =>
+            instance.Implementation == Backends.BackendImplementations.Sonarr ? ContentType.Tv
+            : instance.Implementation == Backends.BackendImplementations.Lidarr ? ContentType.Music
+            : ContentType.Movie;
+
+        public static string InstanceDownAlert(Backends.BackendInstance instance) =>
+            $"⚠️ **{instance.Name} can't be reached** since <t:{new DateTimeOffset(DateTime.SpecifyKind(instance.DownSince ?? DateTime.UtcNow, DateTimeKind.Utc)).ToUnixTimeSeconds()}:f> ({Label(TypeOf(instance))}). " +
+            $"Users still see {Label(TypeOf(instance))}, but new {Label(TypeOf(instance))} requests tell them requests are paused; nobody's access changes. Requestarr checks again every minute and says here when it's back.";
+
+        public static string InstanceBackAlert(Backends.BackendInstance instance, TimeSpan downFor) =>
+            $"✅ **{instance.Name} is back** after {Duration(downFor)}. {Label(TypeOf(instance))} requests work again.";
+
+        public static string Duration(TimeSpan span) =>
+            span.TotalMinutes < 90 ? $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))} minute{((int)Math.Round(span.TotalMinutes) == 1 ? string.Empty : "s")}"
+            : span.TotalHours < 48 ? $"{span.TotalHours:0.#} hours"
+            : $"{span.TotalDays:0.#} days";
+
+        public static string RequestsPaused(ContentType type, string instance) =>
+            $"{Label(type)} requests are paused right now: {instance} can't be reached. Requestarr keeps trying, and the admin is alerted if it stays down.";
+
+        public static string TypeNotAvailable(ContentType type) => $"{Label(type)} can't be requested here yet.";
+
+        public static string NotConnectedYet(string name, ContentType type) =>
+            $"Saved. {name} won't see {Label(type)} until a {Backends.BackendImplementations.ForContentType(type)} instance is connected in Requestarr.";
+
+        // /admin requests: one thing waiting on the admin at a time, oldest first.
+        public const string WalkDone = "Nothing left waiting on you. 🎉";
+        public const string AlreadyHandled = "That one was already handled; here's the next.";
+        public const string SkipLabel = "Skip";
+        public const string StartOverLabel = "Start over";
+        public const string SearchAgainLabel = "Search again";
+        public const string RetrySendLabel = "Try adding again";
+        public const string CheckNowLabel = "Check now";
+        public const string Requester = "asked";
+        public const string Follower = "follows";
+
+        public static string WalkHeader(int position, int total) => $"**Waiting on you** · {position} of {total}";
+
+        public static string WalkEnd(int left) =>
+            $"That's the end of the list. {left} skipped item{(left == 1 ? string.Empty : "s")} still wait{(left == 1 ? "s" : string.Empty)}; **{StartOverLabel}** goes through them again.";
+
+        public static string PanelPendingQueueCount(int count) => count > 0 ? $"{PanelPendingQueue} ({count})" : PanelPendingQueue;
+
+        public static string WaitingSince(Request request) =>
+            $"Request #{request.Id} for {request.Label} is waiting for approval since <t:{Unix(request.Requested)}:R>.";
+
+        // What went wrong with an approved request, in plain words, and what the buttons do.
+        public static string TroubleText(Request request, string instance) => request.Status == RequestStatus.Failed
+            ? $"Request #{request.Id} for {request.Label} couldn't be added to {instance}{Because(request.DecisionReason)}. **{RetrySendLabel}** once that's fixed; **{CancelLabel}** drops it; **{AlreadyAvailableLabel}** closes it if you have the title another way."
+            : request.Progress == DownloadProgress.Failed
+                ? $"The download for request #{request.Id} ({request.Label}) failed{Because(request.ProgressDetail)}. {instance} usually blocklists that release and tries another by itself. **{SearchAgainLabel}** asks it to look now; **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way."
+                : $"The download for request #{request.Id} ({request.Label}) is stuck{Because(request.ProgressDetail)}. **{SearchAgainLabel}** asks {instance} for another release (the stuck download stays in your download client until you remove it there); **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way.";
+
+        public static string PlexLinkWaiting(string name, string discordId, MediaServers.MediaServerProvider provider, string username, DateTime since) =>
+            $"**{name}** (<@{discordId}>) asks for {provider} access as `{username}`, since <t:{Unix(since)}:R>.";
+
+        public static string InstanceWaiting(Backends.BackendInstance instance) =>
+            InstanceDownAlert(instance) + $"\nNothing to decide: this stays here until it's back. **{CheckNowLabel}** tries it again now.";
+
+        public static string PersonLine(string name, string role, ContentType type, AccessState state, int used, int? limit, int days, int pending) =>
+            $"• **{name}** ({role}): {Label(type)} {Label(state)} · {used}{(limit.HasValue ? $" of {limit}" : string.Empty)} {Label(type)} request{(used == 1 && !limit.HasValue ? string.Empty : "s")} in {days} days{(limit.HasValue ? string.Empty : " (no limit)")} · {pending} waiting for approval";
+
+        public static string NothingToSearch(Request request) => $"Request #{request.Id} isn't in Sonarr or Radarr, so there's nothing to search for.";
+
+        public static string NothingToRetry(Request request) => $"Request #{request.Id} isn't waiting to be added again; it's {Label(request.Status)}.";
+
+        public static string SearchingAgain(Request request, string instance) => $"Asked {instance} to search for {request.Label} (request #{request.Id}) again.";
+
+        public static string AccessSelectPlaceholder(ContentType type) => $"{Label(type)} access";
+
+        public static string LevelLabel(AccessState state) => Capitalize(Label(state));
+
+        public const string MorePlaceholder = "Limits, instance, their requests…";
+
+        public static string InstanceBackNow(string instance) => $"{instance} answers again.";
+
+        public static string StillDown(string instance) => $"{instance ?? "That instance"} still can't be reached.";
+
+        private static long Unix(DateTime value) => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)).ToUnixTimeSeconds();
+
         public static class Commands
         {
             public const string Admin = "Requestarr admin commands";
             public const string AdminUser = "Open a member's card: add, access, limits, Plex, suspend, remove";
-            public const string AdminRequest = "Open a request's card: approve, deny, cancel, add seasons";
+            public const string AdminRequests = "Go through everything waiting on you, one at a time";
             public const string OptionRequestSearch = "Request number or part of its title";
             public const string AdminMediaServer = "Media server access requests";
             public const string RequestOne = "Request a movie or TV show";

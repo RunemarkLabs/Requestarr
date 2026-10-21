@@ -31,6 +31,13 @@ namespace Requestarr.Core.Backends
         Task CheckAllAsync();
         IReadOnlyCollection<BackendCheckResult> LastResults { get; }
         IBackendApi ApiFor(BackendInstance instance);
+
+        // Whether a content type has an enabled instance that has ever connected. Users only see
+        // types that have one; admins can grant any type ahead of time.
+        bool EverConnected(ContentType type);
+
+        // The type's instances that are down right now (lost connection).
+        IReadOnlyList<BackendInstance> DownFor(ContentType type);
     }
 
     public class BackendService : IBackendService, IHandleAsync<ProvisioningCompletedEvent>
@@ -208,9 +215,26 @@ namespace Requestarr.Core.Backends
             {
                 _logger.Warn("Backend '{0}' check failed: {1}", instance.Name, result.Error);
             }
+            else if (!instance.FirstConnected.HasValue)
+            {
+                instance.FirstConnected = DateTime.UtcNow;
+                _repository.SetFields(instance, i => i.FirstConnected);
+            }
 
             _results[instance.Id] = result;
             return result;
+        }
+
+        public bool EverConnected(ContentType type)
+        {
+            var implementation = BackendImplementations.ForContentType(type);
+            return implementation != null && _repository.All().Any(b => b.Enable && b.Implementation == implementation && b.FirstConnected.HasValue);
+        }
+
+        public IReadOnlyList<BackendInstance> DownFor(ContentType type)
+        {
+            var implementation = BackendImplementations.ForContentType(type);
+            return _repository.All().Where(b => b.Enable && b.Implementation == implementation && b.DownSince.HasValue).ToList();
         }
 
         public static NamedItem ResolveProfile(IReadOnlyList<NamedItem> profiles, string wanted)

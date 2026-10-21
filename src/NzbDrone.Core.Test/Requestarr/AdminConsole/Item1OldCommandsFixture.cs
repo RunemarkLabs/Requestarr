@@ -95,14 +95,12 @@ namespace Requestarr.Core.Test.AdminConsole
         }
 
         [Test]
-        public async Task queue_is_the_panels_pending_queue_with_type_and_person_filters()
+        public async Task queue_is_the_walk_and_a_members_requests_are_on_their_card()
         {
             await PendingMovie(Alice, Dune);
             await AskTv(Bob);
 
-            (await Admin("queue")).LastReply.Content.Should().Contain("#1 ·").And.Contain("#2 ·");
-            var movies = (await Harness.SendAsync(AdminSlash("queue").WithOption("type", "movie"))).LastReply;
-            movies.Content.Should().Contain("#1 ·").And.NotContain("#2 ·");
+            (await Admin("queue")).LastReply.Content.Should().StartWith(DiscordText.WalkHeader(1, 2)).And.Contain("Dune (2021)");
             var bobs = (await Harness.SendAsync(AdminSlash("queue").WithOption("user", Bob))).LastReply;
             bobs.Content.Should().Contain("#2 ·").And.NotContain("#1 ·");
         }

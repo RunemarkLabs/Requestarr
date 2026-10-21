@@ -17,13 +17,15 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IUserMediaAccessRepository _access;
         private readonly IMediaServerAccountRepository _accounts;
         private readonly IMetadataService _metadata;
+        private readonly Backends.IBackendService _backends;
 
-        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts, IMetadataService metadata)
+        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts, IMetadataService metadata, Backends.IBackendService backends)
         {
             _callers = callers;
             _access = access;
             _accounts = accounts;
             _metadata = metadata;
+            _backends = backends;
         }
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
@@ -90,7 +92,7 @@ namespace Requestarr.Core.Discord.Handlers
             if (user != null && user.Status == UserStatus.Active && user.PrivateChannelId != null)
             {
                 var access = _access.GetForUser(user.Id);
-                var types = ContentTypes.Requestable.Where(t => (access.FirstOrDefault(a => a.ContentType == t)?.State ?? UserManagementService.DefaultAccess[t]) != AccessState.Off).ToList();
+                var types = ContentTypes.Offered.Where(t => _backends.EverConnected(t) && (access.FirstOrDefault(a => a.ContentType == t)?.State ?? UserManagementService.DefaultAccess[t]) != AccessState.Off).ToList();
 
                 return new HelpViewer(types, _accounts.GetForUser(user.Id).Any());
             }

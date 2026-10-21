@@ -19,7 +19,8 @@ namespace Requestarr.Core.Discord.Handlers
         public const string Pick = "adm-pick";              // admin panel: Discord's member picker
         public const string Member = "adm-member";          // picker / users list: open a member card
         public const string Add = "adm-add";                // adm-add:{d}
-        public const string Access = "adm-access";          // adm-access:{d}, value type:level
+        public const string Access = "adm-access";          // adm-access:{d}:{type}, value level (one menu per type)
+        public const string More = "adm-more";              // adm-more:{d}: limit:{type}, instance:{type}:{id}, requests
         public const string Instance = "adm-instance";      // adm-instance:{d}, value type:backendId
         public const string Limit = "adm-limit";            // adm-limit:{d}, value type -> form
         public const string LimitForm = "adm-limit-form";   // adm-limit-form:{d}:{type}
@@ -32,15 +33,14 @@ namespace Requestarr.Core.Discord.Handlers
         public const string RemoveConfirm = "adm-remove-ok";
         public const string Refresh = "adm-refresh";
         public const string Requests = "adm-requests";      // adm-requests:{d}
-        public const string Queue = "adm-queue";            // adm-queue:{type}
         public const string Request = "adm-request";        // menu: open a request card
         public const string LimitField = "limit";
         public const string DaysField = "days";
         public const string PlexField = "username";
     }
 
-    // /admin user {member}, /admin request {id or title}, and everything they open: member cards,
-    // request cards, the member picker, the pending queue and the users list.
+    // /admin user {member} and everything around it: member cards, the member picker, the users list,
+    // and request cards opened from a member's requests. (/admin requests: AdminRequestsHandler.)
     public class AdminConsoleHandler : IInteractionHandler
     {
         private readonly ICallerResolver _callers;
@@ -86,14 +86,12 @@ namespace Requestarr.Core.Discord.Handlers
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
         {
             (InteractionKind.SlashCommand, "admin user"),
-            (InteractionKind.SlashCommand, "admin request"),
-            (InteractionKind.Autocomplete, "admin request"),
-            (InteractionKind.Button, PanelRoutes.AdminQueue),
             (InteractionKind.Button, PanelRoutes.AdminUsers),
             (InteractionKind.Button, AdminRoutes.Pick),
             (InteractionKind.SelectMenu, AdminRoutes.Member),
             (InteractionKind.Button, AdminRoutes.Add),
             (InteractionKind.SelectMenu, AdminRoutes.Access),
+            (InteractionKind.SelectMenu, AdminRoutes.More),
             (InteractionKind.SelectMenu, AdminRoutes.Instance),
             (InteractionKind.SelectMenu, AdminRoutes.Limit),
             (InteractionKind.ModalSubmit, AdminRoutes.LimitForm),
@@ -106,7 +104,6 @@ namespace Requestarr.Core.Discord.Handlers
             (InteractionKind.Button, AdminRoutes.RemoveConfirm),
             (InteractionKind.Button, AdminRoutes.Refresh),
             (InteractionKind.Button, AdminRoutes.Requests),
-            (InteractionKind.Button, AdminRoutes.Queue),
             (InteractionKind.SelectMenu, AdminRoutes.Request)
         };
 
@@ -116,12 +113,6 @@ namespace Requestarr.Core.Discord.Handlers
 
             if (caller.AdminDenial != null)
             {
-                if (interaction.Kind == InteractionKind.Autocomplete)
-                {
-                    await responder.SuggestAsync(Array.Empty<InteractionChoice>());
-                    return;
-                }
-
                 await responder.Ephemeral(caller.AdminDenial);
                 return;
             }
@@ -145,36 +136,6 @@ namespace Requestarr.Core.Discord.Handlers
                     await responder.RespondAsync(Ephemeral(await MemberCard(target.Value)));
                     return;
                 }
-
-                case "admin request" when interaction.Kind == InteractionKind.Autocomplete:
-                    await responder.SuggestAsync(Search(interaction.GetOption<string>("request")).Take(DiscordLimits.ChoicesPerMenu)
-                        .Select(r => new InteractionChoice(DiscordText.RequestChoice(r, _requests.OwnerName(r)), r.Id.ToString())).ToList());
-                    return;
-
-                case "admin request":
-                {
-                    var query = interaction.GetOption<string>("request")?.Trim() ?? string.Empty;
-                    var matches = Search(query).ToList();
-
-                    if (!matches.Any())
-                    {
-                        await responder.Ephemeral(DiscordText.NoRequestMatches);
-                        return;
-                    }
-
-                    await responder.RespondAsync(matches.Count == 1
-                        ? Ephemeral(_feed.CardFor(matches[0]))
-                        : RequestList(DiscordText.RequestMatches(query, matches.Count), matches));
-                    return;
-                }
-
-                case PanelRoutes.AdminQueue:
-                    await responder.RespondAsync(QueueView(null));
-                    return;
-
-                case AdminRoutes.Queue:
-                    await responder.UpdateMessageAsync(QueueView(HandlerSupport.ParseType(First(args))));
-                    return;
 
                 case PanelRoutes.AdminUsers:
                     await responder.RespondAsync(UsersView());
@@ -250,16 +211,7 @@ namespace Requestarr.Core.Discord.Handlers
                         return;
                     }
 
-                    await responder.ShowModalAsync(new InteractionModal
-                    {
-                        CustomId = $"{AdminRoutes.LimitForm}:{member}:{Key(type.Value)}",
-                        Title = $"{DiscordText.LimitTitle}: {DiscordText.Label(type.Value)}",
-                        Fields = new List<InteractionTextField>
-                        {
-                            new(AdminRoutes.LimitField, DiscordText.LimitField, Required: true, MaxLength: 4, Paragraph: false),
-                            new(AdminRoutes.DaysField, DiscordText.DaysField, Required: false, MaxLength: 3, Paragraph: false)
-                        }
-                    });
+                    await responder.ShowModalAsync(LimitForm(member, type.Value));
                     return;
                 }
 
@@ -272,8 +224,59 @@ namespace Requestarr.Core.Discord.Handlers
                     });
                     return;
 
-                // Quick changes: the card changes in place, the outcome comes privately.
+                // A type's access menu: the card changes in place and nothing else is posted, unless
+                // something needs saying (an error, or a type users can't see yet).
                 case AdminRoutes.Access:
+                {
+                    var result = QuickChange(interaction, member, actor);
+                    await responder.UpdateMessageAsync(await MemberCard(member));
+
+                    if (!result.Success)
+                    {
+                        await responder.FollowupAsync(Private(result));
+                    }
+                    else if (AccessChoice(interaction) is { Type: { } type, Level: not AccessState.Off } && !_backends.EverConnected(type))
+                    {
+                        await responder.FollowupAsync(Private(ServiceResult.Ok(DiscordText.NotConnectedYet(_users.FindByDiscordId(member)?.DisplayName ?? member.ToString(), type))));
+                    }
+
+                    return;
+                }
+
+                case AdminRoutes.More:
+                {
+                    var parts = First(interaction.Values)?.Split(':') ?? Array.Empty<string>();
+
+                    switch (parts.ElementAtOrDefault(0))
+                    {
+                        case "limit" when HandlerSupport.ParseType(parts.ElementAtOrDefault(1)) is { } limitType:
+                            await responder.ShowModalAsync(LimitForm(member, limitType));
+                            return;
+
+                        case "instance":
+                        {
+                            var result = QuickChange(interaction, member, actor);
+                            await responder.UpdateMessageAsync(await MemberCard(member));
+
+                            if (!result.Success)
+                            {
+                                await responder.FollowupAsync(Private(result));
+                            }
+
+                            return;
+                        }
+
+                        default:
+                        {
+                            var user = _users.FindByDiscordId(member);
+                            var list = user == null ? new List<Request>() : _requests.List(user, false, null, null);
+                            await responder.RespondAsync(RequestList(DiscordText.MemberRequestsHeader(user?.DisplayName ?? member.ToString(), list.Count), list));
+                            return;
+                        }
+                    }
+                }
+
+                // Forms and the older menus: the card changes in place, the outcome comes privately.
                 case AdminRoutes.Instance:
                 case AdminRoutes.LimitForm:
                 case AdminRoutes.PlexForm:
@@ -316,16 +319,16 @@ namespace Requestarr.Core.Discord.Handlers
             {
                 case AdminRoutes.Access:
                 {
-                    var parts = First(interaction.Values)?.Split(':');
-                    var type = HandlerSupport.ParseType(parts?.ElementAtOrDefault(0));
-                    var level = HandlerSupport.ParseLevel(parts?.ElementAtOrDefault(1));
+                    var (type, level) = AccessChoice(interaction);
 
                     return type == null || level == null ? ServiceResult.Fail(DiscordText.TypeNotOffered) : _users.SetAccess(member, type.Value, level.Value, actor);
                 }
 
                 case AdminRoutes.Instance:
+                case AdminRoutes.More:
                 {
-                    var parts = First(interaction.Values)?.Split(':');
+                    // Instance menu: "type:id"; the More menu: "instance:type:id".
+                    var parts = First(interaction.Values)?.Split(':').SkipWhile(p => p == "instance").ToArray();
                     var type = HandlerSupport.ParseType(parts?.ElementAtOrDefault(0));
                     var wanted = parts?.ElementAtOrDefault(1);
                     var instance = int.TryParse(wanted, out var id) ? _backends.Find(id) : _backends.FindByName(wanted ?? string.Empty);
@@ -362,6 +365,33 @@ namespace Requestarr.Core.Discord.Handlers
                 }
             }
         }
+
+        // One menu per type ("adm-access:{d}:{type}", value the level), or the older single menu
+        // ("adm-access:{d}", value "type:level").
+        private static (ContentType? Type, AccessState? Level) AccessChoice(DiscordInteraction interaction)
+        {
+            var value = First(interaction.Values) ?? string.Empty;
+            var typeArg = interaction.CustomIdArgs.ElementAtOrDefault(1);
+
+            if (typeArg != null)
+            {
+                return (HandlerSupport.ParseType(typeArg), HandlerSupport.ParseLevel(value));
+            }
+
+            var parts = value.Split(':');
+            return (HandlerSupport.ParseType(parts.ElementAtOrDefault(0)), HandlerSupport.ParseLevel(parts.ElementAtOrDefault(1)));
+        }
+
+        private static InteractionModal LimitForm(ulong member, ContentType type) => new()
+        {
+            CustomId = $"{AdminRoutes.LimitForm}:{member}:{Key(type)}",
+            Title = $"{DiscordText.LimitTitle}: {DiscordText.Label(type)}",
+            Fields = new List<InteractionTextField>
+            {
+                new(AdminRoutes.LimitField, DiscordText.LimitField, Required: true, MaxLength: 4, Paragraph: false),
+                new(AdminRoutes.DaysField, DiscordText.DaysField, Required: false, MaxLength: 3, Paragraph: false)
+            }
+        };
 
         private async Task<ServiceResult> DecideLink(DiscordInteraction interaction, ulong member, Actor actor)
         {
@@ -428,35 +458,28 @@ namespace Requestarr.Core.Discord.Handlers
                 };
             }
 
-            var accessMenu = new InteractionSelectMenu
+            // Discord allows five rows: one access menu per type (3), a "More…" menu (limits, instance,
+            // their requests), and one row of buttons.
+            var menus = ContentTypes.Offered.Select(type =>
             {
-                CustomId = $"{AdminRoutes.Access}:{member}",
-                Placeholder = DiscordText.ChangeAccessPlaceholder,
-                Options = ContentTypes.Offered.SelectMany(type => new[] { AccessState.Off, AccessState.NeedsApproval, AccessState.AutoApprove }.Select(state =>
+                var current = access.FirstOrDefault(a => a.ContentType == type)?.State ?? UserManagementService.DefaultAccess[type];
+
+                return new InteractionSelectMenu
                 {
-                    var current = (access.FirstOrDefault(a => a.ContentType == type)?.State ?? UserManagementService.DefaultAccess[type]) == state;
-                    return new InteractionSelectOption(DiscordText.AccessOption(type, state), $"{Key(type)}:{LevelKey(state)}", current ? DiscordText.Current : null);
-                })).ToList()
-            };
+                    CustomId = $"{AdminRoutes.Access}:{member}:{Key(type)}",
+                    Placeholder = DiscordText.AccessSelectPlaceholder(type),
+                    Options = new[] { AccessState.Off, AccessState.NeedsApproval, AccessState.AutoApprove }
+                        .Select(state => new InteractionSelectOption($"{DiscordText.Label(type)}: {DiscordText.LevelLabel(state)}", LevelKey(state), null, state == current)).ToList()
+                };
+            }).ToList();
 
-            var limitMenu = new InteractionSelectMenu
-            {
-                CustomId = $"{AdminRoutes.Limit}:{member}",
-                Placeholder = DiscordText.SetLimitPlaceholder,
-                Options = ContentTypes.Offered.Select(type => new InteractionSelectOption(DiscordText.LimitOption(type, access.FirstOrDefault(a => a.ContentType == type)), Key(type))).ToList()
-            };
-
-            var more = new List<InteractionSelectMenu> { limitMenu };
-            var choices = ContentTypes.Offered
+            var more = ContentTypes.Offered.Select(type => new InteractionSelectOption(DiscordText.LimitOption(type, access.FirstOrDefault(a => a.ContentType == type)), $"limit:{Key(type)}")).ToList();
+            more.AddRange(ContentTypes.Offered
                 .SelectMany(type => instances.Where(i => i.Implementation == BackendImplementations.ForContentType(type)).Select(i => (type, i)))
                 .GroupBy(x => x.type).Where(g => g.Count() > 1).SelectMany(g => g)
-                .Select(x => new InteractionSelectOption(DiscordText.InstanceOption(x.type, x.i.Name), $"{Key(x.type)}:{x.i.Id}", x.i.Settings.IsDefault ? "default" : null))
-                .ToList();
-
-            if (choices.Any())
-            {
-                more.Add(new InteractionSelectMenu { CustomId = $"{AdminRoutes.Instance}:{member}", Placeholder = DiscordText.ChangeInstancePlaceholder, Options = choices });
-            }
+                .Select(x => new InteractionSelectOption(DiscordText.InstanceOption(x.type, x.i.Name), $"instance:{Key(x.type)}:{x.i.Id}", x.i.Settings.IsDefault ? "default" : null)));
+            more.Add(new InteractionSelectOption(DiscordText.TheirRequestsLabel, "requests"));
+            menus.Add(new InteractionSelectMenu { CustomId = $"{AdminRoutes.More}:{member}", Placeholder = DiscordText.MorePlaceholder, Options = more });
 
             var linked = _accounts.GetForUser(user.Id).Any();
             buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Plex}:{member}", Label = linked ? DiscordText.ChangePlexLabel : DiscordText.AdminLinkPlexLabel, Style = ButtonStyle.Secondary });
@@ -464,7 +487,6 @@ namespace Requestarr.Core.Discord.Handlers
                 ? new InteractionButton { CustomId = $"{AdminRoutes.Unsuspend}:{member}", Label = DiscordText.UnsuspendLabel, Style = ButtonStyle.Success }
                 : new InteractionButton { CustomId = $"{AdminRoutes.Suspend}:{member}", Label = DiscordText.SuspendLabel, Style = ButtonStyle.Secondary });
             buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Remove}:{member}", Label = DiscordText.RemoveLabel, Style = ButtonStyle.Danger });
-            buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Requests}:{member}", Label = DiscordText.TheirRequestsLabel, Style = ButtonStyle.Secondary });
 
             foreach (var link in pending.Take(1))
             {
@@ -475,41 +497,10 @@ namespace Requestarr.Core.Discord.Handlers
             return new InteractionReply
             {
                 Content = DiscordLimits.Truncate(string.Join("\n", lines), DiscordLimits.MessageLength),
-                SelectMenu = accessMenu,
-                MoreMenus = more,
+                SelectMenu = menus[0],
+                MoreMenus = menus.Skip(1).ToList(),
                 Buttons = buttons
             };
-        }
-
-        // Requests by number ("12", "#12") or by part of the title, open ones first.
-        private IEnumerable<Request> Search(string query)
-        {
-            query = query?.Trim().TrimStart('#') ?? string.Empty;
-            var all = _requestStore.All();
-
-            if (int.TryParse(query, out var id))
-            {
-                return all.Where(r => r.Id == id || r.Id.ToString().StartsWith(query)).OrderBy(r => r.Id == id ? 0 : 1).ThenByDescending(r => r.Id);
-            }
-
-            return all.Where(r => query.Length == 0 || r.Label.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(r => r.IsActive ? 0 : 1).ThenByDescending(r => r.Id);
-        }
-
-        private InteractionReply QueueView(ContentType? type)
-        {
-            var pending = _requests.List(null, true, RequestStatus.Pending, type);
-            var reply = RequestList(pending.Any() ? DiscordText.QueueHeader(type.HasValue ? DiscordText.Label(type.Value) : null, pending.Count) : DiscordText.QueueEmpty, pending);
-
-            // Filters by type (the member card's "Their requests" filters by person).
-            reply.Buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Queue}:all", Label = DiscordText.AllTypesLabel, Style = type == null ? ButtonStyle.Primary : ButtonStyle.Secondary });
-
-            foreach (var offered in ContentTypes.Offered)
-            {
-                reply.Buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Queue}:{Key(offered)}", Label = DiscordText.Label(offered), Style = type == offered ? ButtonStyle.Primary : ButtonStyle.Secondary });
-            }
-
-            return reply;
         }
 
         // A list of requests with a menu that opens their cards.

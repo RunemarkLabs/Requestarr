@@ -154,7 +154,8 @@ namespace Requestarr.Core.Discord.Help
                 Title = "Members: adding and managing",
                 Summary = "Add people, set access, suspend, remove",
                 Intro = _ => $"**{DiscordText.PanelMembers}** on the admin panel opens Discord's member picker; `/admin user` opens one member's card directly. The card shows only what applies now: **{DiscordText.AddMemberLabel}** for someone new (their role, private channel and panel; Movies and TV start as needs approval, Music off), " +
-                             $"then menus for access per type (off, needs approval, auto-approve), limits, and which Sonarr or Radarr their requests go to, and buttons to link Plex, **{DiscordText.SuspendLabel}** or **{DiscordText.UnsuspendLabel}**, **{DiscordText.RemoveLabel}** (it asks first) and see **{DiscordText.TheirRequestsLabel}**. " +
+                             $"then one menu per content type showing its level (off, needs approval, auto-approve), a **{DiscordText.MorePlaceholder}** menu, and buttons to link Plex, **{DiscordText.SuspendLabel}** or **{DiscordText.UnsuspendLabel}** and **{DiscordText.RemoveLabel}** (it asks first). " +
+                             "Users only see a content type once one of its Sonarr, Radarr or Lidarr instances has connected; you can grant it before that, and the card tells you. " +
                              $"**{DiscordText.PanelUsers}** lists everyone and opens the same card. Every change shows on the card at once.",
                 Commands = new[] { "admin user" },
                 Buttons = new[] { PanelButtons.Members, PanelButtons.Users }
@@ -165,8 +166,8 @@ namespace Requestarr.Core.Discord.Help
                 Title = "Approvals and the queue",
                 Summary = "Approve or deny requests",
                 Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. " +
-                             $"`/admin request` opens any request's card by number or title, with the same buttons as its feed card; **{DiscordText.PanelPendingQueue}** lists what waits, filters by type, and opens the cards. **{DiscordText.CancelLabel}** asks for an optional reason shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
-                Commands = new[] { "admin request" },
+                             $"`/admin requests` (or **{DiscordText.PanelPendingQueue}** on the panel, which shows how many) goes through everything waiting on you, oldest first, one private card at a time: requests to approve, downloads that failed or got stuck, Plex link requests, and instances that are down. Each card has that item's actions plus **{DiscordText.SkipLabel}** and **{DiscordText.BackLabel}**; acting moves straight to the next. **{DiscordText.CancelLabel}** asks for an optional reason shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
+                Commands = new[] { "admin requests" },
                 Buttons = new[] { PanelButtons.PendingQueue }
             },
             new HelpTopic
@@ -192,7 +193,7 @@ namespace Requestarr.Core.Discord.Help
                 Key = "limits",
                 Title = "Limits",
                 Summary = "Requests per rolling window",
-                Intro = _ => $"A limit is per member and per type, over a rolling window (7 days unless you set the days). Set it from the member card's **{DiscordText.SetLimitPlaceholder}** menu; 0 removes it. Users see theirs under My limits.",
+                Intro = _ => $"A limit is per member and per type, over a rolling window (7 days unless you set the days). Set it from the member card's **{DiscordText.MorePlaceholder}** menu; 0 removes it. Users see theirs under My limits.",
                 Commands = new[] { "admin user" }
             },
             new HelpTopic

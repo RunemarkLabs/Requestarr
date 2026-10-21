@@ -91,6 +91,13 @@ namespace NzbDrone.Core.Jobs
                         TypeName = typeof(HousekeepingCommand).FullName
                     },
 
+                    // Requestarr: is each Sonarr / Radarr reachable (outage alerts)?
+                    new ScheduledTask
+                    {
+                        Interval = 1,
+                        TypeName = typeof(Requestarr.Core.Backends.ConnectionCheckCommand).FullName
+                    },
+
                     // Requestarr: the backup availability poll (the service decides when it's due).
                     new ScheduledTask
                     {

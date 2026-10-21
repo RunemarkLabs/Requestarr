@@ -32,6 +32,14 @@ namespace Requestarr.Core.Backends
         public bool Enable { get; set; } = true;
         public List<int> Tags { get; set; } = new();
         public DateTime Added { get; set; }
+
+        // Connection state. Never connected (FirstConnected empty): users don't see its content type.
+        // Lost (DownSince set): users still see the type; its requests say they're paused.
+        public DateTime? FirstConnected { get; set; }
+        public DateTime? DownSince { get; set; }
+        public string DownAlertMessageId { get; set; }
+
+        public bool EverConnected => FirstConnected.HasValue;
     }
 
     public class BackendSettings : IEmbeddedDocument

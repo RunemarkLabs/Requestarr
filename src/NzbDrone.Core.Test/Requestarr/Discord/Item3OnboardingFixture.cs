@@ -176,8 +176,12 @@ namespace Requestarr.Core.Test.Discord
 
             var run = await Harness.SendAsync(AdminCommand("user access", Alice).WithOption("type", type).WithOption("level", level));
 
-            run.LastReply.Content.Should().Be(DiscordText.AccessChanged("alice", contentType, expected));
             Mocker.Resolve<IUserMediaAccessRepository>().GetForUser(UserFor(Alice).Id).Single(a => a.ContentType == contentType).State.Should().Be(expected);
+
+            // No message under the card, except the notice for a type users can't see yet (no Lidarr here).
+            var followups = run.Responder.Responses.Where(r => r.Kind == ResponseKind.Followup).Select(r => r.Reply.Content).ToList();
+            followups.Should().Equal(contentType == ContentType.Music && expected != AccessState.Off ? new[] { DiscordText.NotConnectedYet("alice", ContentType.Music) } : Array.Empty<string>());
+            run.Responder.Replies.First().Content.Should().Contain($"{DiscordText.Label(contentType)}: {DiscordText.Label(expected)}", "the card shows the new level in place");
         }
 
         [Test]

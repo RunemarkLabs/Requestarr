@@ -63,9 +63,20 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
             UseBackends();
+
+            // As on startup: instances that answer count as connected (users see their content types).
+            Mocker.Resolve<IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
             UseMetadata();
             Mocker.SetConstant<IMetadataService>(Mocker.Resolve<MetadataService>());
             Mocker.SetConstant<IGuildSetupService>(Mocker.Resolve<GuildSetupService>());
+            Mocker.SetConstant<Requestarr.Core.Admin.IAdminQueue>(new Requestarr.Core.Admin.AdminQueue(new Requestarr.Core.Admin.IAdminQueueSource[]
+            {
+                Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+            }));
+            Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
@@ -83,7 +94,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<ApprovalHandler>(),
                 Mocker.Resolve<PanelHandler>(),
                 Mocker.Resolve<HelpHandler>(),
-                Mocker.Resolve<SeasonsHandler>());
+                Mocker.Resolve<SeasonsHandler>(),
+                Mocker.Resolve<AdminRequestsHandler>());
         }
 
         // Fake The Movie Database (no key) by default; live fixtures may use the real client.
@@ -226,14 +238,13 @@ namespace Requestarr.Core.Test.Discord.Harness
                     await MemberButton(member, AdminRoutes.Plex);
                     return await MemberForm($"{AdminRoutes.PlexForm}:{member}", (AdminRoutes.PlexField, old.Get<string>("username")));
 
+                // Task 3c: the queue is /admin requests (one item at a time); a member's requests are on
+                // their card's "More…" menu. There's no filter by type any more.
                 case "queue" when old.Has("user"):
-                    return await MemberButton(Convert.ToUInt64(old.Options["user"]), AdminRoutes.Requests);
+                    return await MemberMenu(Convert.ToUInt64(old.Options["user"]), AdminRoutes.More, "requests");
 
                 case "queue":
-                {
-                    var queue = await Harness.SendAsync(AsAdmin(FakeInteraction.Button(PanelRoutes.AdminQueue)));
-                    return old.Has("type") ? await Harness.SendAsync(AsAdmin(FakeInteraction.Button($"{AdminRoutes.Queue}:{old.Get<string>("type")}"))) : queue;
-                }
+                    return await Harness.SendAsync(AsAdmin(FakeInteraction.Button(PanelRoutes.AdminQueue)));
 
                 case "approve":
                     return await RequestCardButton($"{RequestRoutes.Approve}:{id}");

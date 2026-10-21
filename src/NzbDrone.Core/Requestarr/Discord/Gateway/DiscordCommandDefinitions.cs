@@ -8,7 +8,7 @@ namespace Requestarr.Core.Discord.Gateway
     // everything, so older commands disappear):
     //   /request {type} {query}  for everyone; type is autocompleted from the caller's access.
     //   /help                    user help, for everyone.
-    //   /admin user|request|help Manage Server default permission, so non-admins never see it.
+    //   /admin user|requests|help Manage Server default permission, so non-admins never see it.
     // Visibility is cosmetic: Requestarr re-checks admin and channel on every use.
     public static class DiscordCommandDefinitions
     {
@@ -38,9 +38,7 @@ namespace Requestarr.Core.Discord.Gateway
                 .WithContextTypes(InteractionContextType.Guild)
                 .WithDefaultMemberPermissions(GuildPermission.ManageGuild)
                 .AddOption(Sub("user", DiscordText.Commands.AdminUser).AddOption(Member()))
-                .AddOption(Sub("request", DiscordText.Commands.AdminRequest)
-                    .AddOption(new SlashCommandOptionBuilder().WithName("request").WithDescription(DiscordText.Commands.OptionRequestSearch)
-                        .WithType(ApplicationCommandOptionType.String).WithRequired(true).WithAutocomplete(true).WithMaxLength(100)))
+                .AddOption(Sub("requests", DiscordText.Commands.AdminRequests))
                 .AddOption(Sub("help", DiscordText.Commands.AdminHelp));
 
             return new ApplicationCommandProperties[] { request.Build(), help.Build(), admin.Build() };

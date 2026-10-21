@@ -81,6 +81,7 @@ namespace Requestarr.Core.Test.Gaps
                     new() { Name = "Radarr (test)", Url = $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}", ApiKey = radarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true }
                 }
             });
+            Mocker.Resolve<IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
             var tmdb = new TmdbSettingsStore();
             tmdb.Set(Environment.GetEnvironmentVariable("TMDB_API_KEY"));
             Mocker.SetConstant<ITmdbSettingsStore>(tmdb);
@@ -107,6 +108,14 @@ namespace Requestarr.Core.Test.Gaps
             feed = Mocker.Resolve<Requestarr.Core.Requests.RequestFeed>();
             Mocker.SetConstant(guildSetup);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<Requestarr.Core.Admin.IAdminQueue>(new Requestarr.Core.Admin.AdminQueue(new Requestarr.Core.Admin.IAdminQueueSource[]
+            {
+                Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+            }));
+            Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             panels = Mocker.Resolve<PanelService>();
             Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();

@@ -42,16 +42,19 @@ namespace Requestarr.Core.Test.CommandSurface
         }
 
         [Test]
-        public async Task pending_queue_button_lists_pending_requests()
+        public async Task pending_queue_button_starts_the_walk_and_shows_the_count()
         {
-            (await AdminButton(PanelRoutes.AdminQueue)).LastReply.Content.Should().Be(DiscordText.QueueEmpty);
+            (await AdminButton(PanelRoutes.AdminQueue)).LastReply.Content.Should().Be(DiscordText.WalkDone);
 
             await RequestMovie(Alice, Dune);
             var run = await AdminButton(PanelRoutes.AdminQueue);
 
             run.LastReply.Ephemeral.Should().BeTrue();
-            run.LastReply.Content.Should().Contain("#1 ·").And.Contain("Dune (2021)").And.Contain("· alice");
+            run.LastReply.Content.Should().StartWith(DiscordText.WalkHeader(1, 1)).And.Contain("Dune (2021)").And.Contain("**alice** (asked)");
+            PanelLabel(Requestarr.Core.Discord.PanelService.AdminPanel(1)).Should().Be("Pending queue (1)");
         }
+
+        public static string PanelLabel(Requestarr.Core.Discord.Interactions.InteractionReply panel) => panel.Buttons.First(b => b.CustomId == PanelRoutes.AdminQueue).Label;
 
         [Test]
         public async Task users_button_lists_users_with_access()

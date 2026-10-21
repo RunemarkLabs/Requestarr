@@ -87,6 +87,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 Radarr = new List<BackendInstanceProvisioning> { new() { Name = "Radarr (test)", Url = RadarrUrl, ApiKey = RadarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true } },
                 Sonarr = new List<BackendInstanceProvisioning> { new() { Name = "Sonarr (test)", Url = SonarrUrl, ApiKey = SonarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/tv", SeriesType = "standard", Default = true } }
             });
+            Mocker.Resolve<IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
             var tmdb = new TmdbSettingsStore();
             tmdb.Set(Environment.GetEnvironmentVariable("TMDB_API_KEY"));
             Mocker.SetConstant<ITmdbSettingsStore>(tmdb);
@@ -115,6 +116,14 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             feed = Mocker.Resolve<RequestFeed>();
             Mocker.SetConstant(feed);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<Requestarr.Core.Admin.IAdminQueue>(new Requestarr.Core.Admin.AdminQueue(new Requestarr.Core.Admin.IAdminQueueSource[]
+            {
+                Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+            }));
+            Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             panels = Mocker.Resolve<PanelService>();
             Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();

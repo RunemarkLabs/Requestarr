@@ -436,6 +436,7 @@ namespace Requestarr.Core.Users
 
             var adminChannel = ulong.Parse(_guildSetup.GetConfig().AdminChannelId);
             await _gateway.SendMessageAsync(adminChannel, AccessRequestCard(request, user, discordUserId));
+            await _panels.RefreshAdminPanelAsync();
 
             _audit.Record(new Actor($"discord:{discordUserId}", user.Id), "mediaserver.request", "mediaserver-request", request.Id.ToString(), $"{provider} {request.Username}");
 
@@ -462,6 +463,7 @@ namespace Requestarr.Core.Users
             request.Decided = DateTime.UtcNow;
             request.DecidedByUserId = admin.UserId;
             _accessRequests.Update(request);
+            await _panels.RefreshAdminPanelAsync();
 
             if (approve)
             {
