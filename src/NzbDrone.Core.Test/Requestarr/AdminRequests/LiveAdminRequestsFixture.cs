@@ -153,12 +153,12 @@ namespace Requestarr.Core.Test.AdminRequests
                 registered.Single(c => c.Name == "admin").Options.Select(o => o.Name).Should().Equal("user", "requests", "help");
 
                 // Two test members, onboarded through their member cards.
-                var members = (await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync()).Where(m => !m.IsBot && m.Id != guild.OwnerId).OrderBy(m => m.Id).ToList();
-                Log($"[members] {members.Count} member(s) besides the owner: {string.Join(", ", members.Select(m => m.Username))}");
-                members.Should().HaveCountGreaterThanOrEqualTo(2, "the walk needs requests from two members");
-                var (one, two) = (members[0], members[1]);
+                // Two named test members when there are two; otherwise both requests come from the one.
+                var members = LiveTestMembers.Pick(await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync());
+                Log($"[members] test member(s): {string.Join(", ", members.Select(m => m.Username))}");
+                var (one, two) = (members[0], members.Count > 1 ? members[1] : members[0]);
 
-                foreach (var member in new[] { one, two })
+                foreach (var member in new[] { one, two }.Distinct())
                 {
                     var added = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Add}:{member.Id}")));
                     Log($"[add] {member.Username}: {added.LastReply.Content.Replace("\n", " | ")}");

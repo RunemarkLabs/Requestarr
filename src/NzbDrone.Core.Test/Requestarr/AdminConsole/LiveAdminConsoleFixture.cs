@@ -156,7 +156,7 @@ namespace Requestarr.Core.Test.AdminConsole
 
                 // 3. Onboard a member through the member picker.
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
-                var target = members.First(m => !m.IsBot && m.Id != guild.OwnerId);
+                var target = LiveTestMembers.Pick(members)[0];
                 var picker = await Send(dispatcher, AsOwner(FakeInteraction.Button(AdminRoutes.Pick)));
                 Log($"[picker] {picker.LastReply.Content} menu kind={picker.LastReply.SelectMenu.Kind} id={picker.LastReply.SelectMenu.CustomId}");
                 var card = await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu(AdminRoutes.Member, target.Id.ToString())));

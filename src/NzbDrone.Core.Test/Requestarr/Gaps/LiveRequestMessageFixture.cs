@@ -132,7 +132,7 @@ namespace Requestarr.Core.Test.Gaps
                 var guild = host.Client.GetGuild(settings.Current.GuildId);
                 var adminChannel = ulong.Parse(guildSetup.GetConfig().AdminChannelId);
                 var members = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetUsersAsync().FlattenAsync();
-                var target = members.First(m => !m.IsBot && m.Id != guild.OwnerId);
+                var target = LiveTestMembers.Pick(members)[0];
 
                 await Send(dispatcher, FakeInteraction.Button($"adm-add:{target.Id}").By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel));
                 var channel = ulong.Parse(users.FindByDiscordId(target.Id).PrivateChannelId);
