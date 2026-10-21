@@ -18,6 +18,12 @@ namespace Requestarr.Core.Discord
         // The admin-only feed: one card per request. Seeded with open requests once per channel.
         public string FeedChannelId { get; set; }
         public bool FeedSeeded { get; set; }
+
+        // Every onboarded member holds the shared members role, which can read (not post in) the
+        // announcements channel. AnnouncedVersion: the last version whose changes were posted.
+        public string MembersRoleId { get; set; }
+        public string AnnouncementsChannelId { get; set; }
+        public string AnnouncedVersion { get; set; }
     }
 
     public interface IDiscordGuildConfigRepository : IBasicRepository<DiscordGuildConfig>

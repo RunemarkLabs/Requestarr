@@ -111,6 +111,15 @@ namespace Requestarr.Core.Discord.Help
             },
             new HelpTopic
             {
+                Key = "announcements",
+                Title = "Announcements and outages",
+                Summary = "News for every member",
+                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is for every member: they can read it but not post; admins can post there directly. Members get it through one shared role, **{ChannelLayout.MembersRoleName}**, given when they're added or unsuspended and taken when they're suspended or removed. " +
+                             $"Outages: a Sonarr or Radarr that can't be reached gets an alert here after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAlertAfter)}; still down after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAnnounceAfter)}, the alert offers **{DiscordText.AnnounceLabel}**, which posts a plain notice for users. If you announced it, the recovery is announced too; if not, users never hear about it. " +
+                             "Upgrades: when Requestarr starts on a new version, the full list of changes is posted here and the changes for users go to the announcements channel, once per version."
+            },
+            new HelpTopic
+            {
                 Key = "downloads",
                 Title = "Downloads and availability",
                 Summary = "Downloading, stuck, ready to watch",
@@ -142,6 +151,13 @@ namespace Requestarr.Core.Discord.Help
                 Visible = v => !v.Linked,
                 Intro = _ => "Enter your Plex username or email. The admin approves it, and the button disappears once your account is linked.",
                 Buttons = new[] { PanelButtons.LinkPlex }
+            },
+            new HelpTopic
+            {
+                Key = "news",
+                Title = "Announcements",
+                Summary = "News for everyone",
+                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is where Requestarr and the admin post news for everyone: new things you can do after an update, and outages that pause requests (and when they're over). You can read it but not post there."
             },
             Credits
         };

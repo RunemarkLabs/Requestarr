@@ -175,6 +175,16 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.CompletedTask;
         }
 
+        public Task RemoveRoleFromMemberAsync(ulong userId, ulong roleId)
+        {
+            if (Members.TryGetValue(userId, out var member))
+            {
+                Members[userId] = member with { RoleIds = member.RoleIds.Where(r => r != roleId).ToList() };
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message)
         {
             var id = NextId();

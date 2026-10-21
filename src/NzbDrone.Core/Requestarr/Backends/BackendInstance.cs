@@ -39,6 +39,10 @@ namespace Requestarr.Core.Backends
         public DateTime? DownSince { get; set; }
         public string DownAlertMessageId { get; set; }
 
+        // This outage: the alert got its "Announce to users" button; the announcement, if an admin pressed it.
+        public bool DownAnnounceOffered { get; set; }
+        public string DownAnnounceMessageId { get; set; }
+
         public bool EverConnected => FirstConnected.HasValue;
     }
 

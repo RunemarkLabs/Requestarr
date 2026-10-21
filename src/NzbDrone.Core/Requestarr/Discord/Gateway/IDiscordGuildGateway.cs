@@ -14,7 +14,10 @@ namespace Requestarr.Core.Discord.Gateway
         ViewChannel = 1,
         SendMessages = 2,
         ReadMessageHistory = 4,
-        EmbedLinks = 8
+        EmbedLinks = 8,
+
+        // Creating public or private threads and posting in them.
+        Threads = 16
     }
 
     public enum OverwriteTarget
@@ -56,6 +59,7 @@ namespace Requestarr.Core.Discord.Gateway
         Task<ulong?> FindRoleAsync(string name);
         Task DeleteRoleAsync(ulong roleId);
         Task AddRoleToMemberAsync(ulong userId, ulong roleId);
+        Task RemoveRoleFromMemberAsync(ulong userId, ulong roleId);
 
         Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message);
 

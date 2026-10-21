@@ -682,6 +682,7 @@ namespace Requestarr.Core.Discord
         public const string FeedCardWidthUrl = "https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/docs/assets/feed-card-width.png";
 
         public const string FeedChannelTopic = "Requestarr activity: one card per request, newest at the bottom. Admins only.";
+        public const string AnnouncementsChannelTopic = "News from Requestarr for everyone: new things you can do, and outages that affect requests. Only admins post here.";
 
         public static string FeedState(Request request) => request.Status switch
         {
@@ -779,9 +780,11 @@ namespace Requestarr.Core.Discord
             $"✅ **{instance.Name} is back** after {Duration(downFor)}. {Label(TypeOf(instance))} requests work again.";
 
         public static string Duration(TimeSpan span) =>
-            span.TotalMinutes < 90 ? $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))} minute{((int)Math.Round(span.TotalMinutes) == 1 ? string.Empty : "s")}"
+            span.TotalMinutes < 90 ? Minutes(Math.Max(1, (int)Math.Round(span.TotalMinutes)))
             : span.TotalHours < 48 ? $"{span.TotalHours:0.#} hours"
             : $"{span.TotalDays:0.#} days";
+
+        private static string Minutes(int n) => $"{n} minute{(n == 1 ? string.Empty : "s")}";
 
         public static string RequestsPaused(ContentType type, string instance) =>
             $"{Label(type)} requests are paused right now: {instance} can't be reached. Requestarr keeps trying, and the admin is alerted if it stays down.";
@@ -790,6 +793,60 @@ namespace Requestarr.Core.Discord
 
         public static string NotConnectedYet(string name, ContentType type) =>
             $"Saved. {name} won't see {Label(type)} until a {Backends.BackendImplementations.ForContentType(type)} instance is connected in Requestarr.";
+
+        // Outages announced to users: plain words, what's affected, and that the admin knows.
+        public const string AnnounceLabel = "Announce to users";
+
+        public static string AnnounceOffer(TimeSpan after) =>
+            $"Still down after {Duration(after)}. **{AnnounceLabel}** posts a short notice in #{ChannelLayout.AnnouncementsChannelName}; if you do, the recovery is announced there too.";
+
+        public static string AlertAnnounced(string admin) => $"📣 Announced to users by {admin}. The recovery will be announced there too.";
+
+        public static string AlertNowBack(TimeSpan downFor, bool announced) =>
+            $"✅ Back after {Duration(downFor)}.{(announced ? " The recovery was announced to users." : string.Empty)}";
+
+        public static string AnnounceNotDown(string instance) =>
+            instance == null ? "That instance no longer exists." : $"{instance} is back already, so there's nothing to announce.";
+
+        public static string AlreadyAnnounced(string instance) => $"This {instance} outage was already announced to users.";
+
+        public const string AnnounceFailed = "Couldn't post in the announcements channel. Check that it exists and that the bot can post there.";
+
+        public static string Announced(string instance) =>
+            $"Posted in #{ChannelLayout.AnnouncementsChannelName}. When {instance} is back, the recovery is announced there too.";
+
+        public static string OutageNotice(ContentType type, bool partly) =>
+            $"⚠️ **{(partly ? "Some " : string.Empty)}{Label(type)} requests are paused**\n" +
+            $"Requestarr can't pass {(partly ? "some " : string.Empty)}new {Label(type)} requests on right now. The admin knows and is working on it. " +
+            "Everything you already asked for is safe, and there'll be a message here when it works again.";
+
+        public static string OutageOverNotice(ContentType type, TimeSpan downFor) =>
+            $"✅ **{Label(type)} requests work again**\nEverything is back to normal after {Duration(downFor)}. Thanks for your patience.";
+
+        // What's new on upgrade: the full list for admins; only the "For users" lines, as written, for members.
+        public static string VersionNotesForAdmins(Announcements.ChangelogVersion version, bool postedToUsers)
+        {
+            var lines = new List<string> { $"📋 **Requestarr {version.Version}: what's new**" };
+
+            lines.Add(version.Users.Count == 0
+                ? $"**{Announcements.Changelog.UsersHeading}:** nothing this time, so nothing was posted to users."
+                : $"**{Announcements.Changelog.UsersHeading}**{(postedToUsers ? $" (posted in #{ChannelLayout.AnnouncementsChannelName})" : string.Empty)}");
+            lines.AddRange(version.Users.Select(l => $"• {l}"));
+
+            foreach (var (heading, items) in new[] { (Announcements.Changelog.AdminsHeading, version.Admins), (Announcements.Changelog.InternalHeading, version.Internal) })
+            {
+                if (items.Count > 0)
+                {
+                    lines.Add($"**{heading}**");
+                    lines.AddRange(items.Select(l => $"• {l}"));
+                }
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        public static string VersionNotesForUsers(Announcements.ChangelogVersion version) =>
+            $"✨ **What's new in Requestarr**\n{string.Join("\n", version.Users.Select(l => $"• {l}"))}";
 
         // /admin requests: one thing waiting on the admin at a time, oldest first.
         public const string WalkDone = "Nothing left waiting on you. 🎉";

@@ -11,6 +11,8 @@ namespace Requestarr.Core.Discord
     {
         public const string AdminChannelName = "requestarr-admin";
         public const string FeedChannelName = "requestarr-feed";
+        public const string AnnouncementsChannelName = "requestarr-announcements";
+        public const string MembersRoleName = "Requestarr Members";
         public const string RequestCategoryName = "Requestarr Requests";
         public const string UserChannelPrefix = "requests-";
         public const string UserRolePrefix = "requestarr-";
@@ -31,6 +33,16 @@ namespace Requestarr.Core.Discord
             {
                 overwrites.Add(new PermissionOverwrite(adminRoleId.Value, OverwriteTarget.Role, ReadWrite, ChannelPermissions.None));
             }
+
+            return overwrites;
+        }
+
+        // Every onboarded member (the shared members role) can read it but not post or start threads;
+        // admins and the bot post. Hidden from everyone else.
+        public static IReadOnlyList<PermissionOverwrite> Announcements(ulong guildId, ulong botUserId, ulong? adminRoleId, ulong membersRoleId)
+        {
+            var overwrites = AdminOnly(guildId, botUserId, adminRoleId).ToList();
+            overwrites.Add(new PermissionOverwrite(membersRoleId, OverwriteTarget.Role, ChannelPermissions.ViewChannel | ChannelPermissions.ReadMessageHistory, ChannelPermissions.SendMessages | ChannelPermissions.Threads));
 
             return overwrites;
         }

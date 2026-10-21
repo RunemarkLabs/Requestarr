@@ -13,6 +13,7 @@ Code workspace.
 - Commit style: ...
 - Test expectations: ...
 - Namespaces: copied Servarr foundation keeps `NzbDrone.*`; all new code is `Requestarr.*`.
+- Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z` section at the top of `CHANGELOG.md` with **For users** (plain words, only what members notice; posted to them verbatim on upgrade), **For admins** and **Internal**. CI's Changelog job and a unit test enforce it. Details: `docs/development.md#changelog`.
 
 ## Gotchas
 

@@ -128,6 +128,7 @@ namespace Requestarr.Core.Users
             {
                 roleId = await _gateway.CreateRoleAsync(ChannelLayout.UserRoleName(member.Username));
                 await _gateway.AddRoleToMemberAsync(member.Id, roleId.Value);
+                await SetMembership(member.Id, true);
 
                 var categoryId = await _guildSetup.GetCategoryWithRoomAsync();
                 var overwrites = ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _guildSetup.AdminRoleId, roleId.Value, locked: false);
@@ -188,6 +189,8 @@ namespace Requestarr.Core.Users
                 await _gateway.DeleteRoleAsync(roleId);
             }
 
+            await SetMembership(discordUserId, false);
+
             user.Status = UserStatus.Removed;
             user.StatusChanged = DateTime.UtcNow;
             user.DiscordRoleId = null;
@@ -213,6 +216,7 @@ namespace Requestarr.Core.Users
             }
 
             await SetChannelLock(user, locked: true, reason == null ? DiscordText.ChannelLockedNotice : DiscordText.MemberLeftNotice);
+            await SetMembership(discordUserId, false);
 
             user.Status = UserStatus.Suspended;
             user.StatusChanged = DateTime.UtcNow;
@@ -251,6 +255,7 @@ namespace Requestarr.Core.Users
             }
 
             await SetChannelLock(user, locked: false, DiscordText.ChannelRestoredNotice);
+            await SetMembership(discordUserId, true);
 
             user.Status = UserStatus.Active;
             user.StatusChanged = DateTime.UtcNow;
@@ -522,6 +527,32 @@ namespace Requestarr.Core.Users
             }
 
             return (user, null);
+        }
+
+        // The shared members role: it shows the announcements channel. Someone who left the server has no
+        // roles to take, so failures are only logged.
+        private async Task SetMembership(ulong discordUserId, bool member)
+        {
+            if (_guildSetup.MembersRoleId is not { } role)
+            {
+                return;
+            }
+
+            try
+            {
+                if (member)
+                {
+                    await _gateway.AddRoleToMemberAsync(discordUserId, role);
+                }
+                else
+                {
+                    await _gateway.RemoveRoleFromMemberAsync(discordUserId, role);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not {0} the members role for {1}", member ? "give" : "take", discordUserId);
+            }
         }
 
         private UserIdentity Identity(RequestarrUser user)

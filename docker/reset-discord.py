@@ -1,7 +1,7 @@
 """Remove everything Requestarr created in the Discord test server, for a clean UAT start.
 
-Deletes: #requestarr-admin, #requestarr-feed, the "Requestarr Requests" categories and every channel in them
-(including archived ones), and the per-user "requestarr-*" roles.
+Deletes: #requestarr-admin, #requestarr-feed, #requestarr-announcements, the "Requestarr Requests" categories and
+every channel in them (including archived ones), the per-user "requestarr-*" roles and the shared "Requestarr Members" role.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
 
 Reads DISCORD_BOT_TOKEN and DISCORD_TEST_GUILD_ID from the environment. Never prints the token.
@@ -15,9 +15,10 @@ import urllib.error
 import urllib.request
 
 API = "https://discord.com/api/v10"
-ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed")
+ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-announcements")
 CATEGORY = "Requestarr Requests"
 USER_ROLE_PREFIX = "requestarr-"
+MEMBERS_ROLE = "Requestarr Members"
 
 
 def call(method, path):
@@ -52,7 +53,7 @@ def main():
         print(f"deleted channel {'category ' if channel['type'] == 4 else '#'}{channel['name']}")
 
     for role in call("GET", f"/guilds/{guild}/roles"):
-        if role["name"].startswith(USER_ROLE_PREFIX) and not role.get("managed"):
+        if (role["name"].startswith(USER_ROLE_PREFIX) or role["name"] == MEMBERS_ROLE) and not role.get("managed"):
             call("DELETE", f"/guilds/{guild}/roles/{role['id']}")
             print(f"deleted role {role['name']}")
 
