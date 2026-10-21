@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common.Messaging;
@@ -121,6 +123,9 @@ namespace Requestarr.Core.Backends
         {
             var now = Clock();
 
+            // An admin may have pressed Announce since this instance was loaded.
+            instance.DownAnnounceMessageId = _repository.Get(instance.Id).DownAnnounceMessageId;
+
             if (reachable)
             {
                 instance.FirstConnected ??= now;
@@ -151,7 +156,7 @@ namespace Requestarr.Core.Backends
                     instance.DownAlertMessageId = null;
                     instance.DownAnnounceOffered = false;
                     instance.DownAnnounceMessageId = null;
-                    Save(instance);
+                    Save(instance, i => i.DownAnnounceMessageId);
                     _events.PublishEvent(new InstanceRecoveredEvent(instance, downFor, alerted));
 
                     if (alerted)
@@ -220,7 +225,7 @@ namespace Requestarr.Core.Backends
             }
 
             instance.DownAnnounceMessageId = id.ToString();
-            Save(instance);
+            _repository.SetFields(instance, i => i.DownAnnounceMessageId);
             await EditAlertAsync(instance, DiscordText.InstanceDownAlert(instance) + "\n" + DiscordText.AlertAnnounced(adminName), null);
             _logger.Info("{0} announced the {1} outage to users", adminName, instance.Name);
 
@@ -244,8 +249,8 @@ namespace Requestarr.Core.Backends
             {
                 Content = content,
                 Buttons = announceButton == null
-                    ? new System.Collections.Generic.List<InteractionButton>()
-                    : new System.Collections.Generic.List<InteractionButton> { new() { CustomId = announceButton, Label = DiscordText.AnnounceLabel, Style = ButtonStyle.Primary } }
+                    ? new List<InteractionButton>()
+                    : new List<InteractionButton> { new() { CustomId = announceButton, Label = DiscordText.AnnounceLabel, Style = ButtonStyle.Primary } }
             };
 
             try
@@ -259,7 +264,9 @@ namespace Requestarr.Core.Backends
             }
         }
 
-        private void Save(BackendInstance instance) => _repository.SetFields(instance, i => i.FirstConnected, i => i.DownSince, i => i.DownAlertMessageId, i => i.DownAnnounceOffered, i => i.DownAnnounceMessageId);
+        // The announcement itself is written only by AnnounceAsync and cleared on recovery.
+        private void Save(BackendInstance instance, params Expression<Func<BackendInstance, object>>[] also) =>
+            _repository.SetFields(instance, new Expression<Func<BackendInstance, object>>[] { i => i.FirstConnected, i => i.DownSince, i => i.DownAlertMessageId, i => i.DownAnnounceOffered }.Concat(also).ToArray());
 
         private async Task<ulong?> PostAsync(InteractionReply message)
         {

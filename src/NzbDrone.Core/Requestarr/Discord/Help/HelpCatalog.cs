@@ -111,15 +111,6 @@ namespace Requestarr.Core.Discord.Help
             },
             new HelpTopic
             {
-                Key = "announcements",
-                Title = "Announcements and outages",
-                Summary = "News for every member",
-                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is for every member: they can read it but not post; admins can post there directly. Members get it through one shared role, **{ChannelLayout.MembersRoleName}**, given when they're added or unsuspended and taken when they're suspended or removed. " +
-                             $"Outages: a Sonarr or Radarr that can't be reached gets an alert here after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAlertAfter)}; still down after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAnnounceAfter)}, the alert offers **{DiscordText.AnnounceLabel}**, which posts a plain notice for users. If you announced it, the recovery is announced too; if not, users never hear about it. " +
-                             "Upgrades: when Requestarr starts on a new version, the full list of changes is posted here and the changes for users go to the announcements channel, once per version."
-            },
-            new HelpTopic
-            {
                 Key = "downloads",
                 Title = "Downloads and availability",
                 Summary = "Downloading, stuck, ready to watch",
@@ -194,6 +185,15 @@ namespace Requestarr.Core.Discord.Help
                 Intro = _ => $"#{ChannelLayout.FeedChannelName} has one small card per request: who asked, which instance, the state, and for TV the seasons. Every change moves its card to the bottom, so the newest activity is last. " +
                              $"Its buttons are only the ones that make sense now: **{DiscordText.ApproveLabel}**, **{DiscordText.DenyLabel}** and **{DiscordText.AlreadyAvailableLabel}** while it waits; **{DiscordText.CancelLabel}** while it waits or until something starts downloading (a sent title is then unmonitored in Sonarr or Radarr, never deleted); **{DiscordText.AddSeasonsLabel}** on TV. " +
                              "Approval cards stay in this channel too, and acting in either place updates both and the user's message. Account events (new users, access changes, suspensions, Plex links) stay in this channel, not the feed."
+            },
+            new HelpTopic
+            {
+                Key = "announcements",
+                Title = "Announcements and outages",
+                Summary = "News for every member",
+                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is for every member: they can read it but not post; admins can post there directly. Members get it through one shared role, **{ChannelLayout.MembersRoleName}**, given when they're added or unsuspended and taken when they're suspended or removed. " +
+                             $"Outages: a Sonarr or Radarr that can't be reached gets an alert here after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAlertAfter)}; still down after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAnnounceAfter)}, the alert offers **{DiscordText.AnnounceLabel}**, which posts a plain notice for users. If you announced it, the recovery is announced too; if not, users never hear about it. " +
+                             "Upgrades: when Requestarr starts on a new version, the full list of changes is posted here and the changes for users go to the announcements channel, once per version."
             },
             new HelpTopic
             {

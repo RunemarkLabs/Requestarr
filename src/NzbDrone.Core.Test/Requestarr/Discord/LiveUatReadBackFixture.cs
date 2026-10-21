@@ -60,6 +60,14 @@ namespace Requestarr.Core.Test.Discord
 
             await CheckPanel(admin, PanelRoutes.AdminQueue, client.CurrentUser.Id);
 
+            // The announcements channel and what the running bot posted there (what's new on its first start).
+            var announcements = channels.Single(c => c.Name == ChannelLayout.AnnouncementsChannelName);
+            var posts = (await announcements.GetMessagesAsync(20).FlattenAsync()).OrderBy(m => m.Id).ToList();
+            Log($"[announcements] #{announcements.Name}: {posts.Count} post(s)");
+            posts.ForEach(m => Log($"[announcements]   \"{m.Content.Replace("\n", " | ")}\""));
+            var notes = (await admin.GetMessagesAsync(30).FlattenAsync()).Where(m => m.Content.StartsWith("📋")).ToList();
+            Log($"[announcements] what's new in #{admin.Name}: {string.Join(" / ", notes.Select(m => m.Content.Split('\n')[0]))}");
+
             foreach (var channel in userChannels)
             {
                 await CheckPanel(channel, PanelRoutes.MyRequests, client.CurrentUser.Id);
