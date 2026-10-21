@@ -32,6 +32,9 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         [SetUp]
         public void AvailabilityAndClock()
         {
+            // NUnit keeps one fixture instance for all its tests: start every test at the same time.
+            Now = new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc);
+
             // Requestarr's API key (the webhook tokens derive from it); built here, not a literal.
             var config = new Moq.Mock<IConfigFileProvider>();
             config.SetupGet(c => c.ApiKey).Returns(string.Concat(Enumerable.Repeat("ab", 16)));

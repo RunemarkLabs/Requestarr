@@ -118,6 +118,9 @@ namespace Requestarr.Core.Backends
 
         // Stops (or resumes) searching for a library item. Nothing is deleted.
         Task SetMonitoredAsync(BackendSettings settings, int itemId, bool monitored);
+
+        // Asks the instance to search for a library item's missing files now.
+        Task SearchAsync(BackendSettings settings, int itemId);
     }
 
     public interface IRadarrApi : IBackendApi
@@ -278,6 +281,10 @@ namespace Requestarr.Core.Backends
             await PutAsync(settings, $"{ItemResource}/{itemId}", item);
         }
 
+        public Task SearchAsync(BackendSettings settings, int itemId) => PostAsync(settings, "command", SearchCommand(itemId));
+
+        protected abstract object SearchCommand(int itemId);
+
         private async Task<Newtonsoft.Json.Linq.JObject> FindWebhookAsync(BackendSettings settings) =>
             (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "notification"))?.FirstOrDefault(n => (string)n["name"] == WebhookName && (string)n["implementation"] == "Webhook");
 
@@ -425,6 +432,8 @@ namespace Requestarr.Core.Backends
 
         protected override string QueueItemParameter => "movieId";
 
+        protected override object SearchCommand(int itemId) => new { name = "MoviesSearch", movieIds = new[] { itemId } };
+
         public async Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId)
         {
             try
@@ -519,6 +528,8 @@ namespace Requestarr.Core.Backends
         protected override string ItemResource => "series";
 
         protected override string QueueItemParameter => "seriesId";
+
+        protected override object SearchCommand(int itemId) => new { name = "SeriesSearch", seriesId = itemId };
 
         public async Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId)
         {

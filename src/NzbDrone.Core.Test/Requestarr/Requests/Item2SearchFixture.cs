@@ -71,7 +71,7 @@ namespace Requestarr.Core.Test.Requests
         {
             Radarr.Unreachable = true;
 
-            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Contain(DiscordText.BackendUnavailable("Radarr"));
+            (await Harness.SendAsync(Search(Alice, "movie", "dune"))).LastReply.Content.Should().Contain(DiscordText.RequestsPaused(ContentType.Movie, "Radarr"));
 
             ExceptionVerification.IgnoreWarns();
         }

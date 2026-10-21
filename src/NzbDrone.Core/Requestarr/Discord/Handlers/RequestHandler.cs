@@ -442,12 +442,12 @@ namespace Requestarr.Core.Discord.Handlers
             await responder.EditAsync(RequestCards.SearchResults(type, query, results.Value, _metadata.CastEnabled));
         }
 
-        // Only types the caller can actually request: access not off (admins: types with a backend).
-        // Music waits for Lidarr; comics and books are never offered yet.
+        // Only types the caller can actually request: access not off and an instance that has
+        // connected at least once (admins: types with a backend). Comics and books aren't offered yet.
         private IReadOnlyList<InteractionChoice> TypeChoices(CallerContext context, bool asAdmin, string typed)
         {
-            var types = ContentTypes.Requestable
-                .Where(t => asAdmin ? _backends.Default(t) != null : AccessState(context.User, t) != Users.AccessState.Off);
+            var types = ContentTypes.Offered
+                .Where(t => asAdmin ? _backends.Default(t) != null : _backends.EverConnected(t) && AccessState(context.User, t) != Users.AccessState.Off);
 
             return types
                 .Select(t => new InteractionChoice(DiscordText.Label(t), RequestCards.TypeKey(t)))

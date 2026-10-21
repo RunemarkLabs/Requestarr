@@ -78,6 +78,15 @@ namespace Requestarr.Core.Test.Discord.Harness
             return true;
         });
 
+        // Searches the admin asked for (search again), by library item.
+        public List<int> Searches { get; } = new();
+
+        public Task SearchAsync(BackendSettings settings, int itemId) => Run(() =>
+        {
+            Searches.Add(itemId);
+            return true;
+        });
+
         public void Downloading(int itemId, long size = 1000, long left = 600, int? season = null) =>
             Queues[itemId] = new List<QueueEntry> { new(season, "Release", "downloading", "ok", "downloading", size, left, null) };
 

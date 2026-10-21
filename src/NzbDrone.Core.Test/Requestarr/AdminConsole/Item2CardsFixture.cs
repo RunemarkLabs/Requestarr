@@ -48,17 +48,19 @@ namespace Requestarr.Core.Test.AdminConsole
         }
 
         [Test]
-        public async Task an_active_member_gets_access_limits_instance_and_actions()
+        public async Task an_active_member_gets_one_access_menu_per_type_more_and_actions()
         {
             var card = (await MemberCard(Alice)).LastReply;
 
             card.Content.Should().Contain("Status: active").And.Contain("Movies: needs approval");
-            Menus(card).Should().Equal(AdminRoutes.Access, AdminRoutes.Limit, AdminRoutes.Instance);
-            card.SelectMenu.Options.Should().HaveCount(9, "three types, three levels");
-            card.SelectMenu.Options.Single(o => o.Value == "movie:approval").Description.Should().Be(DiscordText.Current);
-            card.MoreMenus.Single(m => m.CustomId.StartsWith(AdminRoutes.Instance)).Options.Select(o => o.Label)
-                .Should().Equal(DiscordText.InstanceOption(ContentType.Movie, "Radarr"), DiscordText.InstanceOption(ContentType.Movie, "Radarr 4K"));
-            Labels(card).Should().Equal(DiscordText.AdminLinkPlexLabel, DiscordText.SuspendLabel, DiscordText.RemoveLabel, DiscordText.TheirRequestsLabel);
+            var menus = new[] { card.SelectMenu }.Concat(card.MoreMenus).ToList();
+            menus.Select(m => m.CustomId).Should().Equal($"adm-access:{Alice}:movie", $"adm-access:{Alice}:tv", $"adm-access:{Alice}:music", $"adm-more:{Alice}");
+            menus.Take(3).Select(m => m.Placeholder).Should().Equal(DiscordText.AccessSelectPlaceholder(ContentType.Movie), DiscordText.AccessSelectPlaceholder(ContentType.Tv), DiscordText.AccessSelectPlaceholder(ContentType.Music));
+            menus[0].Options.Select(o => (o.Value, o.Default)).Should().Equal(("off", false), ("approval", true), ("auto", false));
+            menus[2].Options.Single(o => o.Default).Value.Should().Be("off", "Music starts off, and every type is shown to the admin");
+            menus[3].Options.Select(o => o.Value).Should().Equal("limit:movie", "limit:tv", "limit:music", $"instance:movie:{Instance("Radarr").Id}", $"instance:movie:{Instance("Radarr 4K").Id}", "requests");
+            Labels(card).Should().Equal(DiscordText.AdminLinkPlexLabel, DiscordText.SuspendLabel, DiscordText.RemoveLabel);
+            (menus.Count + 1).Should().BeLessThanOrEqualTo(5, "Discord allows five rows");
         }
 
         [Test]
@@ -109,14 +111,30 @@ namespace Requestarr.Core.Test.AdminConsole
         }
 
         [Test]
-        public async Task every_change_refreshes_the_card_and_reports_privately()
+        public async Task an_access_menu_changes_the_card_in_place_with_nothing_else_posted()
         {
-            var access = await MemberMenu(Alice, AdminRoutes.Access, "tv:auto");
-            access.Responder.Replies.First().Content.Should().Contain("TV: auto-approve");
-            access.LastReply.Ephemeral.Should().BeTrue();
-            access.LastReply.Content.Should().Be(DiscordText.AccessChanged("alice", ContentType.Tv, AccessState.AutoApprove, null));
+            var access = await Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu($"adm-access:{Alice}:tv", "auto")));
 
-            var form = await MemberMenu(Alice, AdminRoutes.Limit, "movie");
+            access.Responder.Responses.Select(r => r.Kind).Should().Equal(ResponseKind.MessageUpdate);
+            access.LastReply.Content.Should().Contain("TV: auto-approve");
+            access.LastReply.MoreMenus.First().Options.Single(o => o.Default).Value.Should().Be("auto", "the menu shows the new level");
+        }
+
+        [Test]
+        public async Task granting_a_type_with_nothing_connected_tells_the_admin_privately()
+        {
+            var run = await Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu($"adm-access:{Alice}:music", "auto")));
+
+            run.Responder.Replies.First().Content.Should().Contain("Music: auto-approve");
+            run.LastReply.Ephemeral.Should().BeTrue();
+            run.LastReply.Content.Should().Be(DiscordText.NotConnectedYet("alice", ContentType.Music));
+            Mocker.Resolve<Requestarr.Core.Discord.IPanelService>().UserPanel(UserFor(Alice)).Content.Should().NotContain("Music", "users don't see a type until an instance for it has connected");
+        }
+
+        [Test]
+        public async Task the_more_menu_sets_limits_and_instances_and_lists_their_requests()
+        {
+            var form = await MemberMenu(Alice, AdminRoutes.More, "limit:movie");
             form.Responder.LastModal.CustomId.Should().Be($"adm-limit-form:{Alice}:movie");
             var limit = await MemberForm($"adm-limit-form:{Alice}:movie", ("limit", "2"), ("days", "30"));
             limit.Responder.Replies.First().Content.Should().Contain("Movies: needs approval (quota 2 per 30 days)");
@@ -124,12 +142,13 @@ namespace Requestarr.Core.Test.AdminConsole
             var bad = await MemberForm($"adm-limit-form:{Alice}:movie", ("limit", "lots"));
             bad.LastReply.Content.Should().Be(DiscordText.InvalidLimit);
 
+            var instance = await MemberMenu(Alice, AdminRoutes.More, $"instance:movie:{Instance("Radarr 4K").Id}");
+            instance.Responder.Responses.Select(r => r.Kind).Should().Equal(ResponseKind.MessageUpdate);
+            instance.LastReply.Content.Should().Contain(DiscordText.InstanceLine(ContentType.Movie, "Radarr 4K"));
+
             var plex = await MemberButton(Alice, AdminRoutes.Plex);
             plex.Responder.LastModal.CustomId.Should().Be($"adm-plex-form:{Alice}");
             (await MemberForm($"adm-plex-form:{Alice}", ("username", "alice_plex"))).Responder.Replies.First().Content.Should().Contain("Plex `alice_plex`");
-
-            var instance = await MemberMenu(Alice, AdminRoutes.Instance, $"movie:{Instance("Radarr 4K").Id}");
-            instance.Responder.Replies.First().Content.Should().Contain(DiscordText.InstanceLine(ContentType.Movie, "Radarr 4K"));
         }
 
         [Test]
@@ -138,71 +157,27 @@ namespace Requestarr.Core.Test.AdminConsole
             await PendingMovie(Alice, Dune);
             await PendingMovie(Bob, DuneTwo);
 
-            var list = (await MemberButton(Alice, AdminRoutes.Requests)).LastReply;
+            var list = (await MemberMenu(Alice, AdminRoutes.More, "requests")).LastReply;
 
             list.Content.Should().StartWith(DiscordText.MemberRequestsHeader("alice", 1)).And.Contain("#1 ·").And.NotContain("#2 ·");
             list.SelectMenu.Options.Select(o => o.Value).Should().Equal("1");
         }
 
-        // Request cards.
-        [TestCase("1")]
-        [TestCase("#1")]
-        [TestCase("dune (2021")]
-        public async Task admin_request_opens_the_card_by_number_or_title(string query)
-        {
-            await PendingMovie(Alice, Dune);
-
-            var card = (await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin request").WithOption("request", query)))).LastReply;
-
-            card.Ephemeral.Should().BeTrue();
-            card.Embeds.Single().Title.Should().Be("Dune (2021)");
-            ButtonIds(card).Should().Equal(ButtonIds(CardOf(1)), "the same buttons as its feed card");
-        }
-
         [Test]
-        public async Task several_matches_give_a_list_and_nothing_found_says_how_to_search()
+        public async Task a_request_card_from_their_requests_acts_in_place()
         {
             await PendingMovie(Alice, Dune);
-            await PendingMovie(Bob, DuneTwo);
-
-            var list = (await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin request").WithOption("request", "dune")))).LastReply;
-            list.Content.Should().StartWith(DiscordText.RequestMatches("dune", 2));
-            list.SelectMenu.CustomId.Should().Be(AdminRoutes.Request);
-
-            var opened = (await Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu(AdminRoutes.Request, "2")))).LastReply;
-            opened.Embeds.Single().Title.Should().Be("Dune: Part Two (2024)");
-
-            (await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin request").WithOption("request", "nothing like it")))).LastReply.Content.Should().Be(DiscordText.NoRequestMatches);
-        }
-
-        [Test]
-        public async Task the_title_autocompletes_from_existing_requests()
-        {
-            await PendingMovie(Alice, Dune);
-            await PendingMovie(Bob, DuneTwo);
-
-            var run = await Harness.SendAsync(AsAdmin(FakeInteraction.Autocomplete("admin request", "request", "part")));
-
-            run.Responder.Suggestions.Select(c => (c.Name, c.Value)).Should().Equal(("#2 Dune: Part Two (2024) · pending · bob", "2"));
-        }
-
-        [Test]
-        public async Task request_card_buttons_follow_its_state_and_act_in_place()
-        {
-            await PendingMovie(Alice, Dune);
-            var card = (await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("admin request").WithOption("request", "1")))).LastReply;
+            var card = (await Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu(AdminRoutes.Request, "1")))).LastReply;
             ButtonIds(card).Should().Equal("req-approve:1", "req-deny:1", "req-available:1", "req-admin-cancel:1");
+            ButtonIds(card).Should().Equal(ButtonIds(CardOf(1)), "the same buttons as its feed card");
 
             var approved = await RequestCardButton("req-approve:1");
 
             approved.Responder.Replies.First().Embeds.Single().Description.Should().StartWith("✅ **Sent**, searching", "the card changes in place");
-            ButtonIds(approved.Responder.Replies.First()).Should().Equal("req-admin-cancel:1");
-            approved.LastReply.Ephemeral.Should().BeTrue();
             approved.LastReply.Content.Should().StartWith("Approved request #1");
             Reload(1).Status.Should().Be(RequestStatus.Approved);
 
-            var late = await RequestCardButton("req-approve:1");
-            late.LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Approved));
+            (await RequestCardButton("req-approve:1")).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Approved));
         }
 
         // The admin panel.
@@ -232,23 +207,6 @@ namespace Requestarr.Core.Test.AdminConsole
             card.Content.Should().StartWith("**bob**");
         }
 
-        [Test]
-        public async Task the_queue_filters_by_type_and_opens_request_cards()
-        {
-            await PendingMovie(Alice, Dune);
-            await AskSeasons(Bob, DarkMatter2015, 1);
-
-            var queue = (await Harness.SendAsync(AsAdmin(FakeInteraction.Button(PanelRoutes.AdminQueue)))).LastReply;
-            queue.Content.Should().StartWith(DiscordText.QueueHeader(null, 2));
-            queue.Buttons.Select(b => b.CustomId).Should().Equal("adm-queue:all", "adm-queue:movie", "adm-queue:tv", "adm-queue:music");
-
-            var tv = (await Harness.SendAsync(AsAdmin(FakeInteraction.Button("adm-queue:tv")))).LastReply;
-            tv.Content.Should().StartWith(DiscordText.QueueHeader("TV", 1)).And.Contain("#2 ·");
-
-            var card = (await Harness.SendAsync(AsAdmin(FakeInteraction.SelectMenu(AdminRoutes.Request, "2")))).LastReply;
-            card.Embeds.Single().Title.Should().Be("Dark Matter (2015)");
-        }
-
         // Permissions: the card's custom IDs never carry authority.
         [Test]
         public async Task cards_and_their_buttons_are_admin_only_and_admin_channel_only()
@@ -256,7 +214,6 @@ namespace Requestarr.Core.Test.AdminConsole
             (await Harness.SendAsync(FakeInteraction.SlashCommand("admin user").WithOption("member", Bob).By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel))).LastReply.Content.Should().Be(DiscordText.AdminOnly);
             (await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)))).LastReply.Content.Should().Be(DiscordText.AdminOnly);
             (await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(ChannelOf(Alice)))).LastReply.Content.Should().Be(DiscordText.AdminChannelOnly);
-            (await Harness.SendAsync(FakeInteraction.Autocomplete("admin request", "request", "d").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel))).Responder.Suggestions.Should().BeEmpty();
             UserFor(Bob).Status.Should().Be(UserStatus.Active);
 
             (await Harness.SendAsync(FakeInteraction.Button($"adm-suspend:{Bob}").By(Moderator, "mod").WithRoles(AdminRole).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel))).LastReply.Content.Should().Be(DiscordText.UserSuspendedDone("bob"));

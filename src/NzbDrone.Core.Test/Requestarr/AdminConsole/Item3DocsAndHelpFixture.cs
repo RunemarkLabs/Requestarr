@@ -24,7 +24,7 @@ namespace Requestarr.Core.Test.AdminConsole
         [Test]
         public void admin_help_lists_exactly_the_new_commands()
         {
-            HelpCatalog.AdminTopics.SelectMany(t => t.Commands).Distinct().Should().BeEquivalentTo("admin user", "admin request");
+            HelpCatalog.AdminTopics.SelectMany(t => t.Commands).Distinct().Should().BeEquivalentTo("admin user", "admin requests");
             HelpCatalog.AdminTopics.SelectMany(t => t.Buttons).Should().Contain(PanelButtons.Members);
         }
 
@@ -50,7 +50,7 @@ namespace Requestarr.Core.Test.AdminConsole
             }
 
             table.Should().Contain("`unsuspend`").And.Contain("`deny` / `available` / `cancel`").And.Contain("`/admin mediaserver approve` / `deny`");
-            commands.Should().Contain("### `/admin user member:@someone`").And.Contain("### `/admin request request:{number or title}`");
+            commands.Should().Contain("### `/admin user member:@someone`").And.Contain("### `/admin requests`").And.NotContain("/admin request request");
         }
 
         [Test]
@@ -59,7 +59,7 @@ namespace Requestarr.Core.Test.AdminConsole
             var guide = File.ReadAllText(Item4To6Fixture.RepoFile("docs", "setup-guide.md"));
             var admin = guide.Substring(guide.IndexOf("## 5. Admin setup in Discord"), guide.IndexOf("## 6. ") - guide.IndexOf("## 5. Admin setup in Discord"));
 
-            admin.Should().Contain("**Add or find a member**").And.Contain("### 5.6 The member card").And.Contain("`/admin request`");
+            admin.Should().Contain("**Add or find a member**").And.Contain("### 5.6 The member card").And.Contain("`/admin requests`").And.Contain("### 5.7 When Sonarr or Radarr can't be reached");
             admin.Should().NotContain("/admin user add").And.NotContain("/admin queue").And.NotContain("/admin approve").And.NotContain("/admin mediaserver");
         }
     }

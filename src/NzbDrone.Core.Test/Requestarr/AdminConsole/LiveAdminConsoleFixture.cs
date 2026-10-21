@@ -28,7 +28,7 @@ namespace Requestarr.Core.Test.AdminConsole
 {
     // Live: the real bot in the Discord test server with the dev stack's TEST Radarr. Reads back the
     // registered commands; onboards a member through the admin panel's member picker; changes their
-    // access and limit on the member card; approves their request from /admin request. Clicks are
+    // access and limit on the member card; approves their request from /admin requests. Clicks are
     // simulated through the real handlers (their replies are private, so they're recorded here);
     // the real effects (role, channel, panel, request message) are read back from Discord.
     // Never runs in CI (ManualTest). Needs the stack's Requestarr stopped and a clean server:
@@ -81,6 +81,7 @@ namespace Requestarr.Core.Test.AdminConsole
             {
                 Radarr = new List<BackendInstanceProvisioning> { new() { Name = "Radarr (test)", Url = RadarrUrl, ApiKey = RadarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true } }
             });
+            Mocker.Resolve<IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
             var tmdb = new TmdbSettingsStore();
             tmdb.Set(Environment.GetEnvironmentVariable("TMDB_API_KEY"));
             Mocker.SetConstant<ITmdbSettingsStore>(tmdb);
@@ -109,13 +110,21 @@ namespace Requestarr.Core.Test.AdminConsole
             feed = Mocker.Resolve<RequestFeed>();
             Mocker.SetConstant(feed);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<Requestarr.Core.Admin.IAdminQueue>(new Requestarr.Core.Admin.AdminQueue(new Requestarr.Core.Admin.IAdminQueueSource[]
+            {
+                Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+            }));
+            Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             panels = Mocker.Resolve<PanelService>();
             Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();
             Mocker.SetConstant(users);
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
-            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>(), Mocker.Resolve<MediaServerHandler>(), Mocker.Resolve<PanelHandler>() };
+            var handlers = new IInteractionHandler[] { Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<RequestHandler>(), Mocker.Resolve<ApprovalHandler>(), Mocker.Resolve<SeasonsHandler>(), Mocker.Resolve<MediaServerHandler>(), Mocker.Resolve<PanelHandler>(), Mocker.Resolve<AdminRequestsHandler>() };
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
 
             try
@@ -136,7 +145,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 }
 
                 registered.Select(c => c.Name).Should().BeEquivalentTo("admin", "help", "request");
-                registered.Single(c => c.Name == "admin").Options.Select(o => o.Name).Should().Equal("user", "request", "help");
+                registered.Single(c => c.Name == "admin").Options.Select(o => o.Name).Should().Equal("user", "requests", "help");
 
                 // 2. The admin panel's buttons, read back from the pinned panel.
                 var adminRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
@@ -161,9 +170,9 @@ namespace Requestarr.Core.Test.AdminConsole
                 Log($"[discord] channel #{channel.Name}, role {role?.Name}, pinned panel: \"{(await channel.GetPinnedMessagesAsync()).Single().Content.Replace("\n", " | ")}\"");
 
                 // 4. Access and a limit from the member card.
-                var access = await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.Access}:{target.Id}", "movie:approval")));
+                var access = await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.Access}:{target.Id}:movie", "approval")));
                 Log($"[access] {access.LastReply.Content}");
-                await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.Limit}:{target.Id}", "movie")));
+                await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.More}:{target.Id}", "limit:movie")));
                 var limit = await Send(dispatcher, AsOwner(FakeInteraction.ModalSubmit($"{AdminRoutes.LimitForm}:{target.Id}:movie").WithField(AdminRoutes.LimitField, "5").WithField(AdminRoutes.DaysField, "7")));
                 Log($"[limit] {limit.LastReply.Content}");
                 var refreshed = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", target.Id)));
@@ -172,20 +181,18 @@ namespace Requestarr.Core.Test.AdminConsole
                 var userPanel = (await channel.GetPinnedMessagesAsync()).Single().Content;
                 Log($"[discord] their panel now: \"{userPanel.Replace("\n", " | ")}\"");
 
-                // 5. They request a movie; it's approved from /admin request.
+                // 5. They request a movie; it's approved from /admin requests.
                 var message = await gateway.SendMessageAsync(channel.Id, new InteractionReply { Content = $"🎬 **Movies request** · details (tmdb:{Matrix})" });
                 var requestRun = new RecordingResponder(null, channel.Id, message, false);
                 await dispatcher.DispatchAsync(FakeInteraction.Button($"req-make:movie:{Matrix}").By(target.Id).InGuild(guild.Id).InChannel(channel.Id).OnMessage(message).Build(), requestRun);
                 await gateway.EditMessageAsync(channel.Id, message, requestRun.LastReply);
                 Log($"[request] {requestRun.LastReply.Content.Replace("\n", " | ")}");
 
-                var suggestions = await Send(dispatcher, AsOwner(FakeInteraction.Autocomplete("admin request", "request", "matrix")));
-                Log($"[autocomplete] \"matrix\" -> {string.Join("; ", suggestions.Responder.Suggestions.Select(s => $"{s.Name} = {s.Value}"))}");
-                var id = suggestions.Responder.Suggestions[0].Value;
-                var requestCard = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin request").WithOption("request", id)));
-                Log($"[request card] \"{requestCard.LastReply.Embeds.Single().Title}\" {requestCard.LastReply.Embeds.Single().Description.Replace("\n", " | ")} buttons=[{string.Join("] [", requestCard.LastReply.Buttons.Select(b => b.Label))}]");
-                var approve = await Send(dispatcher, AsOwner(FakeInteraction.Button($"req-approve:{id}")));
-                Log($"[approve] card now: \"{approve.Responder.Replies.First().Embeds.Single().Description.Replace("\n", " | ")}\"; private reply: {approve.LastReply.Content}");
+                var id = "1";
+                var requestCard = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin requests")));
+                Log($"[walk] {requestCard.LastReply.Content.Replace("\n", " | ")} \"{requestCard.LastReply.Embeds.Single().Title}\" buttons=[{string.Join("] [", requestCard.LastReply.Buttons.Select(b => b.Label))}]");
+                var approve = await Send(dispatcher, AsOwner(FakeInteraction.Button(requestCard.LastReply.Buttons.Single(b => b.Label == DiscordText.ApproveLabel).CustomId)));
+                Log($"[approve] the walk now: {approve.LastReply.Content.Replace("\n", " | ")}");
 
                 var request = Mocker.Resolve<IRequestRepository>().Get(int.Parse(id));
                 var reposted = await channel.GetMessageAsync(ulong.Parse(request.MessageId));
@@ -262,18 +269,13 @@ namespace Requestarr.Core.Test.AdminConsole
                 Log($"[plex form] {relinked.LastReply.Content}; linked account now: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username}");
                 Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username.Should().Be("live_test_plex2");
 
-                // 10. Old /admin queue [type] [user]: the panel's Pending queue, its type buttons, and Their requests.
+                // 10. Old /admin queue [user]: the panel's Pending queue (now the walk) and the card's "Their requests".
                 await RequestInRealMessage(dispatcher, gateway, guild.Id, channel.Id, target.Id, 438631);
                 var queue = await Send(dispatcher, AsOwner(FakeInteraction.Button(PanelRoutes.AdminQueue)));
-                Log($"[queue] {queue.LastReply.Content.Replace("\n", " | ")} filters=[{string.Join("] [", queue.LastReply.Buttons.Select(b => b.Label))}] menu={queue.LastReply.SelectMenu?.Options.Count ?? 0} option(s)");
-                var movies = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Queue}:movie")));
-                Log($"[queue] Movies: {movies.LastReply.Content.Replace("\n", " | ")}");
-                var tv = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Queue}:tv")));
-                Log($"[queue] TV: {tv.LastReply.Content.Replace("\n", " | ")}");
-                var theirs = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AdminRoutes.Requests}:{target.Id}")));
+                Log($"[queue] {queue.LastReply.Content.Replace("\n", " | ")} buttons=[{string.Join("] [", queue.LastReply.Buttons.Select(b => b.Label))}]");
+                var theirs = await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.More}:{target.Id}", "requests")));
                 Log($"[queue] Their requests: {theirs.LastReply.Content.Replace("\n", " | ")}");
-                movies.LastReply.Content.Should().Contain("Dune (2021)");
-                tv.LastReply.Content.Should().Be(DiscordText.QueueEmpty);
+                queue.LastReply.Content.Should().Contain("Dune (2021)");
                 theirs.LastReply.SelectMenu.Options.Should().HaveCount(requests.All().Count());
 
                 // 11. Old /admin user suspend / unsuspend: the card's buttons; the real channel's lock read back.

@@ -90,6 +90,15 @@ namespace Requestarr.Core.Requests
         // Whether the request is one the caller can add seasons to.
         bool CanAddSeasons(Request request, RequestarrUser user, bool asAdmin);
 
+        // A request in trouble: ask its instance to search again (download failed or stuck), or try
+        // adding it again (it couldn't be added).
+        Task<ServiceResult> SearchAgainAsync(int requestId, Actor admin);
+        Task<ServiceResult> RetrySendAsync(int requestId, Actor admin);
+
+        // Everyone on a request (the requester and followers): their access for its type, their limit
+        // used, and how many of their requests wait for approval. One line each.
+        IReadOnlyList<string> PeopleOn(Request request);
+
         // Remembers the message a request was made in, so it can be edited after a decision.
         void AttachMessage(int requestId, ulong channelId, ulong messageId);
 
@@ -130,6 +139,7 @@ namespace Requestarr.Core.Requests
         private readonly IAnimeService _anime;
         private readonly IUserIdentityRepository _identities;
         private readonly IRequestFeed _feed;
+        private readonly NzbDrone.Core.Messaging.Events.IEventAggregator _events;
         private readonly Logger _logger;
 
         public RequestService(IRequestRepository requests,
@@ -146,6 +156,7 @@ namespace Requestarr.Core.Requests
                               IAnimeService anime,
                               IUserIdentityRepository identities,
                               IRequestFeed feed,
+                              NzbDrone.Core.Messaging.Events.IEventAggregator events,
                               Logger logger)
         {
             _requests = requests;
@@ -162,6 +173,7 @@ namespace Requestarr.Core.Requests
             _anime = anime;
             _identities = identities;
             _feed = feed;
+            _events = events;
             _logger = logger;
         }
 
@@ -198,7 +210,7 @@ namespace Requestarr.Core.Requests
             catch (BackendException ex)
             {
                 _logger.Warn(ex, "Lookup on {0} failed", instance.Name);
-                return LookupOutcome<List<MediaLookupResult>>.Fail(DiscordText.BackendUnavailable(instance.Name));
+                return LookupOutcome<List<MediaLookupResult>>.Fail(DiscordText.RequestsPaused(type, instance.Name));
             }
         }
 
@@ -220,7 +232,7 @@ namespace Requestarr.Core.Requests
             catch (BackendException ex)
             {
                 _logger.Warn(ex, "Lookup on {0} failed", instance.Name);
-                return LookupOutcome<TitleState>.Fail(DiscordText.BackendUnavailable(instance.Name));
+                return LookupOutcome<TitleState>.Fail(DiscordText.RequestsPaused(type, instance.Name));
             }
 
             if (item == null)
@@ -406,6 +418,7 @@ namespace Requestarr.Core.Requests
 
             await PostApprovalCard(request, state.Instance, item, caller.Name);
             await _feed.PostAsync(request, item);
+            _events.PublishEvent(new AdminQueueChangedEvent());
 
             return new RequestResult(true, DiscordText.RequestPending(request.Label, request.Id), request, RequestOutcome.Pending);
         }
@@ -506,7 +519,7 @@ namespace Requestarr.Core.Requests
             }
 
             var instance = _backends.Find(request.BackendId ?? 0);
-            var wasSent = request.Status == RequestStatus.Approved;
+            var wasSent = request.Status == RequestStatus.Approved && request.ExternalItemId.HasValue;
 
             if (wasSent)
             {
@@ -552,7 +565,7 @@ namespace Requestarr.Core.Requests
                 return ServiceResult.Fail(DiscordText.RequestNotFound);
             }
 
-            if (request.Status != RequestStatus.Pending)
+            if (request.Status != RequestStatus.Pending && !Admin.TroubleSource.InTrouble(request))
             {
                 return ServiceResult.Fail(DiscordText.NotPending(request.Id, request.Status));
             }
@@ -581,6 +594,7 @@ namespace Requestarr.Core.Requests
         // downloading or there yet (later, removal is the way: task 4).
         public static bool AdminCanCancel(Request request) =>
             request.Status == RequestStatus.Pending ||
+            Admin.TroubleSource.InTrouble(request) ||
             (request.Status == RequestStatus.Approved && request.Progress == DownloadProgress.None && !(request.AvailableSeasons?.Any() ?? false));
 
         public async Task<bool> ApplyProgressAsync(Request request, ProgressSnapshot snapshot)
@@ -694,6 +708,96 @@ namespace Requestarr.Core.Requests
             await RefreshOrNotify(request, null, DiscordText.SeasonsAddedNotice(request.Label, request.Id, added), skipUserId: user?.Id);
 
             return ServiceResult.Ok(DiscordText.SeasonsAdded(request, added, request.Status == RequestStatus.Pending));
+        }
+
+        public async Task<ServiceResult> SearchAgainAsync(int requestId, Actor admin)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return ServiceResult.Fail(DiscordText.RequestNotFound);
+            }
+
+            if (request.Status != RequestStatus.Approved || !request.ExternalItemId.HasValue)
+            {
+                return ServiceResult.Fail(DiscordText.NothingToSearch(request));
+            }
+
+            var instance = _backends.Find(request.BackendId ?? 0);
+
+            try
+            {
+                await _backends.ApiFor(instance).SearchAsync(instance.Settings, request.ExternalItemId.Value);
+            }
+            catch (Exception ex) when (ex is BackendException || ex is NullReferenceException)
+            {
+                _logger.Warn(ex, "Request {0}: search on {1} failed", request.Id, instance?.Name);
+                return ServiceResult.Fail(DiscordText.RequestsPaused(request.ContentType, instance?.Name ?? DiscordText.Label(request.ContentType)));
+            }
+
+            _audit.Record(admin, "request.search", "request", request.Id.ToString(), instance.Name);
+            return ServiceResult.Ok(DiscordText.SearchingAgain(request, instance.Name));
+        }
+
+        public async Task<ServiceResult> RetrySendAsync(int requestId, Actor admin)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null)
+            {
+                return ServiceResult.Fail(DiscordText.RequestNotFound);
+            }
+
+            if (request.Status != RequestStatus.Failed)
+            {
+                return ServiceResult.Fail(DiscordText.NothingToRetry(request));
+            }
+
+            var instance = _backends.Find(request.BackendId ?? 0);
+
+            if (instance == null || !instance.Enable)
+            {
+                return ServiceResult.Fail(DiscordText.NoBackend(request.ContentType));
+            }
+
+            _audit.Record(admin, "request.retry", "request", request.Id.ToString());
+            request.DecisionReason = null;
+            var (sent, item) = await SendAsync(request, instance, null, admin);
+
+            await RefreshOrNotify(request, item, sent
+                ? DiscordText.RequestApprovedNotice(request.Label, request.Id, instance.Name)
+                : DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason));
+
+            return sent || request.Status == RequestStatus.Available
+                ? ServiceResult.Ok(DiscordText.RequestSent(request.Label, request.Id, instance.Name))
+                : ServiceResult.Fail(DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason));
+        }
+
+        public IReadOnlyList<string> PeopleOn(Request request)
+        {
+            var people = new[] { (UserId: request.OwnerUserId, Role: DiscordText.Requester) }
+                .Concat(_subscribers.ForRequest(request.Id).Select(s => (s.UserId, Role: DiscordText.Follower)));
+            var lines = new List<string>();
+
+            foreach (var (userId, role) in people)
+            {
+                var user = _users.Find(userId);
+
+                if (user == null)
+                {
+                    continue;
+                }
+
+                var access = AccessFor(user, request.ContentType);
+                var window = access.QuotaWindow ?? TimeSpan.FromDays(7);
+                var used = _requests.OwnedBy(user.Id).Count(r => r.ContentType == request.ContentType && r.IsActive && r.Requested > Clock() - window);
+                var pending = _requests.OwnedBy(user.Id).Count(r => r.Status == RequestStatus.Pending);
+
+                lines.Add(DiscordText.PersonLine(user.DisplayName, role, request.ContentType, access.State, used, access.QuotaLimit, (int)window.TotalDays, pending));
+            }
+
+            return lines;
         }
 
         // A follower joins: no quota cost; the admin feed shows who follows.
@@ -1017,6 +1121,7 @@ namespace Requestarr.Core.Requests
 
             await RefreshFollowers(request, item, instance, note, skipUserId, notice);
             await _feed.PostAsync(request, item);
+            _events.PublishEvent(new AdminQueueChangedEvent());
 
             if (ulong.TryParse(request.AdminMessageId, out var card) && ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
             {
@@ -1180,6 +1285,12 @@ namespace Requestarr.Core.Requests
             if (type == ContentType.Music)
             {
                 return (null, DiscordText.MusicNotYet);
+            }
+
+            // A type with no instance that has ever connected isn't shown to users, so it can't be requested.
+            if (!caller.AsAdmin && !_backends.EverConnected(type))
+            {
+                return (null, DiscordText.TypeNotAvailable(type));
             }
 
             var instance = caller.AsAdmin ? _backends.Default(type) : _backends.ForUser(AccessFor(caller.User, type), type);

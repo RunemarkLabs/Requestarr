@@ -246,7 +246,7 @@ List as many instances per type as you need. Common setups:
 
 Users never pick an instance. By default every user's movie requests go to the default Radarr, and TV requests to the default Sonarr.
 
-To send one user's requests elsewhere, open their card (`/admin user`, or **Users** on the admin panel) and pick the instance in **Send requests to…**, for example "Movies: Radarr 4K". The menu only appears when a type has more than one instance.
+To send one user's requests elsewhere, open their card (`/admin user`, or **Users** on the admin panel) and pick the instance in its **Limits, instance, their requests…** menu, for example "Movies: Radarr 4K". The menu only appears when a type has more than one instance.
 
 The assignment is per user and per content type, and the card shows it.
 
@@ -454,11 +454,11 @@ Requestarr checks admin status itself on every command and button click. What Di
 
 Requestarr registers exactly three commands:
 
-- **`/request`** is visible to everyone. Its type list is filled in for each person from their own access, so someone without TV access never sees TV.
+- **`/request`** is visible to everyone. Its type list is filled in for each person from their own access, so someone without TV access never sees TV. A type also stays hidden until a Sonarr, Radarr or Lidarr for it has connected at least once (5.7).
 - **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
-- **`/admin`** has three parts: `/admin user` opens a member's card, `/admin request` opens a request's card, and `/admin help` opens admin help. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
+- **`/admin`** has three parts: `/admin user` opens a member's card, `/admin requests` goes through everything waiting on you one item at a time, and `/admin help` opens admin help. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
-Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.7).
+Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.8).
 
 User help and admin help are separate. Admin help has its own topics, plus a **What users see** branch so you can walk someone through their help. User help never shows admin topics, even to an admin. Both are built from the same definitions as the commands and buttons, so they can't describe something that no longer exists.
 
@@ -493,14 +493,25 @@ Removing titles that were already downloaded comes with removal votes, in a late
 
 The admin channel has a pinned panel with four buttons. Everything they open is visible only to you:
 
-- **Pending queue:** what's waiting for approval, with buttons to show only Movies, TV or Music, and a menu that opens any of them as a request card.
+- **Pending queue (n):** the same as `/admin requests`, below. The number is how many items are waiting on you, and it updates by itself.
 - **Users:** everyone with their status, channel and access, and a menu that opens their member card.
 - **Add or find a member:** Discord's member picker. Pick anyone in the server to open their member card, and add them from there.
 - **Help:** admin help (the same as `/admin help`).
 
 Requestarr posts the panel on first start and re-posts it if it is deleted.
 
-**Request cards.** `/admin request` opens one request by its number (`12` or `#12`) or part of its title, which autocompletes from existing requests; several matches give a list to pick from. The card is the same as its feed card, with the same buttons, and it changes in place when you act on it. **Deny** asks for a reason and **Cancel request** for an optional one; both are shown to the user.
+**Everything waiting on you: `/admin requests`.** It takes no options. It shows one private card at a time, oldest first, with a counter ("3 of 7"), and goes through:
+
+| Item | The card shows | Its buttons |
+|---|---|---|
+| A request waiting for approval | the full request card, how long it has waited, and for the requester and anyone following: their access for that type, how much of their limit they've used, and how many requests they have waiting | **Approve**, **Deny** (asks for a reason), **Already available**, **Cancel** (asks for an optional reason) |
+| An approved request that failed or is stuck | the same, plus what went wrong in plain words and what you can do | **Try adding again** if it couldn't be added to Sonarr or Radarr, otherwise **Search again**; then **Already available** and **Cancel** |
+| A Plex link someone asked for | who asked, their Plex username, and their access | **Approve Plex link**, **Deny Plex link** |
+| A Sonarr or Radarr that can't be reached (5.7) | since when, and that requests for it are paused | **Check now** |
+
+Every card also has **Skip**, and **Back** after the first. Acting on an item moves straight to the next one and says what happened at the top. If an item was already handled somewhere else in the meantime (on its approval card, for example), it's skipped and you're told so; nothing is done twice. At the end it says "Nothing left waiting on you", or, if you skipped some, how many still wait, with **Start over**.
+
+**Search again** asks Sonarr or Radarr to search for the title again; the stuck download stays in your download client for you to remove there. The item stays in the list until the download moves on.
 
 `/admin` and the admin panel work only in the admin channel (the feed's buttons work in the feed). Users' commands and panel buttons work only in their own channel.
 
@@ -532,7 +543,7 @@ Discord allows 250 roles per server, and every user needs one. Adding stops a fe
 
 ### 5.6 The member card: access, limits and more
 
-`/admin user` (or **Users** or **Add or find a member** on the panel) opens a member's card, visible only to you. It shows their status, channel, access, limits, instance and media server account, and only the controls that apply to them now. Every change updates the card at once, and the result comes as a private note.
+`/admin user` (or **Users** or **Add or find a member** on the panel) opens a member's card, visible only to you. It shows their status, channel, access, limits, instance and media server account, and only the controls that apply to them now. Every change updates the card in place.
 
 There are three access levels for each content type:
 
@@ -544,24 +555,37 @@ There are three access levels for each content type:
 
 | On the card | What it does |
 |---|---|
-| **Change access…** | Sets one type's level, for example "Movies: Auto-approve". The current level of each type is marked. |
-| **Set a limit…** | Pick a type, then enter how many requests and per how many days (7 if left empty). 0 removes the limit. Following someone else's request never counts. |
-| **Send requests to…** | Only when a type has several instances: which Sonarr or Radarr this person's requests go to (4.4). |
+| **Movies access**, **TV access**, **Music access** | One menu per type, set to the current level. Pick another level and the card changes; nothing else is posted. Every type is shown to you, even one with nothing connected yet; granting such a type tells you privately that the member won't see it until an instance for it connects (5.7). |
+| **Limits, instance, their requests…** | One menu for the rest: a type's limit (enter how many requests and per how many days, 7 if left empty; 0 removes the limit; following someone else's request never counts), which instance their requests go to (only when a type has several Sonarr or Radarr instances, 4.4), and **Their requests**. |
 | **Link Plex…** / **Change Plex link…** | Links their Plex account directly. |
 | **Approve Plex link** / **Deny Plex link** | Only while they've asked for Plex access themselves. |
 | **Suspend** / **Unsuspend** | Suspend locks their channel: they can read it but can't post or request. Unsuspend unlocks it and gives their role back if they rejoined. |
 | **Remove** | Asks first. Archives their channel (renamed `archived-…`, visible only to admins), deletes their role, and keeps their request history. Their card then offers **Add to Requestarr** to bring them back. |
-| **Their requests** | Their requests and the ones they follow, opening as request cards. |
+| **Their requests** (in the menu above) | Their requests and the ones they follow, opening as request cards with the same buttons as their feed cards. |
 
 Comics and books are not offered yet.
 
-### 5.7 Where everything is
+### 5.7 When Sonarr or Radarr can't be reached
+
+Requestarr checks every Sonarr and Radarr once a minute. Each has one of three states:
+
+| State | What users see |
+|---|---|
+| **Never connected** | Nothing. The type stays hidden from everyone, even members with access, until an instance for it answers for the first time. Admins can still grant it. |
+| **Connected** | The type, if they have access. |
+| **Lost** (it connected before, and stops answering) | The type as before. New requests for it say requests are paused right now. Nobody's access changes. |
+
+When an instance has been unreachable for 3 minutes, one alert is posted in `#requestarr-admin`, and the instance is an item in `/admin requests` until it answers again. When it's back, one more message says so and for how long it was down. A blip shorter than 3 minutes posts nothing.
+
+Music stays hidden until Lidarr support arrives in a later version.
+
+### 5.8 Where everything is
 
 For every command and button, see the [command reference](commands.md).
 
 Users can also ask for media server access themselves with the **Link Plex** button on their panel. An Approve / Deny card then appears in the admin channel, and their member card shows the same choice. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
 
-### 5.8 When someone leaves the server
+### 5.9 When someone leaves the server
 
 If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, press **Unsuspend** on their card (`/admin user`): Requestarr gives their role back and unlocks the channel. The admin channel gets a note when someone leaves.
 
@@ -585,8 +609,8 @@ _Coming in Phase 2._
 - **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
 - **Users don't see /admin:** that's intended; it only shows to members with Manage Server (see 5.3).
 - **The panels are posted but not pinned, and System → Status warns about Pin Messages:** the bot's role lacks **Pin Messages**. Everything else keeps working. Turn it on in Server Settings → Roles (see section 2, step 5) and restart Requestarr.
-- **The /request type list is empty:** that user has every type set to off. Change it on their card (`/admin user`, **Change access…**).
-- **Old admin commands such as `/admin user add` or `/admin approve` still show:** Discord caches commands; press Ctrl+R in the Discord app. They were replaced by `/admin user`, `/admin request` and the panel in this version.
+- **The /request type list is empty, or a type is missing:** that user has the type set to off (change it on their card, `/admin user`), or no instance for it has connected yet (5.7).
+- **Old admin commands such as `/admin user add` or `/admin approve` still show:** Discord caches commands; press Ctrl+R in the Discord app. They were replaced by `/admin user`, `/admin requests` and the panel.
 - **Discord still shows old commands after an update:** press Ctrl+R in the Discord app, or fully quit it from the system tray and reopen it.
 - **The bot doesn't come online:** check **System → Status** for the Discord message. Common causes are a wrong token, the bot not being invited to the server in `guildId`, or a missing application ID.
 - **"Provisioning file could not be applied" under System → Status:** the message names the problem, for example an environment variable that is not set or an invalid value. Fix `provisioning.yml` or `secrets.env`, then `docker compose restart requestarr`.

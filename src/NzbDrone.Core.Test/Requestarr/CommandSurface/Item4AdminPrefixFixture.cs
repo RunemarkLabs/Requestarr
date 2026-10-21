@@ -37,15 +37,14 @@ namespace Requestarr.Core.Test.CommandSurface
             var admin = DiscordCommandDefinitions.Build().Cast<SlashCommandProperties>().Single(c => c.Name.Value == "admin");
 
             admin.Options.Value.Should().OnlyContain(o => o.Type == ApplicationCommandOptionType.SubCommand);
-            admin.Options.Value.Select(o => o.Name).Should().Equal("user", "request", "help");
+            admin.Options.Value.Select(o => o.Name).Should().Equal("user", "requests", "help");
 
             var user = admin.Options.Value.Single(o => o.Name == "user").Options.Single();
             (user.Name, user.Type, user.IsRequired).Should().Be(("member", ApplicationCommandOptionType.User, true));
 
-            var request = admin.Options.Value.Single(o => o.Name == "request").Options.Single();
-            (request.Name, request.Type, request.IsAutocomplete, request.IsRequired).Should().Be(("request", ApplicationCommandOptionType.String, true, true));
+            admin.Options.Value.Single(o => o.Name == "requests").Options.Should().BeNullOrEmpty("it walks everything; no number or title to know");
             admin.Options.Value.Single(o => o.Name == "help").Options.Should().BeNullOrEmpty();
-            DiscordCommandDefinitions.Leaves().Select(l => l.Path).Should().Equal("request", "help", "admin user", "admin request", "admin help");
+            DiscordCommandDefinitions.Leaves().Select(l => l.Path).Should().Equal("request", "help", "admin user", "admin requests", "admin help");
         }
 
         [Test]
@@ -55,7 +54,7 @@ namespace Requestarr.Core.Test.CommandSurface
             await RequestMovie(Bob, DuneTwo);
             await Harness.SendAsync(PlexForm(Alice, "alice_plex"));
 
-            (await Admin("queue")).LastReply.Content.Should().Contain("#1 ·").And.Contain("#2 ·");
+            (await Admin("queue")).LastReply.Content.Should().StartWith(DiscordText.WalkHeader(1, 3));
             (await Harness.SendAsync(AdminSlash("approve").WithOption("id", 1L))).LastReply.Content.Should().StartWith("Approved request #1");
             (await Harness.SendAsync(AdminSlash("deny").WithOption("id", 2L).WithOption("reason", "no"))).LastReply.Content.Should().Be(DiscordText.AdminDenied(RequestStore.Get(2)));
             (await Harness.SendAsync(AdminSlash("mediaserver approve").WithOption("id", 1L))).LastReply.Content.Should().Contain("approved");
@@ -83,6 +82,7 @@ namespace Requestarr.Core.Test.CommandSurface
         [TestCase("admin cancel")]
         [TestCase("admin mediaserver approve")]
         [TestCase("admin mediaserver deny")]
+        [TestCase("admin request")]
         public async Task old_top_level_commands_are_no_longer_handled(string old)
         {
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand(old).By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
