@@ -111,6 +111,7 @@ Opens help that only you can see. It starts with a short overview, then you pick
 - my requests and cancelling
 - limits
 - linking Plex
+- announcements
 
 You only see topics you can use: no seasons or anime topic without TV access, no Plex topic once you're linked.
 
@@ -153,6 +154,7 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 - members: adding and managing
 - approvals and the queue
 - the admin feed
+- announcements and outages
 - downloads, webhooks and polling
 - limits
 - anime, sub/dub and priority: the Sonarr tags and release profiles, `anime.priority`, and separate sub and dub instances
@@ -180,6 +182,13 @@ Requests that need approval post a card in `#requestarr-admin` with **Approve**,
 `#requestarr-feed` has one small card per request, moved to the bottom on every change: new requests, someone following, approved, denied, cancelled, already available, downloading, stuck or failed, available. Its buttons are the same as the request card's. Your reply comes privately. Account events stay in `#requestarr-admin`.
 
 Media server access requests post a card here with **Approve** and **Deny**; the member's card offers the same.
+
+### Announcements
+
+`#requestarr-announcements` is read-only for every member (through the shared **Requestarr Members** role) and admins post in it directly.
+
+- **Announce to users** appears on a Sonarr or Radarr down alert once it has been down for 30 minutes. It posts a plain notice ("TV requests are paused…") and the recovery is then announced automatically. Never pressed: users never hear about it.
+- On a new version, the full list of changes goes to `#requestarr-admin` and the changes for users go to `#requestarr-announcements`, once per version.
 
 ### Where the old admin commands went
 

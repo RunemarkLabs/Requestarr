@@ -50,8 +50,8 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task add_should_still_work_just_below_the_role_limit()
         {
-            // The scenario already has the admin role.
-            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 3);
+            // The scenario already has the admin role and the shared members role (one role for everyone).
+            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 4);
 
             (await AddUser(Alice)).LastReply.Content.Should().StartWith("Added alice.");
         }

@@ -458,7 +458,7 @@ Requestarr registers exactly three commands:
 - **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
 - **`/admin`** has three parts: `/admin user` opens a member's card, `/admin requests` goes through everything waiting on you one item at a time, and `/admin help` opens admin help. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
-Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.8).
+Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.9).
 
 User help and admin help are separate. Admin help has its own topics, plus a **What users see** branch so you can walk someone through their help. User help never shows admin topics, even to an admin. Both are built from the same definitions as the commands and buttons, so they can't describe something that no longer exists.
 
@@ -473,10 +473,11 @@ This is display only. Requestarr still refuses `/admin` from non-admins and outs
 
 ### 5.4 The admin channel and request channels
 
-On first start, Requestarr creates three things, or reuses them if they already exist:
+On first start, Requestarr creates these, or reuses them if they already exist:
 
 - **`#requestarr-admin`:** run `/admin` here, and use the pinned admin panel. Approval cards for requests and media server access also appear here, and so do account events: new users, access changes, suspensions (including a member leaving the server) and Plex link requests. Only the Requestarr Admin role, the owner, and the bot can see it. Admins can also make their own requests here; those go straight through.
 - **`#requestarr-feed`:** the admin feed, next to the admin channel and just as private. It has one small card per request: thumbnail, title, type, who asked, the instance, the state and, for TV, the seasons and who follows it. Every change deletes the card and posts a fresh one at the bottom, so the newest activity is always last. If you delete the channel, Requestarr recreates it on the next start. The first time a feed channel exists, it's filled with cards for requests that are still waiting or in progress, not finished ones.
+- **`#requestarr-announcements`** and the **Requestarr Members** role: news for every member, read-only for them (5.8).
 - **A "Requestarr Requests" category:** each user's private request channel goes here. When a category reaches Discord's limit of 50 channels, Requestarr starts "Requestarr Requests 2", and so on.
 
 You can rename or move the channels and category. Requestarr tracks them by ID.
@@ -539,7 +540,7 @@ By default, a new user gets:
 
 The card then shows their access, ready to change (5.6).
 
-Discord allows 250 roles per server, and every user needs one. Adding stops a few roles short of that limit and says so.
+Discord allows 250 roles per server, and every user needs one. Requestarr also uses two shared roles: Requestarr Admin and Requestarr Members (one role for all members, not one each). Adding stops a few roles short of that limit and says so.
 
 ### 5.6 The member card: access, limits and more
 
@@ -577,15 +578,33 @@ Requestarr checks every Sonarr and Radarr once a minute. Each has one of three s
 
 When an instance has been unreachable for 3 minutes, one alert is posted in `#requestarr-admin`, and the instance is an item in `/admin requests` until it answers again. When it's back, one more message says so and for how long it was down. A blip shorter than 3 minutes posts nothing.
 
+If it's still down after 30 minutes, the alert gets an **Announce to users** button. Users are told only if you press it (5.8).
+
 Music stays hidden until Lidarr support arrives in a later version.
 
-### 5.8 Where everything is
+### 5.8 The announcements channel
+
+`#requestarr-announcements` is for every member. Members can read it but can't post or start threads in it; admins (and the owner) can type their own announcements there directly, and the bot posts there. Everyone else in the server doesn't see it.
+
+Members see it through one shared role, **Requestarr Members**. They get it when they're added or unsuspended and lose it when they're suspended or removed, the same way as their request channel. On every start, Requestarr makes sure every active member has the role and nobody else does, so existing members are added the first time this version starts. If the channel is deleted, it's recreated on the next start; if its permissions were changed, members are made read-only again.
+
+What Requestarr posts there:
+
+| When | In `#requestarr-announcements` | In `#requestarr-admin` |
+|---|---|---|
+| A Sonarr or Radarr is still down after 30 minutes and you press **Announce to users** on its alert | A plain notice, for example "TV requests are paused" and that the admin knows. The button then goes away. | The alert says who announced it. |
+| That outage ends | "TV requests work again", automatically, only if it was announced. An outage you never announced is never mentioned to users. | The usual "is back" message. |
+| Requestarr starts on a new version | The changes for users, in plain words. Nothing if a version has none. | The full list of changes. |
+
+Each version is announced once, even across restarts. The first time a server starts with announcements, only the current version is posted. The changes come from the project's changelog, written with every change (see [development](development.md#changelog)).
+
+### 5.9 Where everything is
 
 For every command and button, see the [command reference](commands.md).
 
 Users can also ask for media server access themselves with the **Link Plex** button on their panel. An Approve / Deny card then appears in the admin channel, and their member card shows the same choice. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
 
-### 5.9 When someone leaves the server
+### 5.10 When someone leaves the server
 
 If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, press **Unsuspend** on their card (`/admin user`): Requestarr gives their role back and unlocks the channel. The admin channel gets a note when someone leaves.
 

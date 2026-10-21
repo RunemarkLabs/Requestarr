@@ -230,6 +230,9 @@ namespace Requestarr.Core.Discord.Gateway
                 await _panels.Value.EnsureAllAsync();
                 await _feed.Value.SeedAsync();
 
+                // Members role sync and what's new on upgrade (AnnouncementService).
+                _eventAggregator.PublishEvent(new Announcements.DiscordReadyEvent());
+
                 _logger.Info("Discord bot ready in server '{0}'", guild.Name);
                 _ready.TrySetResult();
             }

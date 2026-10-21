@@ -38,6 +38,7 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 | Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
 | Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
 | Docker image | full `docker/Dockerfile` build (not pushed) |
+| Changelog | pull requests only: `CHANGELOG.md` changed and its top version is higher than the base branch's (see [Changelog](#changelog)) |
 
 Not run in CI:
 
@@ -45,6 +46,32 @@ Not run in CI:
 - `Requestarr.Automation.Test`: needs Selenium and a browser against a running app.
 - `Requestarr.Benchmark.Test`: performance measurements, not pass or fail.
 - Tests tagged `ManualTest`: these call live third-party services.
+
+## Changelog
+
+`CHANGELOG.md` at the repo root records every change, and Requestarr announces it: when it starts on a new version, the whole entry goes to the admin channel and the **For users** lines go to the members' announcements channel, word for word. So every pull request does this:
+
+1. **Bump the version** in `src/Directory.Build.props` (`<AssemblyVersion>x.y.z.*</AssemblyVersion>`): the patch number for fixes and internal work, the minor number for new things people can do. Only `x.y.z` counts; the last part is the build number.
+2. **Add a `## x.y.z` section at the top of `CHANGELOG.md`** with the lines that apply:
+
+   ```markdown
+   ## 0.1.1
+
+   ### For users
+   - You can now cancel a request after it was approved, until it starts downloading.
+
+   ### For admins
+   - The member card shows when someone last made a request.
+
+   ### Internal
+   - Faster tests for the request flow.
+   ```
+
+   - **For users**: what members can now do or will notice, in plain words a non-technical person understands. No product names of the servers behind Requestarr, no settings, no "fixed a bug in…". Leave the section out if nothing changes for them; then nothing is posted to users.
+   - **For admins**: anything an admin sees or sets up.
+   - **Internal**: everything else (tests, build, refactoring). Admins see it; users never do.
+
+The checks: the `Changelog` job in CI fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than `main`'s, and a unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
 
 ## Docker stack
 

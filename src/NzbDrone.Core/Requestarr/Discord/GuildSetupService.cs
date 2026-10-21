@@ -15,10 +15,15 @@ namespace Requestarr.Core.Discord
 
         // The resolved admin role (provisioned ID, existing role by name, or the one Requestarr created).
         ulong? AdminRoleId { get; }
+
+        // The shared role every onboarded member holds; it can read the announcements channel.
+        ulong? MembersRoleId { get; }
+        ulong? AnnouncementsChannelId { get; }
     }
 
-    // Makes sure the admin channel, the admin feed channel and a request-channel category exist. Existing ones are
-    // reused (by stored ID, provisioned ID, then name) and only missing ones are created.
+    // Makes sure the admin channel, the admin feed channel, the members role, the announcements channel and a
+    // request-channel category exist. Existing ones are reused (by stored ID, provisioned ID, then name) and only
+    // missing ones are created.
     public class GuildSetupService : IGuildSetupService
     {
         private readonly IDiscordGuildGateway _gateway;
@@ -37,6 +42,10 @@ namespace Requestarr.Core.Discord
         }
 
         public ulong? AdminRoleId => ulong.TryParse(GetConfig()?.AdminRoleId, out var id) ? id : _settings.Current.AdminRoleId;
+
+        public ulong? MembersRoleId => Parse(GetConfig()?.MembersRoleId);
+
+        public ulong? AnnouncementsChannelId => Parse(GetConfig()?.AnnouncementsChannelId);
 
         public DiscordGuildConfig GetConfig()
         {
@@ -85,6 +94,26 @@ namespace Requestarr.Core.Discord
                 config.FeedChannelId = feedChannel.ToString();
                 config.FeedSeeded = false;
             }
+
+            // One shared role for every member (it costs one of the server's 250 roles, not one each) reads the
+            // announcements channel; only admins and the bot post there.
+            var membersRole = await EnsureMembersRoleAsync(config);
+            config.MembersRoleId = membersRole.ToString();
+            var announcementsLayout = ChannelLayout.Announcements(_gateway.GuildId, _gateway.BotUserId, adminRoleId, membersRole);
+            var announcements = await ExistingOrNull(Parse(config.AnnouncementsChannelId)) ?? await _gateway.FindTextChannelAsync(ChannelLayout.AnnouncementsChannelName);
+
+            if (announcements == null)
+            {
+                announcements = await _gateway.CreateTextChannelAsync(ChannelLayout.AnnouncementsChannelName, null, DiscordText.AnnouncementsChannelTopic, announcementsLayout);
+                _logger.Info("Created Discord announcements channel {0}", announcements);
+                _audit.Record(Actor.System, "discord.announcements-channel.create", "channel", announcements.ToString());
+            }
+            else
+            {
+                await EnsureOverwrites(announcements.Value, announcementsLayout.Where(o => o.TargetId != _gateway.GuildId && o.TargetId != _gateway.BotUserId));
+            }
+
+            config.AnnouncementsChannelId = announcements.ToString();
 
             var categories = new List<string>();
 
@@ -180,6 +209,43 @@ namespace Requestarr.Core.Discord
             _audit.Record(Actor.System, "discord.admin-role.create", "role", created.ToString(), name);
 
             return created;
+        }
+
+        private async Task<ulong> EnsureMembersRoleAsync(DiscordGuildConfig config)
+        {
+            if (ulong.TryParse(config.MembersRoleId, out var stored) && await _gateway.RoleExistsAsync(stored))
+            {
+                return stored;
+            }
+
+            var existing = await _gateway.FindRoleAsync(ChannelLayout.MembersRoleName);
+
+            if (existing.HasValue)
+            {
+                return existing.Value;
+            }
+
+            var created = await _gateway.CreateRoleAsync(ChannelLayout.MembersRoleName);
+            _logger.Info("Created Discord members role '{0}' ({1})", ChannelLayout.MembersRoleName, created);
+            _audit.Record(Actor.System, "discord.members-role.create", "role", created.ToString(), ChannelLayout.MembersRoleName);
+
+            return created;
+        }
+
+        // Puts back the given overwrites (by target) on an existing channel, keeping any others.
+        private async Task EnsureOverwrites(ulong channelId, IEnumerable<PermissionOverwrite> wanted)
+        {
+            var overwrites = (await _gateway.GetChannelOverwritesAsync(channelId)).ToList();
+            var missing = wanted.Where(w => !overwrites.Contains(w)).ToList();
+
+            if (missing.Count == 0)
+            {
+                return;
+            }
+
+            overwrites.RemoveAll(o => missing.Any(m => m.TargetId == o.TargetId));
+            overwrites.AddRange(missing);
+            await _gateway.SetChannelOverwritesAsync(channelId, overwrites);
         }
 
         // Adds the admin role to an admin-only channel or category that lacks it (keeps everything else).

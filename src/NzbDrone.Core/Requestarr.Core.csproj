@@ -25,6 +25,10 @@
     <ProjectReference Include="..\NzbDrone.Common\Requestarr.Common.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- What's new on upgrade (Requestarr.Core.Announcements.Changelog). -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Requestarr.CHANGELOG.md" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Localization\Core\**">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

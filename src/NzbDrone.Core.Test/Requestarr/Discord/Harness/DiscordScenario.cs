@@ -76,6 +76,7 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
                 Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
             }));
+            Mocker.SetConstant<Requestarr.Core.Announcements.IAnnouncementService>(Mocker.Resolve<Requestarr.Core.Announcements.AnnouncementService>());
             Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
@@ -95,7 +96,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<PanelHandler>(),
                 Mocker.Resolve<HelpHandler>(),
                 Mocker.Resolve<SeasonsHandler>(),
-                Mocker.Resolve<AdminRequestsHandler>());
+                Mocker.Resolve<AdminRequestsHandler>(),
+                Mocker.Resolve<OutageHandler>());
         }
 
         // Fake The Movie Database (no key) by default; live fixtures may use the real client.

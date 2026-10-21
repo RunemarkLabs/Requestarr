@@ -13,6 +13,8 @@ namespace Requestarr.Core.Discord.Gateway
     // overwrites) go through REST so they reflect Discord's current state, not the cache.
     public class DiscordNetGateway : IDiscordGuildGateway
     {
+        private const ulong ThreadPermissions = (ulong)(ChannelPermission.CreatePublicThreads | ChannelPermission.CreatePrivateThreads | ChannelPermission.SendMessagesInThreads);
+
         private readonly IDiscordClientHost _host;
         private readonly IDiscordSettingsStore _settings;
 
@@ -142,6 +144,11 @@ namespace Requestarr.Core.Discord.Gateway
             await Client.Rest.AddRoleAsync(GuildId, userId, roleId);
         }
 
+        public async Task RemoveRoleFromMemberAsync(ulong userId, ulong roleId)
+        {
+            await Client.Rest.RemoveRoleAsync(GuildId, userId, roleId);
+        }
+
         public async Task<ulong> SendMessageAsync(ulong channelId, InteractionReply message)
         {
             if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel)
@@ -245,6 +252,11 @@ namespace Requestarr.Core.Discord.Gateway
                 value |= (ulong)ChannelPermission.EmbedLinks;
             }
 
+            if (permissions.HasFlag(ChannelPermissions.Threads))
+            {
+                value |= ThreadPermissions;
+            }
+
             return value;
         }
 
@@ -270,6 +282,11 @@ namespace Requestarr.Core.Discord.Gateway
             if ((value & (ulong)ChannelPermission.EmbedLinks) != 0)
             {
                 result |= ChannelPermissions.EmbedLinks;
+            }
+
+            if ((value & ThreadPermissions) == ThreadPermissions)
+            {
+                result |= ChannelPermissions.Threads;
             }
 
             return result;
