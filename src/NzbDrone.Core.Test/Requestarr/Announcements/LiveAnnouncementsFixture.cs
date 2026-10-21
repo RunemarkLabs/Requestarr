@@ -194,7 +194,8 @@ namespace Requestarr.Core.Test.Announcements
                 userNotes.ForEach(m => Log($"[upgrade]   users, read back: \"{m.Content.Replace("\n", " | ")}\""));
                 adminNotes.Should().NotBeEmpty();
                 adminNotes[0].Content.Should().StartWith($"📋 **Requestarr {current}: what's new**");
-                userNotes.Should().ContainSingle();
+                var hasUserLines = Changelog.Parse(announcements.ChangelogText()).Single(v => v.Version == current).Users.Count > 0;
+                userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
                 var next = new Version(current.Major, current.Minor, current.Build + 1);
                 announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
@@ -208,7 +209,7 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade]   admin, read back: \"{adminAfter.Last().Content.Replace("\n", " | ")}\"");
                 Log($"[upgrade]   users, read back: \"{usersAfter.Last().Content.Replace("\n", " | ")}\"");
                 adminAfter.Should().HaveCount(adminNotes.Count + 1, "once per version, even across restarts");
-                usersAfter.Should().HaveCount(2);
+                usersAfter.Should().HaveCount(userNotes.Count + 1);
                 usersAfter.Last().Content.Should().NotContain("admins").And.NotContain("Internal");
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
