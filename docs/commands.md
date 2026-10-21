@@ -140,7 +140,7 @@ Goes through everything waiting on you, one private card at a time, oldest first
 | Plex link request | **Approve Plex link**, **Deny Plex link** |
 | Sonarr or Radarr that can't be reached | **Check now** |
 
-Every card has **Skip**, and **Back** after the first. Request cards show the full card, and for the requester and each follower their access for that type, their limit used and how many requests they have waiting. Problem items say in plain words what went wrong and what you can do. Acting moves straight to the next item. Items handled elsewhere meanwhile are skipped. It ends with "Nothing left waiting on you", or with **Start over** if you skipped some.
+Every card has **Skip**, and **Back** after the first. Request cards show the full card, and for the requester and each follower their access for that type, their limit used and how many requests they have waiting. Problem items say in plain words what went wrong and what you can do. Acting moves straight to the next item. Items handled elsewhere meanwhile are skipped. It ends with "Nothing left waiting on you", or with **Start over** if you skipped some. **Cancel** on a request that was already sent unmonitors the title in Sonarr or Radarr, so nothing more is searched for; it's never deleted.
 
 A member's own requests open as request cards from **Their requests** on their card, with the same buttons as the feed card; the card changes in place when you act on it. A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead. A late click changes nothing: you're told why, and the card shows the request as it is.
 

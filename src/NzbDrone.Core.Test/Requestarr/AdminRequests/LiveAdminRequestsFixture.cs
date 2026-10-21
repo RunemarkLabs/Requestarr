@@ -208,7 +208,7 @@ namespace Requestarr.Core.Test.AdminRequests
                 var requests = Mocker.Resolve<IRequestRepository>();
                 foreach (var r in requests.All())
                 {
-                    var channel = (IMessageChannel)await host.Client.Rest.GetChannelAsync(r.UserId == users.FindByDiscordId(one.Id).Id ? channelOne : channelTwo);
+                    var channel = (IMessageChannel)await host.Client.Rest.GetChannelAsync(r.OwnerUserId == users.FindByDiscordId(one.Id).Id ? channelOne : channelTwo);
                     var message = await channel.GetMessageAsync(ulong.Parse(r.MessageId));
                     Log($"[walk] request #{r.Id} {r.Label} status={r.Status}; the user's message, read back: \"{message.Content.Replace("\n", " | ")}\"");
                 }
@@ -238,7 +238,7 @@ namespace Requestarr.Core.Test.AdminRequests
                 downAlerts.Should().Be(1);
 
                 var paused = await Send(dispatcher, FakeInteraction.SlashCommand("request").WithOption("type", "tv").WithOption("query", "severance").By(one.Id).InGuild(guild.Id).InChannel(channelOne));
-                Log($"[outage] {one.Username}'s /request tv severance: {paused.LastReply.Content}");
+                Log($"[outage] {one.Username}'s /request tv severance: {paused.LastReply.Content.Replace("\n", " | ")}");
                 paused.LastReply.Content.Should().Contain(DiscordText.RequestsPaused(ContentType.Tv, "Sonarr (test)"));
                 panelOne = (await restOne.GetPinnedMessagesAsync()).Single();
                 Log($"[outage] {one.Username}'s panel still lists TV: {panelOne.Content.Contains("TV")}; access TV={Mocker.Resolve<IUserMediaAccessRepository>().GetForUser(users.FindByDiscordId(one.Id).Id).Single(a => a.ContentType == ContentType.Tv).State}");
