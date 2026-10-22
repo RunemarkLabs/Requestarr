@@ -1073,7 +1073,8 @@ namespace Requestarr.Core.Requests
 
             try
             {
-                await _gateway.EditMessageAsync(channel, message, WithRemoval(RequestCards.Status(request, null, _backends.Find(request.BackendId ?? 0)?.Name), request));
+                var reply = RequestCards.Status(request, null, _backends.Find(request.BackendId ?? 0)?.Name, Mention(request.OwnerUserId), null, null);
+                await _gateway.EditMessageAsync(channel, message, WithRemoval(reply, request));
             }
             catch (Exception ex)
             {

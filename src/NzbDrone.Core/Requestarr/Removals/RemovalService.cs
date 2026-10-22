@@ -594,8 +594,19 @@ namespace Requestarr.Core.Removals
 
             if (proposal.RequesterUserId.HasValue && proposal.RequesterMessageId != null && _prompts.ForProposal(proposal.Id).All(p => p.UserId != proposal.RequesterUserId))
             {
-                proposal.RequesterMessageId = await Repost(proposal.RequesterChannelId, proposal.RequesterMessageId, proposal.RequesterUserId.Value, outcome, null, card) ?? proposal.RequesterMessageId;
-                Save(proposal);
+                // Deleted: their request message is reposted with the outcome, so this one just goes.
+                var requestReposted = proposal.Status is RemovalStatus.Deleted or RemovalStatus.Forced && proposal.RequestId.HasValue &&
+                                      _requests.Find(proposal.RequestId.Value)?.OwnerUserId == proposal.RequesterUserId;
+
+                if (requestReposted && ulong.TryParse(proposal.RequesterChannelId, out var channel) && ulong.TryParse(proposal.RequesterMessageId, out var message))
+                {
+                    await _gateway.DeleteMessageAsync(channel, message);
+                }
+                else
+                {
+                    proposal.RequesterMessageId = await Repost(proposal.RequesterChannelId, proposal.RequesterMessageId, proposal.RequesterUserId.Value, outcome, null, card) ?? proposal.RequesterMessageId;
+                    Save(proposal);
+                }
             }
         }
 
@@ -614,7 +625,12 @@ namespace Requestarr.Core.Removals
             if (request != null)
             {
                 await _feed.PostAsync(request);
-                await _requestService.RefreshOwnerMessageAsync(request);
+
+                // Once removed, the request message was just reposted with the outcome.
+                if (proposal.Status is not (RemovalStatus.Deleted or RemovalStatus.Forced))
+                {
+                    await _requestService.RefreshOwnerMessageAsync(request);
+                }
             }
             else
             {
