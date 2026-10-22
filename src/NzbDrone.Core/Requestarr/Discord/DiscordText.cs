@@ -718,6 +718,7 @@ namespace Requestarr.Core.Discord
             RequestStatus.Available => request.Progress == DownloadProgress.Imported ? FinalReady : FinalAvailable,
             RequestStatus.Denied => $"{FinalDenied}{Because(request.DecisionReason)}",
             RequestStatus.Cancelled => FinalCancelled,
+            RequestStatus.Removed => FinalRemoved,
             _ => $"{FinalFailed}{Because(request.DecisionReason)}"
         };
 
@@ -731,6 +732,181 @@ namespace Requestarr.Core.Discord
         // Account events go to the admin channel (never the feed).
         public static string MemberLeftAdminNotice(string name) =>
             $"**{name}** left the server: their access is suspended and their channel is locked. **Unsuspend** on their card (`/admin user`) restores them if they come back.";
+
+        // Removals: the requester asked first (admin-initiated, owned), then a "still watching?" vote
+        // for everyone with access to the type. Nothing changes until it's decided.
+        public const string RemovalYesLabel = "Yes, remove it";
+        public const string RemovalNoLabel = "No, keep it";
+        public const string RemovalKeepLabel = "Keep it";
+        public const string RemovalTakeBackLabel = "Take back my keep";
+        public const string RemoveRequestLabel = "Remove…";
+        public const string DeleteLabel = "Delete";
+        public const string ForceRemovalLabel = "Force removal";
+        public const string DropRemovalLabel = "Drop removal";
+        public const string StartRemovalLabel = "Start removal";
+        public const string StartVoteLabel = "Start the vote";
+        public const string ForceNowLabel = "Force: delete now";
+        public const string ConfirmDeleteLabel = "Yes, delete now";
+        public const string RemoveTitleLabel = "Remove a title";
+        public const string WholeShowOption = "The whole show";
+        public const string RemovalScopePlaceholder = "What to remove";
+        public const string RemovalPickPlaceholder = "Pick a title";
+        public const string RemoveSearchTitle = "Remove a title";
+        public const string RemoveSearchField = "Title in Sonarr or Radarr";
+
+        public const string RemovalNotInLibrary = "That title isn't in Sonarr or Radarr any more.";
+        public const string RemovalOnlyYours = "You can only ask to remove titles you requested.";
+        public const string RemovalNotYours = "That isn't yours to answer.";
+        public const string RemovalNotFound = "That removal doesn't exist any more.";
+        public const string RemovalNoSuchSeason = "That show doesn't have those seasons.";
+        public const string RemovalInstanceGone = "its Sonarr or Radarr is no longer set up";
+        public const string RemovalKeepNoted = "Noted: you want to keep it. One keep is enough; you can take it back while the vote is open.";
+        public const string RemovalKeepTakenBack = "Your keep is taken back.";
+        public const string RemovalNothingFound = "Nothing in Sonarr or Radarr matches that.";
+        public const string RemovalNothingDownloaded = "Nothing of this is downloaded yet, so there is nothing to remove.";
+
+        public static string RemovalScope(Removals.RemovalProposal proposal) =>
+            proposal.WholeTitle ? $"**{proposal.Label}**" : $"**{proposal.Label}**, {(proposal.Seasons.Count == 1 ? "season" : "seasons")} {Ranges(proposal.Seasons)}";
+
+        public static string RemovalScope(string label, IReadOnlyCollection<int> seasons) =>
+            seasons == null || seasons.Count == 0 ? $"**{label}**" : $"**{label}**, {(seasons.Count == 1 ? "season" : "seasons")} {Ranges(seasons)}";
+
+        private static string Closing(DateTime utc) => $"<t:{new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds()}:f>";
+
+        // The "still watching?" prompt, in each voter's own channel.
+        public static string RemovalPrompt(Removals.RemovalProposal proposal, DateTime closes, bool flagged) =>
+            $"🗳️ **Still watching?** · {RemovalScope(proposal)} may be removed from the library. " +
+            (flagged
+                ? $"You asked to keep it, so it stays unless the admin decides otherwise. You can take that back until {Closing(closes)}."
+                : $"Press **{RemovalKeepLabel}** if you still watch it: one keep is enough. Voting closes {Closing(closes)}; nothing changes until then.");
+
+        // The requester's own say, first, when an admin starts it.
+        public static string RemovalAskRequester(Removals.RemovalProposal proposal, DateTime answerBy, DateTime? reminder) =>
+            $"🗑️ **Remove your request?** · The admin would like to remove {RemovalScope(proposal)}, which you requested. " +
+            $"**{RemovalYesLabel}** puts it to a vote of everyone who can watch it; **{RemovalNoLabel}** keeps it. " +
+            $"No answer by {Closing(answerBy)} counts as yes{(reminder.HasValue ? $" (you'll get a reminder {Closing(reminder.Value)})" : string.Empty)}.";
+
+        public static string RemovalReminder(Removals.RemovalProposal proposal, DateTime answerBy) =>
+            $"⏰ **Reminder** · {RemovalAskRequester(proposal, answerBy, null).Replace("🗑️ **Remove your request?** · ", string.Empty)}";
+
+        public static string RemovalYouSaidYes(Removals.RemovalProposal proposal, DateTime closes) =>
+            $"🗳️ **Up for a vote** · You agreed to remove {RemovalScope(proposal)}. Everyone who can watch it has until {Closing(closes)} to keep it.";
+
+        public static string RemovalYouSaidNo(Removals.RemovalProposal proposal) => $"✅ **Kept** · You chose to keep {RemovalScope(proposal)}. The admin has been told.";
+
+        public static string RemovalNoAnswer(Removals.RemovalProposal proposal, DateTime closes) =>
+            $"🗳️ **Up for a vote** · No answer came, so the removal of {RemovalScope(proposal)} went to a vote, as the message said. You can still press **{RemovalKeepLabel}** on the vote until {Closing(closes)}.";
+
+        public static string RemovalStartedByYou(Removals.RemovalProposal proposal, DateTime closes) =>
+            $"🗳️ **Up for a vote** · You asked to remove {RemovalScope(proposal)}. Everyone who can watch it has until {Closing(closes)} to keep it; you'll see the outcome here.";
+
+        // The outcome, reposted for everyone who was asked, without buttons. Flaggers are never named.
+        public static string RemovalOutcome(Removals.RemovalProposal proposal) => proposal.Status switch
+        {
+            Removals.RemovalStatus.Deleted => $"🗑️ **Removed** · {RemovalScope(proposal)} was removed from the library: nobody asked to keep it.{AgainNote(proposal)}",
+            Removals.RemovalStatus.Forced => $"🗑️ **Removed by the admin** · {RemovalScope(proposal)} was removed from the library.{AgainNote(proposal)}",
+            Removals.RemovalStatus.Flagged or Removals.RemovalStatus.Kept => $"✅ **Kept** · {RemovalScope(proposal)} stays: someone still watches it.",
+            _ => $"✅ **Kept** · The removal of {RemovalScope(proposal)} was called off."
+        };
+
+        private static string AgainNote(Removals.RemovalProposal proposal) => proposal.WholeTitle ? " It can be requested again any time." : " The rest of the show stays.";
+
+        // On the request message after a removal.
+        public static string RemovalNote(Removals.RemovalProposal proposal) =>
+            proposal.WholeTitle
+                ? $"🗑️ Removed from the library{(proposal.Status == Removals.RemovalStatus.Forced ? " by the admin" : " after a vote")}."
+                : $"🗑️ {(proposal.Seasons.Count == 1 ? "Season" : "Seasons")} {Ranges(proposal.Seasons)} removed{(proposal.Status == Removals.RemovalStatus.Forced ? " by the admin" : " after a vote")}.";
+
+        public const string FinalRemoved = "🗑️ **Removed**";
+
+        public static string RequestRemovedStatus(Request request) => $"Request #{request.Id} for {request.Label} was removed from the library. You can request it again any time.";
+
+        // For the admin.
+        public static string RemovalVoteStarted(Removals.RemovalProposal proposal) =>
+            $"Started: everyone with {Label(proposal.ContentType)} access has until {Closing(proposal.WindowClosesAt ?? DateTime.UtcNow)} to keep {RemovalScope(proposal)}.";
+
+        public static string RemovalAskedRequester(Removals.RemovalProposal proposal, string requester, DateTime answerBy) =>
+            $"Asked {requester} first, in their channel. No answer by {Closing(answerBy)} counts as yes and starts the vote.";
+
+        public static string RemovalAlreadyOpen(Removals.RemovalProposal open) =>
+            $"There's already a removal open for {RemovalScope(open)} ({Label(open.Status)}). Finish or drop that one first; other seasons can be removed alongside it.";
+
+        public static string RemovalAlreadyMoved(Removals.RemovalProposal proposal) => $"That removal has moved on: it's {Label(proposal.Status)} now.";
+
+        public static string RemovalVoteClosed(Removals.RemovalProposal proposal) => $"The vote on {RemovalScope(proposal)} has closed.";
+
+        public static string RemovalDropped(Removals.RemovalProposal proposal) => $"Dropped: {RemovalScope(proposal)} stays.";
+
+        public static string RemovalDone(Removals.RemovalProposal proposal, string instance) =>
+            proposal.WholeTitle
+                ? $"Removed {RemovalScope(proposal)} from {instance} with its files. It wasn't added to the exclusion list, so it can be requested again."
+                : $"Removed {RemovalScope(proposal)} from {instance}: those seasons' files are deleted and the seasons unmonitored. The show stays.";
+
+        public static string RemovalFailed(Removals.RemovalProposal proposal, string instance) =>
+            $"{instance ?? "Sonarr or Radarr"} refused to remove {RemovalScope(proposal)}: {proposal.Detail}. It's waiting in `/admin requests` (Force tries again).";
+
+        public static string Label(Removals.RemovalStatus status) => status switch
+        {
+            Removals.RemovalStatus.AwaitingRequester => "waiting on the requester",
+            Removals.RemovalStatus.Voting => "voting",
+            Removals.RemovalStatus.Declined => "the requester said keep",
+            Removals.RemovalStatus.Flagged => "kept by a vote",
+            Removals.RemovalStatus.Failed => "failed",
+            Removals.RemovalStatus.Forced => "removed by the admin",
+            Removals.RemovalStatus.Deleted => "removed by vote",
+            Removals.RemovalStatus.Kept => "kept",
+            _ => "cancelled"
+        };
+
+        // The feed card's removal line, at every step.
+        public static string FeedRemovalLine(Removals.RemovalProposal proposal, int keeps, string requester) =>
+            FeedRemovalState(proposal, keeps, requester) + (proposal.WholeTitle ? string.Empty : $" · seasons {Ranges(proposal.Seasons)}");
+
+        private static string FeedRemovalState(Removals.RemovalProposal proposal, int keeps, string requester) => proposal.Status switch
+        {
+            Removals.RemovalStatus.AwaitingRequester => $"🗑️ Removal: asked {requester ?? "the requester"}, answer by {Closing(proposal.AnswerBy ?? DateTime.UtcNow)}",
+            Removals.RemovalStatus.Voting => $"🗑️ Removal vote until {Closing(proposal.WindowClosesAt ?? DateTime.UtcNow)} · {keeps} keep",
+            Removals.RemovalStatus.Declined => $"🗑️ Removal: {requester ?? "the requester"} said keep (Force or drop)",
+            Removals.RemovalStatus.Flagged => $"🗑️ Removal: kept by {keeps} keep (Force or drop)",
+            Removals.RemovalStatus.Kept => $"🗑️ Removal: kept ({keeps} keep)",
+            Removals.RemovalStatus.Forced => $"🗑️ Removed by {proposal.ClosedByName ?? "the admin"} (forced)",
+            Removals.RemovalStatus.Deleted => "🗑️ Removed by vote",
+            Removals.RemovalStatus.Failed => $"🗑️ Removal failed: {proposal.Detail}",
+            _ => $"🗑️ Removal cancelled{(proposal.ClosedByName != null ? $" by {proposal.ClosedByName}" : string.Empty)}"
+        };
+
+        public static string RemovalFeedMeta(Removals.RemovalProposal proposal, string instance) =>
+            $"{(proposal.ContentType == ContentType.Tv ? "📺 TV" : "🎬 Movie")}{Dot}not requested through Requestarr{(instance != null ? Dot + instance : string.Empty)}";
+
+        public static string RemovalFeedFooter(Removals.RemovalProposal proposal) => $"Removal #{proposal.Id}";
+
+        // The admin's removal card (from the feed's Delete or the panel's Remove a title).
+        public static string RemovalStartCard(Removals.RemovalTarget target, IReadOnlyCollection<int> seasons) =>
+            $"**Remove {RemovalScope(target.Label, seasons)}** · {target.Instance.Name}\n" +
+            (target.Requester != null
+                ? $"Requested by **{target.Requester.DisplayName}**: they're asked first, and no answer in the requester window counts as yes."
+                : "Not requested through Requestarr (or its requester was removed): it goes straight to the vote.") +
+            "\nEveryone with access gets a **Keep it** button; nothing is deleted until the vote closes with no keeps. **Force** deletes now.";
+
+        public static string RemovalUserCard(Request request, IReadOnlyCollection<int> seasons) =>
+            $"**Remove {RemovalScope(request.Label, seasons)}?** Everyone who can watch it gets to keep it, and nothing changes until the vote closes. If nobody keeps it, it's removed from the library and its files are deleted.";
+
+        public static string RemovalConfirmForce(string label, IReadOnlyCollection<int> seasons) =>
+            $"Delete {RemovalScope(label, seasons)} **now**? Its files are deleted; this can't be undone. Nobody is asked.";
+
+        public static string RemovalSearchResults(string term, int count) => $"**Remove a title** · {count} match{(count == 1 ? string.Empty : "es")} for \"{term}\". Pick one.";
+
+        public static string RemovalChoice(Removals.RemovalTarget target) =>
+            DiscordLimits.Truncate($"{target.Label} · {target.Instance.Name} · {(target.Requester != null ? $"requested by {target.Requester.DisplayName}" : "not requested")}", DiscordLimits.OptionLabelLength);
+
+        // In /admin requests.
+        public static string RemovalWaiting(Removals.RemovalProposal proposal, string requester, IReadOnlyCollection<string> flaggers) => proposal.Status switch
+        {
+            Removals.RemovalStatus.AwaitingRequester => $"🗑️ The removal of {RemovalScope(proposal)} is waiting on **{requester}**, asked {DiscordTimestamp(proposal.Created)}. No answer by {Closing(proposal.AnswerBy ?? DateTime.UtcNow)} counts as yes and starts the vote. **{ForceRemovalLabel}** skips both.",
+            Removals.RemovalStatus.Declined => $"🗑️ **{requester}** said keep {RemovalScope(proposal)}. **{ForceRemovalLabel}** removes it anyway; **{DropRemovalLabel}** leaves it.",
+            Removals.RemovalStatus.Flagged => $"🗑️ The vote kept {RemovalScope(proposal)}: {flaggers.Count} keep ({string.Join(", ", flaggers)}). **{ForceRemovalLabel}** removes it anyway; **{DropRemovalLabel}** leaves it.",
+            _ => $"🗑️ Removing {RemovalScope(proposal)} failed: {proposal.Detail}. **{ForceRemovalLabel}** tries again; **{DropRemovalLabel}** leaves it."
+        };
 
         // The admin console: /admin user and /admin request cards, the member picker, queue and users views.
         public const string PanelMembers = "Add or find a member";

@@ -21,7 +21,10 @@ namespace Requestarr.Core.Requests
         Denied = 2,
         Cancelled = 3,
         Failed = 4,
-        Available = 5
+        Available = 5,
+
+        // Removed from the library by a removal (vote or admin Force); a later request is a fresh one.
+        Removed = 6
     }
 
     // What Sonarr / Radarr are doing with a sent request (Status stays Approved until it's all there).

@@ -144,6 +144,41 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
         }
 
+        // Removals: titles deleted (with their files; the fake, like Requestarr, never excludes them).
+        public List<(string Url, int Id)> Deletes { get; } = new();
+        public bool FailDeletes { get; set; }
+
+        public Task<List<LibraryTitle>> GetLibraryAsync(BackendSettings settings) => Run(() =>
+            Catalog.Select(c => (Item: c, Id: c.LibraryId ?? (Library.TryGetValue((settings.Url, Key(c)), out var id) ? id : (int?)null)))
+                .Where(x => x.Id.HasValue)
+                .Select(x => TitleOf(x.Item, x.Id.Value))
+                .ToList());
+
+        public Task DeleteItemAsync(BackendSettings settings, int itemId) => Run(() =>
+        {
+            if (FailDeletes)
+            {
+                throw new BackendException("500 InternalServerError: disk is read-only");
+            }
+
+            Deletes.Add((settings.Url, itemId));
+
+            foreach (var key in Library.Where(l => l.Key.Url == settings.Url && l.Value == itemId).Select(l => l.Key).ToList())
+            {
+                Library.Remove(key);
+            }
+
+            Catalog.Where(c => c.LibraryId == itemId).ToList().ForEach(c => c.LibraryId = null);
+            OnDeleted(itemId);
+            return true;
+        });
+
+        protected abstract LibraryTitle TitleOf(MediaLookupResult item, int libraryId);
+
+        protected virtual void OnDeleted(int libraryId)
+        {
+        }
+
         protected static MediaLookupResult Copy(MediaLookupResult item) => item == null ? null : new MediaLookupResult
         {
             Title = item.Title,
@@ -206,6 +241,15 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId) =>
             Run(() => Gone.Contains(movieId) ? (bool?)null : Files.Contains(movieId));
+
+        protected override LibraryTitle TitleOf(MediaLookupResult item, int libraryId) =>
+            new(libraryId, item.Title, item.Year, item.TmdbId, null, item.HasFile || Files.Contains(libraryId), Array.Empty<int>(), Array.Empty<int>(), item.PosterUrl);
+
+        protected override void OnDeleted(int libraryId)
+        {
+            Files.Remove(libraryId);
+            Gone.Add(libraryId);
+        }
 
         // Radarr imported it: the file is there and the queue is empty.
         public void Imported(int movieId)
@@ -335,6 +379,34 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId) =>
             Run(() => Episodes.GetValueOrDefault(seriesId)?.ToList() ?? new List<EpisodeInfo>());
+
+        // Seasons removed: their episode files deleted and the seasons unmonitored.
+        public List<(int SeriesId, List<int> Seasons)> SeasonDeletes { get; } = new();
+
+        public Task DeleteSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons) => Run(() =>
+        {
+            if (FailDeletes)
+            {
+                throw new BackendException("500 InternalServerError: disk is read-only");
+            }
+
+            SeasonDeletes.Add((seriesId, seasons.ToList()));
+
+            if (Episodes.TryGetValue(seriesId, out var episodes))
+            {
+                Episodes[seriesId] = episodes.Select(e => seasons.Contains(e.SeasonNumber) ? e with { HasFile = false, Monitored = false } : e).ToList();
+            }
+
+            return true;
+        });
+
+        protected override LibraryTitle TitleOf(MediaLookupResult item, int libraryId)
+        {
+            var withFiles = Episodes.GetValueOrDefault(libraryId)?.Where(e => e.HasFile).Select(e => e.SeasonNumber).Distinct().OrderBy(n => n).ToList() ?? new List<int>();
+            return new LibraryTitle(libraryId, item.Title, item.Year, item.TmdbId, item.TvdbId, withFiles.Any(), item.Seasons.ToList(), withFiles, item.PosterUrl);
+        }
+
+        protected override void OnDeleted(int libraryId) => Episodes.Remove(libraryId);
 
         public Task AddSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons, bool monitorFuture) => Run(() =>
         {

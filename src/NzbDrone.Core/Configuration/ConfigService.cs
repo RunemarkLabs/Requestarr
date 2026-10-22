@@ -81,6 +81,24 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("HistoryCleanupDays", value); }
         }
 
+        public int RemovalVoteDays
+        {
+            get { return GetValueInt("RemovalVoteDays", Requestarr.Core.Removals.RemovalSettings.DefaultVoteDays); }
+            set { SetValue("RemovalVoteDays", value); }
+        }
+
+        public int RemovalRequesterTimeoutDays
+        {
+            get { return GetValueInt("RemovalRequesterTimeoutDays", Requestarr.Core.Removals.RemovalSettings.DefaultRequesterTimeoutDays); }
+            set { SetValue("RemovalRequesterTimeoutDays", value); }
+        }
+
+        public int RemovalReminderDay
+        {
+            get { return GetValueInt("RemovalReminderDay", Requestarr.Core.Removals.RemovalSettings.DefaultReminderDay); }
+            set { SetValue("RemovalReminderDay", value); }
+        }
+
         public bool LogIndexerResponse
         {
             get { return GetValueBoolean("LogIndexerResponse", false); }

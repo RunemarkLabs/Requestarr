@@ -28,6 +28,7 @@ namespace Requestarr.Core.Test.CommandSurface
                 (DiscordText.PanelPendingQueue, PanelRoutes.AdminQueue),
                 (DiscordText.PanelUsers, PanelRoutes.AdminUsers),
                 (DiscordText.PanelMembers, "adm-pick"),
+                (DiscordText.RemoveTitleLabel, "rm-search"),
                 (DiscordText.PanelHelp, PanelRoutes.AdminHelp));
             Config.AdminPanelMessageId.Should().Be(AdminRoom.Pinned.Single().ToString());
         }

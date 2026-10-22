@@ -20,6 +20,9 @@ namespace Requestarr.Core.Provisioning
 
         // Optional: how Sonarr and Radarr tell Requestarr about downloads (webhook plus a backup poll).
         public AvailabilityProvisioning Availability { get; set; }
+
+        // Optional: removal vote timings (days). Stored as settings the admin portal can change.
+        public RemovalProvisioning Removal { get; set; }
     }
 
     public class AvailabilityProvisioning
@@ -30,6 +33,18 @@ namespace Requestarr.Core.Provisioning
 
         // Minutes between backup polls (default 15, at least 5).
         public int? PollMinutes { get; set; }
+    }
+
+    public class RemovalProvisioning
+    {
+        // How long a removal vote stays open (default 7).
+        public int? VoteDays { get; set; }
+
+        // How long the requester has to answer an admin's removal before silence counts as yes (default 7).
+        public int? RequesterTimeoutDays { get; set; }
+
+        // Which day of that the requester is reminded (default 5).
+        public int? ReminderDay { get; set; }
     }
 
     public class TmdbProvisioning

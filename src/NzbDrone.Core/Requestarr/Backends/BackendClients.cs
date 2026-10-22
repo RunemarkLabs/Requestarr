@@ -29,6 +29,10 @@ namespace Requestarr.Core.Backends
     // One episode as Sonarr keeps it.
     public record EpisodeInfo(int SeasonNumber, int EpisodeNumber, DateTime? AirDateUtc, bool HasFile, bool Monitored);
 
+    // A title in an instance's library, for removals (search it, and see what is on disk).
+    // TV: Seasons are the show's seasons, SeasonsWithFiles those with at least one episode file.
+    public record LibraryTitle(int Id, string Title, int? Year, int? TmdbId, int? TvdbId, bool HasFile, IReadOnlyList<int> Seasons, IReadOnlyList<int> SeasonsWithFiles, string PosterUrl);
+
     // What EnsureWebhookAsync did to Requestarr's webhook connection on an instance.
     public enum WebhookChange
     {
@@ -121,6 +125,12 @@ namespace Requestarr.Core.Backends
 
         // Asks the instance to search for a library item's missing files now.
         Task SearchAsync(BackendSettings settings, int itemId);
+
+        // Every title in the instance's library.
+        Task<List<LibraryTitle>> GetLibraryAsync(BackendSettings settings);
+
+        // Removes a title and its files. Never adds it to the exclusion list, so it can be requested again.
+        Task DeleteItemAsync(BackendSettings settings, int itemId);
     }
 
     public interface IRadarrApi : IBackendApi
@@ -153,6 +163,9 @@ namespace Requestarr.Core.Backends
         // Monitors more seasons of a library series (and optionally new ones as they air), then
         // searches for each added season. Seasons already monitored are left as they are.
         Task AddSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons, bool monitorFuture);
+
+        // Deletes those seasons' episode files and unmonitors the seasons; the show stays.
+        Task DeleteSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons);
     }
 
     // Shared v3 API plumbing (Sonarr 4 and Radarr 5 both use /api/v3).
@@ -285,6 +298,20 @@ namespace Requestarr.Core.Backends
 
         protected abstract object SearchCommand(int itemId);
 
+        public async Task<List<LibraryTitle>> GetLibraryAsync(BackendSettings settings) =>
+            (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, ItemResource) ?? new List<Newtonsoft.Json.Linq.JObject>()).Select(LibraryTitleOf).ToList();
+
+        // Radarr: addImportExclusion, Sonarr: addImportListExclusion; both false.
+        public Task DeleteItemAsync(BackendSettings settings, int itemId) =>
+            SendAsync(settings, $"{ItemResource}/{itemId}", null, System.Net.Http.HttpMethod.Delete, ("deleteFiles", "true"), (ExclusionParameter, "false"));
+
+        protected abstract string ExclusionParameter { get; }
+
+        protected abstract LibraryTitle LibraryTitleOf(Newtonsoft.Json.Linq.JObject item);
+
+        protected static string PosterOf(Newtonsoft.Json.Linq.JObject item) =>
+            Poster(item["images"]?.ToObject<List<ImageResource>>(), (string)item["remotePoster"]);
+
         private async Task<Newtonsoft.Json.Linq.JObject> FindWebhookAsync(BackendSettings settings) =>
             (await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "notification"))?.FirstOrDefault(n => (string)n["name"] == WebhookName && (string)n["implementation"] == "Webhook");
 
@@ -340,7 +367,7 @@ namespace Requestarr.Core.Backends
 
         protected Task<string> DeleteAsync(BackendSettings settings, string resource) => SendAsync(settings, resource, null, System.Net.Http.HttpMethod.Delete);
 
-        private async Task<string> SendAsync(BackendSettings settings, string resource, object body, System.Net.Http.HttpMethod method, params (string Key, object Value)[] query)
+        protected async Task<string> SendAsync(BackendSettings settings, string resource, object body, System.Net.Http.HttpMethod method, params (string Key, object Value)[] query)
         {
             var builder = Builder(settings, resource);
 
@@ -433,6 +460,14 @@ namespace Requestarr.Core.Backends
         protected override string QueueItemParameter => "movieId";
 
         protected override object SearchCommand(int itemId) => new { name = "MoviesSearch", movieIds = new[] { itemId } };
+
+        protected override string ExclusionParameter => "addImportExclusion";
+
+        protected override LibraryTitle LibraryTitleOf(Newtonsoft.Json.Linq.JObject movie)
+        {
+            var year = (int?)movie["year"] is > 0 ? (int?)movie["year"] : null;
+            return new LibraryTitle((int)movie["id"], (string)movie["title"], year, (int?)movie["tmdbId"], null, (bool?)movie["hasFile"] ?? false, Array.Empty<int>(), Array.Empty<int>(), PosterOf(movie));
+        }
 
         public async Task<bool?> MovieHasFileAsync(BackendSettings settings, int movieId)
         {
@@ -530,6 +565,50 @@ namespace Requestarr.Core.Backends
         protected override string QueueItemParameter => "seriesId";
 
         protected override object SearchCommand(int itemId) => new { name = "SeriesSearch", seriesId = itemId };
+
+        protected override string ExclusionParameter => "addImportListExclusion";
+
+        protected override LibraryTitle LibraryTitleOf(Newtonsoft.Json.Linq.JObject series)
+        {
+            var seasons = series["seasons"]?.OfType<Newtonsoft.Json.Linq.JObject>().ToList() ?? new List<Newtonsoft.Json.Linq.JObject>();
+            var withFiles = seasons.Where(s => (int?)s["statistics"]?["episodeFileCount"] is > 0).Select(s => (int)s["seasonNumber"]).ToList();
+
+            var year = (int?)series["year"] is > 0 ? (int?)series["year"] : null;
+            var numbers = seasons.Select(s => (int)s["seasonNumber"]).Where(n => n > 0).ToList();
+            return new LibraryTitle((int)series["id"], (string)series["title"], year, (int?)series["tmdbId"], (int?)series["tvdbId"], withFiles.Any(), numbers, withFiles, PosterOf(series));
+        }
+
+        public async Task DeleteSeasonsAsync(BackendSettings settings, int seriesId, IReadOnlyCollection<int> seasons)
+        {
+            var files = await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "episodefile", ("seriesId", seriesId)) ?? new List<Newtonsoft.Json.Linq.JObject>();
+            var doomed = files.Where(f => seasons.Contains((int)f["seasonNumber"])).Select(f => (int)f["id"]).ToList();
+
+            if (doomed.Any())
+            {
+                await SendAsync(settings, "episodefile/bulk", new { episodeFileIds = doomed }, System.Net.Http.HttpMethod.Delete);
+            }
+
+            // Unmonitor the seasons and their episodes, so nothing is downloaded again.
+            var series = await GetAsync<Newtonsoft.Json.Linq.JObject>(settings, $"series/{seriesId}");
+
+            foreach (var season in series["seasons"]?.OfType<Newtonsoft.Json.Linq.JObject>() ?? Enumerable.Empty<Newtonsoft.Json.Linq.JObject>())
+            {
+                if (seasons.Contains((int)season["seasonNumber"]))
+                {
+                    season["monitored"] = false;
+                }
+            }
+
+            await PutAsync(settings, $"series/{seriesId}", series);
+
+            var episodes = await GetAsync<List<Newtonsoft.Json.Linq.JObject>>(settings, "episode", ("seriesId", seriesId)) ?? new List<Newtonsoft.Json.Linq.JObject>();
+            var unmonitor = episodes.Where(e => seasons.Contains((int)e["seasonNumber"])).Select(e => (int)e["id"]).ToList();
+
+            if (unmonitor.Any())
+            {
+                await PutAsync(settings, "episode/monitor", new { episodeIds = unmonitor, monitored = false });
+            }
+        }
 
         public async Task<List<EpisodeInfo>> GetEpisodesAsync(BackendSettings settings, int seriesId)
         {

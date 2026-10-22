@@ -126,6 +126,16 @@ namespace Requestarr.Core.Requests
 
         // The title as the request's instance has it now (null when it can't be looked up).
         Task<MediaLookupResult> ItemForAsync(Request request);
+
+        // A title as an instance has it now, by its TMDB (movie) or TVDB (TV) ID; null when it can't be looked up.
+        Task<MediaLookupResult> LookupItemAsync(BackendInstance instance, ContentType type, int externalId);
+
+        // After a removal: the whole title closes the request as removed; seasons leave the request
+        // (and close it once none are left). Its people get their messages reposted with the note.
+        Task ApplyRemovalAsync(Request request, IReadOnlyCollection<int> seasons, string note);
+
+        // The owner's message edited in place (a removal opened or closed: its Remove button follows).
+        Task RefreshOwnerMessageAsync(Request request);
         List<Request> List(RequestarrUser user, bool all, RequestStatus? status, ContentType? type);
         string OwnerName(Request request);
         string DisplayName(int? userId);
@@ -151,6 +161,7 @@ namespace Requestarr.Core.Requests
         private readonly IAnimeService _anime;
         private readonly IUserIdentityRepository _identities;
         private readonly IRequestFeed _feed;
+        private readonly Removals.IRemovalProposalRepository _removals;
         private readonly NzbDrone.Core.Messaging.Events.IEventAggregator _events;
         private readonly Logger _logger;
 
@@ -168,9 +179,11 @@ namespace Requestarr.Core.Requests
                               IAnimeService anime,
                               IUserIdentityRepository identities,
                               IRequestFeed feed,
+                              Removals.IRemovalProposalRepository removals,
                               NzbDrone.Core.Messaging.Events.IEventAggregator events,
                               Logger logger)
         {
+            _removals = removals;
             _requests = requests;
             _subscribers = subscribers;
             _users = users;
@@ -1010,12 +1023,96 @@ namespace Requestarr.Core.Requests
 
         public Task<MediaLookupResult> ItemForAsync(Request request) => TryLookup(_backends.Find(request.BackendId ?? 0), request);
 
+        public async Task<MediaLookupResult> LookupItemAsync(BackendInstance instance, ContentType type, int externalId)
+        {
+            try
+            {
+                var item = await Lookup(instance, type, externalId);
+
+                if (item != null)
+                {
+                    await _metadata.EnrichAsync(type, new[] { item });
+                }
+
+                return item;
+            }
+            catch (BackendException)
+            {
+                return null;
+            }
+        }
+
+        public async Task ApplyRemovalAsync(Request request, IReadOnlyCollection<int> seasons, string note)
+        {
+            if (seasons == null || seasons.Count == 0)
+            {
+                request.Status = RequestStatus.Removed;
+            }
+            else
+            {
+                request.Seasons = request.Seasons.Except(seasons).ToList();
+                request.AvailableSeasons = (request.AvailableSeasons ?? new List<int>()).Except(seasons).ToList();
+
+                if (request.Seasons.Count == 0 && !request.MonitorFutureSeasons)
+                {
+                    request.Status = RequestStatus.Removed;
+                }
+            }
+
+            _requests.Update(request);
+            _audit.Record(Actor.System, "request.removed", "request", request.Id.ToString(), seasons?.Any() == true ? $"seasons {string.Join(", ", seasons)}" : "whole title");
+            await RefreshMessagesAsync(request, null, ownerRepost: true, note);
+        }
+
+        public async Task RefreshOwnerMessageAsync(Request request)
+        {
+            if (!ulong.TryParse(request.MessageChannelId, out var channel) || !ulong.TryParse(request.MessageId, out var message))
+            {
+                return;
+            }
+
+            try
+            {
+                await _gateway.EditMessageAsync(channel, message, WithRemoval(RequestCards.Status(request, null, _backends.Find(request.BackendId ?? 0)?.Name), request));
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Request {0}: its message could not be edited", request.Id);
+            }
+        }
+
+        // The owner's request message: Remove… on a downloaded title with no removal open; a line
+        // while one is (the vote itself is in their channel).
+        private InteractionReply WithRemoval(InteractionReply reply, Request request)
+        {
+            var open = _removals.ForRequest(request.Id).FirstOrDefault(p => p.IsOpen);
+
+            if (open != null)
+            {
+                return new InteractionReply
+                {
+                    Content = DiscordLimits.Truncate($"{reply.Content}\n{DiscordText.FeedRemovalLine(open, 0, OwnerName(request)).Split(" · ")[0]}", DiscordLimits.MessageLength),
+                    Embeds = reply.Embeds,
+                    KeepEmbeds = reply.KeepEmbeds,
+                    Buttons = reply.Buttons
+                };
+            }
+
+            if (RequestCards.Downloaded(request))
+            {
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{Removals.RemovalRoutes.User}:{request.Id}", Label = DiscordText.RemoveRequestLabel, Style = ButtonStyle.Secondary });
+            }
+
+            return reply;
+        }
+
         private async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item, string mention, string note, string followerOf)
         {
             var instance = _backends.Find(request.BackendId ?? 0);
             item ??= await TryLookup(instance, request);
+            var reply = RequestCards.Status(request, item, instance?.Name, mention, note, followerOf);
 
-            return RequestCards.Status(request, item, instance?.Name, mention, note, followerOf);
+            return followerOf == null ? WithRemoval(reply, request) : reply;
         }
 
         public async Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId)
@@ -1181,7 +1278,7 @@ namespace Requestarr.Core.Requests
             {
                 try
                 {
-                    var reply = RequestCards.Status(request, item, instance?.Name, ownerRepost ? Mention(request.OwnerUserId) : null, note, null);
+                    var reply = WithRemoval(RequestCards.Status(request, item, instance?.Name, ownerRepost ? Mention(request.OwnerUserId) : null, note, null), request);
 
                     if (ownerRepost)
                     {

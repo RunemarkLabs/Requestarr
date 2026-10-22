@@ -17,6 +17,7 @@ using Requestarr.Core.Audit;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Removals;
 using Requestarr.Core.Requests;
 using Requestarr.Core.Users;
 using static Dapper.SqlMapper;
@@ -63,6 +64,9 @@ namespace NzbDrone.Core.Datastore
             Mapper.Entity<BackendInstance>("Backends").RegisterModel();
             Mapper.Entity<Request>("Requests").RegisterModel();
             Mapper.Entity<RequestSubscriber>("RequestSubscribers").RegisterModel();
+            Mapper.Entity<RemovalProposal>("RemovalProposals").RegisterModel();
+            Mapper.Entity<RemovalFlag>("RemovalFlags").RegisterModel();
+            Mapper.Entity<RemovalPrompt>("RemovalPrompts").RegisterModel();
         }
 
         private static void RegisterMappers()

@@ -16,6 +16,9 @@ namespace Requestarr.Core.Requests
     {
         Task PostAsync(Request request, MediaLookupResult item = null);
 
+        // A removal of a title with no request (never requested through Requestarr): its own card.
+        Task PostRemovalAsync(Removals.RemovalProposal removal);
+
         // The card as it stands, for refreshing a card in place after a late click.
         InteractionReply CardFor(Request request);
 
@@ -31,6 +34,8 @@ namespace Requestarr.Core.Requests
         private readonly IRequestSubscriberRepository _subscribers;
         private readonly IRequestarrUserRepository _users;
         private readonly IBackendService _backends;
+        private readonly Removals.IRemovalProposalRepository _removals;
+        private readonly Removals.IRemovalFlagRepository _flags;
         private readonly Logger _logger;
 
         public RequestFeed(IDiscordGuildGateway gateway,
@@ -39,8 +44,12 @@ namespace Requestarr.Core.Requests
                            IRequestSubscriberRepository subscribers,
                            IRequestarrUserRepository users,
                            IBackendService backends,
+                           Removals.IRemovalProposalRepository removals,
+                           Removals.IRemovalFlagRepository flags,
                            Logger logger)
         {
+            _removals = removals;
+            _flags = flags;
             _gateway = gateway;
             _configs = configs;
             _requests = requests;
@@ -55,7 +64,35 @@ namespace Requestarr.Core.Requests
             var followers = _subscribers.ForRequest(request.Id).Select(s => _users.Find(s.UserId)?.DisplayName ?? $"user {s.UserId}").ToList();
             var owner = _users.Find(request.OwnerUserId)?.DisplayName ?? $"user {request.OwnerUserId}";
 
-            return RequestCards.FeedCard(request, null, owner, _backends.Find(request.BackendId ?? 0)?.Name, followers);
+            var all = _removals.ForRequest(request.Id);
+            var removal = all.Where(p => p.IsOpen).OrderByDescending(p => p.Id).FirstOrDefault() ?? all.OrderByDescending(p => p.Id).FirstOrDefault();
+
+            return RequestCards.FeedCard(request, null, owner, _backends.Find(request.BackendId ?? 0)?.Name, followers, removal, removal == null ? 0 : _flags.ForProposal(removal.Id).Count);
+        }
+
+        public async Task PostRemovalAsync(Removals.RemovalProposal removal)
+        {
+            if (!ulong.TryParse(Config()?.FeedChannelId, out var channel))
+            {
+                return;
+            }
+
+            try
+            {
+                var card = RequestCards.RemovalFeedCard(removal, _backends.Find(removal.BackendId ?? 0)?.Name, _flags.ForProposal(removal.Id).Count);
+
+                if (ulong.TryParse(removal.FeedMessageId, out var old) && !await _gateway.DeleteMessageAsync(channel, old))
+                {
+                    await _gateway.EditMessageAsync(channel, old, new InteractionReply { KeepEmbeds = true });
+                }
+
+                removal.FeedMessageId = (await _gateway.SendMessageAsync(channel, card)).ToString();
+                _removals.SetFields(removal, r => r.FeedMessageId);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Removal {0}: its feed card could not be posted", removal.Id);
+            }
         }
 
         public async Task PostAsync(Request request, MediaLookupResult item = null)

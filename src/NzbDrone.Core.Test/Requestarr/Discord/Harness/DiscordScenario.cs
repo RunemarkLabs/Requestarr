@@ -62,6 +62,12 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IBackendRepository>(Mocker.Resolve<BackendRepository>());
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalProposalRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalProposalRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalFlagRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalFlagRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalPromptRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalPromptRepository>());
+            Mocker.SetConstant<NzbDrone.Core.Configuration.IConfigRepository>(Mocker.Resolve<NzbDrone.Core.Configuration.ConfigRepository>());
+            Mocker.SetConstant<NzbDrone.Core.Configuration.IConfigService>(Mocker.Resolve<NzbDrone.Core.Configuration.ConfigService>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalSettings>(Mocker.Resolve<Requestarr.Core.Removals.RemovalSettings>());
             UseBackends();
 
             // As on startup: instances that answer count as connected (users see their content types).
@@ -74,7 +80,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
                 Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
                 Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
-                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.RemovalSource>()
             }));
             Mocker.SetConstant<Requestarr.Core.Announcements.IAnnouncementService>(Mocker.Resolve<Requestarr.Core.Announcements.AnnouncementService>());
             Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
@@ -84,6 +91,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestFeed>(Mocker.Resolve<RequestFeed>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalService>(Mocker.Resolve<Requestarr.Core.Removals.RemovalService>());
             Mocker.SetConstant<IAvailabilitySettingsStore>(new AvailabilitySettingsStore());
 
             Mocker.Resolve<IGuildSetupService>().EnsureAsync().GetAwaiter().GetResult();
@@ -97,7 +105,8 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<HelpHandler>(),
                 Mocker.Resolve<SeasonsHandler>(),
                 Mocker.Resolve<AdminRequestsHandler>(),
-                Mocker.Resolve<OutageHandler>());
+                Mocker.Resolve<OutageHandler>(),
+                Mocker.Resolve<RemovalHandler>());
         }
 
         // Fake The Movie Database (no key) by default; live fixtures may use the real client.
