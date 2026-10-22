@@ -151,6 +151,17 @@ namespace Requestarr.Core.Test.Removals
         }
 
         [Test]
+        public void removals_are_documented_for_users_and_admins()
+        {
+            var guide = System.IO.File.ReadAllText(AnimeDub.Item4To6Fixture.RepoFile("docs", "setup-guide.md"));
+            var commands = System.IO.File.ReadAllText(AnimeDub.Item4To6Fixture.RepoFile("docs", "commands.md"));
+
+            guide.Should().Contain("### 5.9 Removing titles").And.Contain("**without** adding it to the exclusion list").And.Contain("voteDays: 7").And.Contain("reminderDay: 5").And.Contain("**Remove a title:**");
+            commands.Should().Contain("### Removing and keeping titles").And.Contain("### Removals").And.Contain("| **Remove a title** |");
+            System.IO.File.ReadAllText(AnimeDub.Item4To6Fixture.RepoFile("docker", "provisioning.yml")).Should().Contain("removal:");
+        }
+
+        [Test]
         public async Task radarr_and_sonarr_are_asked_to_delete_files_and_never_to_exclude()
         {
             var seen = new List<HttpRequest>();

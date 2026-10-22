@@ -74,6 +74,9 @@ namespace Requestarr.Core.Test.AdminConsole
             Mocker.SetConstant<IBackendRepository>(Mocker.Resolve<BackendRepository>());
             Mocker.SetConstant<IRequestRepository>(Mocker.Resolve<RequestRepository>());
             Mocker.SetConstant<IRequestSubscriberRepository>(Mocker.Resolve<RequestSubscriberRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalProposalRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalProposalRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalFlagRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalFlagRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalPromptRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalPromptRepository>());
             Mocker.SetConstant<IRadarrApi>(Mocker.Resolve<RadarrApi>());
             Mocker.SetConstant<ISonarrApi>(Mocker.Resolve<SonarrApi>());
             Mocker.SetConstant<IBackendService>(Mocker.Resolve<BackendService>());

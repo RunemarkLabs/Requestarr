@@ -860,7 +860,7 @@ namespace Requestarr.Core.Discord
 
         // The feed card's removal line, at every step.
         public static string FeedRemovalLine(Removals.RemovalProposal proposal, int keeps, string requester) =>
-            FeedRemovalState(proposal, keeps, requester) + (proposal.WholeTitle ? string.Empty : $" · seasons {Ranges(proposal.Seasons)}");
+            FeedRemovalState(proposal, keeps, requester) + (proposal.WholeTitle ? string.Empty : $" · {(proposal.Seasons.Count == 1 ? "season" : "seasons")} {Ranges(proposal.Seasons)}");
 
         private static string FeedRemovalState(Removals.RemovalProposal proposal, int keeps, string requester) => proposal.Status switch
         {

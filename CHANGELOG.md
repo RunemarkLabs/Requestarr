@@ -4,6 +4,24 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.2.0
+
+### For users
+- When you no longer need something you asked for, press **Remove…** on its message to put it to a vote.
+- If a title you can watch might be removed, you get a "Still watching?" message: press **Keep it** to keep it. One keep is enough, nobody sees who pressed it, and you can take it back.
+- If the admin wants to remove something you asked for, you're asked first. No answer by the date shown counts as yes.
+- Everyone who was asked sees whether a title was kept or removed. A removed title can be asked for again any time.
+- When someone switches a series between dub and sub, the message now says whether it's still on its way, partly there or ready, instead of always saying it's available.
+
+### For admins
+- Removal votes: **Delete** on a downloaded title's feed card, and **Remove a title** on the admin panel, which searches every Sonarr and Radarr library (titles nobody requested too). The requester is asked first; **Force removal** and **Drop removal** at every stage; removals show in `/admin requests`.
+- Removing deletes the files and the title from Sonarr or Radarr without adding it to the exclusion list; removing seasons deletes their files and unmonitors them. The show stays.
+- Settings `removal.voteDays`, `removal.requesterTimeoutDays` and `removal.reminderDay` (7, 7 and 5 days), stored where the admin web portal can change them.
+- The TMDB logo and the feed card spacer are built into Requestarr and sent with each message; nothing is loaded from GitHub.
+
+### Internal
+- Every skipped test is accounted for: all are inherited platform-only tests. The test runner's printed summary leaves out tests skipped at fixture level, which is why it showed 24 where the result files show 76.
+
 ## 0.1.1
 
 ### Internal
