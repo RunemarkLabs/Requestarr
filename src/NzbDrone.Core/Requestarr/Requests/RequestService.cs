@@ -59,8 +59,20 @@ namespace Requestarr.Core.Requests
     }
 
     // A request outcome with the request it created or joined (for Cancel and the final status line).
+    // Where a series already in Sonarr really stands (anime replies say this, never "available" early).
+    public enum LibraryStanding
+    {
+        Searching,
+        Downloading,
+        PartlyAvailable,
+        Available
+    }
+
     public record RequestResult(bool Success, string Message, Request Request, RequestOutcome Outcome) : ServiceResult(Success, Message)
     {
+        // Replaces the outcome's header on the final card (a series' real state in the library).
+        public string Header { get; init; }
+
         public static RequestResult Refused(string message) => new(false, message, null, RequestOutcome.Refused);
 
         // The title as looked up, for the card on the final status (null when the lookup failed).
@@ -831,9 +843,17 @@ namespace Requestarr.Core.Requests
         {
             var label = Titles.WithYear(state.Item.Title, state.Item.Year);
 
-            if (state.Item.LibraryId.HasValue || state.Active == null)
+            if (state.Item.LibraryId.HasValue)
             {
-                return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority), null, RequestOutcome.AlreadyAvailable);
+                var standing = await StandingAsync(state);
+                var result = await InLibraryResult(caller, state, standing, $"stays {DiscordText.Label(existing)}");
+
+                return result with { Message = DiscordText.AnimeStaysInLibrary(label, existing, priority, standing) };
+            }
+
+            if (state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority, LibraryStanding.Available), null, RequestOutcome.AlreadyAvailable);
             }
 
             if (state.CallerOwnsActive)
@@ -888,9 +908,17 @@ namespace Requestarr.Core.Requests
                 await RefreshOrNotify(request, item, DiscordText.AnimeSwitchedNotice(request.Label, language), DiscordText.AnimeSwitchedNote(language), skipUserId: caller.User?.Id);
             }
 
-            if (item.LibraryId.HasValue || state.Active == null)
+            if (item.LibraryId.HasValue)
             {
-                return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language), null, RequestOutcome.AlreadyAvailable);
+                var standing = await StandingAsync(state);
+                var result = await InLibraryResult(caller, state, standing, $"switched it to {DiscordText.Label(language)}");
+
+                return result with { Message = DiscordText.AnimeSwitchedInLibrary(label, language, standing) };
+            }
+
+            if (state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language, LibraryStanding.Available), null, RequestOutcome.AlreadyAvailable);
             }
 
             // Re-read: the loop above changed its language.
@@ -902,6 +930,63 @@ namespace Requestarr.Core.Requests
             }
 
             return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, active.Id), active, RequestOutcome.Following);
+        }
+
+        // A series in Sonarr: its open request's state when there is one, otherwise the episodes on disk.
+        private async Task<LibraryStanding> StandingAsync(TitleState state)
+        {
+            var active = state.Active == null ? null : _requests.Find(state.Active.Id);
+
+            if (active?.Status == RequestStatus.Available)
+            {
+                return LibraryStanding.Available;
+            }
+
+            if (active?.Status == RequestStatus.Approved)
+            {
+                return active.Progress is DownloadProgress.Downloading or DownloadProgress.Stalled ? LibraryStanding.Downloading
+                    : active.AvailableSeasons?.Any() == true ? LibraryStanding.PartlyAvailable
+                    : LibraryStanding.Searching;
+            }
+
+            try
+            {
+                var episodes = await _sonarr.GetEpisodesAsync(state.Instance.Settings, state.Item.LibraryId.Value);
+                var aired = episodes?.Where(e => e.SeasonNumber > 0 && e.AirDateUtc <= Clock()).ToList();
+
+                if (aired == null || aired.Count == 0)
+                {
+                    return aired == null ? LibraryStanding.Available : LibraryStanding.Searching;
+                }
+
+                var withFiles = aired.Count(e => e.HasFile);
+                return withFiles == 0 ? LibraryStanding.Searching : withFiles < aired.Count ? LibraryStanding.PartlyAvailable : LibraryStanding.Available;
+            }
+            catch (BackendException ex)
+            {
+                _logger.Debug(ex, "Episodes of {0} could not be read", state.Item.Title);
+                return LibraryStanding.Available;
+            }
+        }
+
+        // The reply for a series already in Sonarr: "available" only when it is; while it is still on
+        // its way, the switcher follows the open request (or it's theirs).
+        private async Task<RequestResult> InLibraryResult(RequestCaller caller, TitleState state, LibraryStanding standing, string why)
+        {
+            var header = DiscordText.StandingHeader(standing);
+
+            if (standing == LibraryStanding.Available || state.Active == null)
+            {
+                return new RequestResult(true, null, null, standing == LibraryStanding.Available ? RequestOutcome.AlreadyAvailable : RequestOutcome.Sent) { Header = header };
+            }
+
+            if (!state.CallerOwnsActive && !state.CallerFollows && caller.User != null)
+            {
+                await Subscribe(state.Active, caller.User.Id, state.Item);
+                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), why);
+            }
+
+            return new RequestResult(true, null, _requests.Find(state.Active.Id), state.CallerOwnsActive ? RequestOutcome.Sent : RequestOutcome.Following) { Header = header };
         }
 
         public void AttachMessage(int requestId, ulong channelId, ulong messageId)

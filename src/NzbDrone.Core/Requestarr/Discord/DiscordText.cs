@@ -210,7 +210,7 @@ namespace Requestarr.Core.Discord
 
         // TMDB's approved "alt short" logo, rendered unaltered to PNG (Discord can't show SVG) and
         // served from this project's public repository. Shown small: never larger than Requestarr's own mark.
-        public const string TmdbLogoUrl = "https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/docs/assets/tmdb-logo.png";
+        public const string TmdbLogoUrl = DiscordAssets.Scheme + DiscordAssets.TmdbLogo;
         public const string TmdbName = "The Movie Database (TMDB)";
         public const string TmdbSite = "https://www.themoviedb.org";
 
@@ -484,8 +484,27 @@ namespace Requestarr.Core.Discord
         public static string AnimeStaysYours(string label, AnimeLanguage existing, Anime.AnimePriority priority) =>
             $"Your request for {label} stays **{Label(existing)}** ({Keeps(priority)}).";
 
-        public static string AnimeStaysInLibrary(string label, AnimeLanguage existing, Anime.AnimePriority priority) =>
-            $"Good news: {label} is already in the library, set to **{Label(existing)}** ({Keeps(priority)}).";
+        public static string AnimeStaysInLibrary(string label, AnimeLanguage existing, Anime.AnimePriority priority, Requests.LibraryStanding standing) =>
+            $"{Standing(label, standing)}, set to **{Label(existing)}** ({Keeps(priority)}).";
+
+        // Where a series already in Sonarr stands, in the words the anime replies use.
+        public static string Standing(string label, Requests.LibraryStanding standing) => standing switch
+        {
+            Requests.LibraryStanding.Available => $"Good news: {label} is already in the library",
+            Requests.LibraryStanding.PartlyAvailable => $"{label} is partly in the library (more is on its way)",
+            Requests.LibraryStanding.Downloading => $"{label} is downloading",
+            _ => $"{label} was sent to Sonarr and nothing is downloaded yet"
+        };
+
+        public static string StandingHeader(Requests.LibraryStanding standing) => standing switch
+        {
+            Requests.LibraryStanding.Available => FinalAvailable,
+            Requests.LibraryStanding.PartlyAvailable => FinalPartlyAvailable,
+            Requests.LibraryStanding.Downloading => FinalDownloading,
+            _ => FinalSearching
+        };
+
+        public const string FinalSearching = "🔎 **Sent, nothing downloaded yet**";
 
         // Honest about a switch: Sonarr changes what it looks for next; files already there stay.
         public static string AnimeSwitchedNote(AnimeLanguage language) =>
@@ -493,8 +512,10 @@ namespace Requestarr.Core.Discord
 
         public static string AnimeSwitchedNotice(string label, AnimeLanguage language) => $"🔁 {label} is now set to **{Label(language)}** after a later request. Episodes already downloaded stay as they are; new and missing episodes will be looked for as {Label(language)}.";
 
-        public static string AnimeSwitchedInLibrary(string label, AnimeLanguage language) =>
-            $"Good news: {label} is in the library and is now set to **{Label(language)}**. New and missing episodes will be looked for as {Label(language)}; episodes already downloaded stay as they are.";
+        public static string AnimeSwitchedInLibrary(string label, AnimeLanguage language, Requests.LibraryStanding standing) =>
+            $"{Standing(label, standing)}, and is now set to **{Label(language)}**. " + (standing == Requests.LibraryStanding.Searching
+                ? $"It will be looked for as {Label(language)}."
+                : $"New and missing episodes will be looked for as {Label(language)}; episodes already downloaded stay as they are.");
 
         public static string AnimeSwitchedYours(string label, AnimeLanguage language) => $"Your request for {label} is now **{Label(language)}**.";
 
@@ -679,7 +700,7 @@ namespace Requestarr.Core.Discord
         // The admin feed: one compact card per request.
         // A transparent 800x1 image: Discord sizes embeds to their content, so every feed card uses it
         // to be drawn the same width.
-        public const string FeedCardWidthUrl = "https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/docs/assets/feed-card-width.png";
+        public const string FeedCardWidthUrl = DiscordAssets.Scheme + DiscordAssets.FeedCardWidth;
 
         public const string FeedChannelTopic = "Requestarr activity: one card per request, newest at the bottom. Admins only.";
         public const string AnnouncementsChannelTopic = "News from Requestarr for everyone: new things you can do, and outages that affect requests. Only admins post here.";

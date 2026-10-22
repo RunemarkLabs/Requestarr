@@ -378,7 +378,7 @@ namespace Requestarr.Core.Requests
                 _ => (DiscordText.FinalRefused, RefusedColor)
             };
 
-            var lines = new List<string> { $"{status}{DiscordText.Dot}{result.Message}" };
+            var lines = new List<string> { $"{result.Header ?? status}{DiscordText.Dot}{result.Message}" };
 
             if (type == ContentType.Tv && seasonsText != null && (result.Outcome == RequestOutcome.Sent || result.Outcome == RequestOutcome.Pending))
             {

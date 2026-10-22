@@ -54,7 +54,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             card.Embeds.Single().Title.Should().Be("Dune (2021)");
             card.Embeds.Single().ThumbnailUrl.Should().Be("https://image.example/dune.jpg");
             card.Embeds.Single().ImageUrl.Should().Be(DiscordText.FeedCardWidthUrl, "a transparent spacer makes every card the same width; the poster stays a small thumbnail");
-            System.IO.File.Exists(Requestarr.Core.Test.AnimeDub.Item4To6Fixture.RepoFile("docs", "assets", "feed-card-width.png")).Should().BeTrue();
+            Requestarr.Core.Discord.DiscordAssets.Bytes(Requestarr.Core.Discord.DiscordAssets.FeedCardWidth).Should().NotBeNull("the spacer is built in and sent with the card");
             card.Embeds.Single().Description.Split('\n').Should().Equal(DiscordText.FinalPending, "🎬 Movie · alice · Radarr");
             ButtonIds(card).Should().Equal("req-approve:1", "req-deny:1", "req-available:1", "req-admin-cancel:1");
         }
