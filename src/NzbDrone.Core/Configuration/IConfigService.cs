@@ -13,6 +13,11 @@ namespace NzbDrone.Core.Configuration
         //History
         int HistoryCleanupDays { get; set; }
 
+        // Requestarr removal votes (days); read through Requestarr.Core.Removals.RemovalSettings
+        int RemovalVoteDays { get; set; }
+        int RemovalRequesterTimeoutDays { get; set; }
+        int RemovalReminderDay { get; set; }
+
         //UI
         int FirstDayOfWeek { get; set; }
         string CalendarWeekColumnHeader { get; set; }

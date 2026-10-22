@@ -145,6 +145,16 @@ namespace Requestarr.Core.Discord.Help
             },
             new HelpTopic
             {
+                Key = "removals",
+                Title = "Removing and keeping titles",
+                Summary = "Votes on what leaves the library",
+                Intro = _ => $"Nothing is removed from the library without asking the people who can watch it. On a title you requested, **{DiscordText.RemoveRequestLabel}** on its message (once it's downloaded) asks to remove it, or some seasons of a show; " +
+                             $"everyone who can watch that type then gets a **Still watching?** message with **{DiscordText.RemovalKeepLabel}**. One keep is enough to keep it, nobody sees who pressed it, and you can take yours back while the vote is open. " +
+                             $"Nothing changes until the vote closes. If the admin wants to remove something you requested, you're asked first: **{DiscordText.RemovalYesLabel}** or **{DiscordText.RemovalNoLabel}**, and no answer by the date shown counts as yes. " +
+                             "Everyone who was asked sees the outcome. A removed title can be requested again any time."
+            },
+            new HelpTopic
+            {
                 Key = "news",
                 Title = "Announcements",
                 Summary = "News for everyone",
@@ -185,6 +195,18 @@ namespace Requestarr.Core.Discord.Help
                 Intro = _ => $"#{ChannelLayout.FeedChannelName} has one small card per request: who asked, which instance, the state, and for TV the seasons. Every change moves its card to the bottom, so the newest activity is last. " +
                              $"Its buttons are only the ones that make sense now: **{DiscordText.ApproveLabel}**, **{DiscordText.DenyLabel}** and **{DiscordText.AlreadyAvailableLabel}** while it waits; **{DiscordText.CancelLabel}** while it waits or until something starts downloading (a sent title is then unmonitored in Sonarr or Radarr, never deleted); **{DiscordText.AddSeasonsLabel}** on TV. " +
                              "Approval cards stay in this channel too, and acting in either place updates both and the user's message. Account events (new users, access changes, suspensions, Plex links) stay in this channel, not the feed."
+            },
+            new HelpTopic
+            {
+                Key = "removing",
+                Title = "Removing titles",
+                Summary = "Votes, Force, and the settings",
+                Intro = _ => $"**{DiscordText.DeleteLabel}** on a downloaded title's feed card, or **{DiscordText.RemoveTitleLabel}** on the panel (it searches every Sonarr and Radarr library, including titles nobody requested here), starts a removal of the whole title or chosen seasons. " +
+                             $"A title someone requested asks them first (silence counts as yes after the requester window, with a reminder); otherwise it goes straight to a vote of everyone with access, and any one **{DiscordText.RemovalKeepLabel}** keeps it. Nothing changes during a vote. " +
+                             $"**{DiscordText.ForceRemovalLabel}** deletes at any stage (it asks first, and is audited); **{DiscordText.DropRemovalLabel}** leaves it. A requester's No, a vote kept by keeps, and a removal waiting on its requester show in `/admin requests`, where you see who pressed Keep it. " +
+                             "Removing deletes the files and the title from Sonarr or Radarr without adding it to the exclusion list; seasons have their files deleted and are unmonitored. " +
+                             $"Settings (days): vote {Removals.RemovalSettings.DefaultVoteDays}, requester answer {Removals.RemovalSettings.DefaultRequesterTimeoutDays}, reminder on day {Removals.RemovalSettings.DefaultReminderDay} by default; set them under `removal:` in provisioning.",
+                Buttons = new[] { PanelButtons.RemoveTitle }
             },
             new HelpTopic
             {

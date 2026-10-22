@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using Requestarr.Core.Backends;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Removals;
 using Requestarr.Core.Requests;
 
 namespace Requestarr.Core.Admin
 {
     // One thing waiting on an admin decision. Key: what it is ("r12" request 12, "t12" request 12
-    // in trouble, "p3" Plex link request 3, "i2" instance 2 down; task 4 adds removals). Since: how
+    // in trouble, "p3" Plex link request 3, "i2" instance 2 down, "x4" removal 4). Since: how
     // long it has waited, which orders the walk (oldest first).
     public record QueueItem(string Key, DateTime Since)
     {
@@ -41,6 +42,27 @@ namespace Requestarr.Core.Admin
 
         public IReadOnlyList<QueueItem> Items() =>
             _sources.SelectMany(s => s.Items()).OrderBy(i => i.Since).ThenBy(i => i.Key, StringComparer.Ordinal).ToList();
+    }
+
+    // Removals waiting on the admin: a requester's No, a vote kept by keep flags, a deletion Sonarr or
+    // Radarr refused (Force or drop each), and an owned removal still waiting on its requester.
+    public class RemovalSource : IAdminQueueSource
+    {
+        private readonly IRemovalProposalRepository _proposals;
+
+        public RemovalSource(IRemovalProposalRepository proposals)
+        {
+            _proposals = proposals;
+        }
+
+        public IEnumerable<QueueItem> Items() =>
+            _proposals.WithStatus(RemovalStatus.AwaitingRequester, RemovalStatus.Declined, RemovalStatus.Flagged, RemovalStatus.Failed)
+                .Select(p => new QueueItem($"x{p.Id}", p.Status switch
+                {
+                    RemovalStatus.Declined => p.Answered ?? p.Created,
+                    RemovalStatus.Flagged or RemovalStatus.Failed => p.Closed ?? p.Created,
+                    _ => p.Created
+                }));
     }
 
     // Requests waiting for approval.

@@ -81,6 +81,7 @@ namespace Requestarr.Core.Test.AnimeDub
         {
             var tags = await SetUp();
             var id = Sonarr.AddToLibrary(OnePiece, "anime", 41, tags.Sub);
+            Sonarr.Season(id, 1, aired: 3, withFiles: 3);
 
             var run = await AskLanguage(Bob, "d");
 
@@ -89,10 +90,10 @@ namespace Requestarr.Core.Test.AnimeDub
             RequestStore.All().Should().BeEmpty();
         }
 
-        // Found live: a sent (approved) request whose series is now in Sonarr is good news, like any
-        // title in the library, and the switch shows the new language everywhere.
+        // Task 4 item 13: a series that was sent to Sonarr but has nothing downloaded is not "already
+        // available"; the reply says where it really stands, and the switcher follows the request.
         [Test]
-        public async Task switching_a_series_that_was_sent_and_is_in_the_library_is_good_news()
+        public async Task switching_a_series_that_was_sent_but_not_downloaded_says_so()
         {
             var tags = await SetUp();
             await SetAccess(Alice, "tv", "auto");
@@ -101,11 +102,45 @@ namespace Requestarr.Core.Test.AnimeDub
 
             var run = await AskLanguage(Bob, "d");
 
-            run.LastReply.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain("now set to **Dub**").And.NotContain(DiscordText.LanguageLine(AnimeLanguage.Sub));
+            run.LastReply.Content.Should().StartWith(DiscordText.FinalSearching).And.Contain("was sent to Sonarr and nothing is downloaded yet").And.Contain("now set to **Dub**")
+                .And.NotContain(DiscordText.FinalAvailable).And.NotContain("in the library").And.NotContain(DiscordText.LanguageLine(AnimeLanguage.Sub));
             Sonarr.SeriesTags[id].Should().Equal(tags.Dub);
             RequestFor().Language.Should().Be(AnimeLanguage.Dub);
             Latest(Alice).Content.Should().StartWith($"<@{Alice}>").And.Contain(DiscordText.LanguageLine(AnimeLanguage.Dub)).And.Contain("Now set to **Dub**");
-            Subscribers.ForRequest(RequestFor().Id).Should().BeEmpty("it's in the library: nothing to follow");
+            Subscribers.ForRequest(RequestFor().Id).Select(s => s.UserId).Should().Equal(new[] { UserFor(Bob).Id }, "it's still on its way: Bob follows it");
+        }
+
+        [TestCase(Requestarr.Core.Requests.DownloadProgress.Downloading, false, "is downloading", "⬇️ **Downloading**")]
+        [TestCase(Requestarr.Core.Requests.DownloadProgress.None, true, "is partly in the library", "🎉 **Partly available**")]
+        public async Task the_switch_reply_matches_a_download_in_progress(Requestarr.Core.Requests.DownloadProgress progress, bool partly, string says, string header)
+        {
+            await SetUp();
+            await SetAccess(Alice, "tv", "auto");
+            await RequestAnime(Alice, "s");
+            var request = RequestFor();
+            request.Progress = progress;
+            request.AvailableSeasons = partly ? new System.Collections.Generic.List<int> { 1 } : new System.Collections.Generic.List<int>();
+            RequestStore.Update(request);
+
+            var run = await AskLanguage(Bob, "d");
+
+            run.LastReply.Content.Should().StartWith(header).And.Contain(says).And.Contain("now set to **Dub**");
+        }
+
+        [Test]
+        public async Task a_library_series_with_every_aired_episode_downloaded_is_already_available()
+        {
+            var tags = await SetUp();
+            await SetAccess(Alice, "tv", "auto");
+            await RequestAnime(Alice, "s");
+            var request = RequestFor();
+            request.Status = Requestarr.Core.Requests.RequestStatus.Available;
+            RequestStore.Update(request);
+
+            var run = await AskLanguage(Bob, "d");
+
+            run.LastReply.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain("Good news").And.Contain("now set to **Dub**");
+            Sonarr.SeriesTags.Values.Single().Should().Equal(tags.Dub);
         }
 
         [Test]
@@ -113,11 +148,15 @@ namespace Requestarr.Core.Test.AnimeDub
         {
             var tags = await SetUp();
             var id = Sonarr.AddToLibrary(OnePiece, "anime", tags.Dub);
+            Sonarr.Season(id, 1, aired: 3, withFiles: 3);
 
             var run = await AskLanguage(Bob, "s");
 
             Sonarr.SeriesTags[id].Should().Equal(tags.Dub);
             run.LastReply.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain("set to **Dub** (dub wins here)");
+
+            Sonarr.Season(id, 1, aired: 3, withFiles: 0);
+            (await AskLanguage(Bob, "s")).LastReply.Content.Should().StartWith(DiscordText.FinalSearching).And.Contain("nothing is downloaded yet, set to **Dub**");
         }
 
         [Test]

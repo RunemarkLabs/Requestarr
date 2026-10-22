@@ -63,9 +63,9 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             done.Progress.Should().Be(DownloadProgress.Imported);
             done.Fulfilled.Should().Be(Now);
             Latest(Alice).Content.Should().StartWith($"<@{Alice}> {DiscordText.FinalReady}").And.Contain("ready to watch");
-            Latest(Alice).Buttons.Should().BeEmpty();
+            Latest(Alice).Buttons.Select(b => b.CustomId).Should().Equal(new[] { $"rm-user:{request.Id}" }, "once it's in the library, its requester can ask to remove it (task 4)");
             State(CardOf(request.Id)).Should().Be(DiscordText.FinalReady);
-            CardOf(request.Id).Buttons.Should().BeEmpty();
+            CardOf(request.Id).Buttons.Select(b => b.CustomId).Should().Equal(new[] { $"rm-feed:{request.Id}" }, "the feed card's Delete starts a removal");
             Audits("request.fulfilled").Should().Be(1);
         }
 

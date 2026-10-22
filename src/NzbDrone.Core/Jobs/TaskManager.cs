@@ -107,6 +107,12 @@ namespace NzbDrone.Core.Jobs
 
                     new ScheduledTask
                     {
+                        Interval = 1,
+                        TypeName = typeof(Requestarr.Core.Removals.RemovalCheckCommand).FullName
+                    },
+
+                    new ScheduledTask
+                    {
                         Interval = GetBackupInterval(),
                         TypeName = typeof(BackupCommand).FullName
                     }

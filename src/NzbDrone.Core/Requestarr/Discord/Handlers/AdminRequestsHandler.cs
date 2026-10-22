@@ -7,6 +7,7 @@ using Requestarr.Core.Audit;
 using Requestarr.Core.Backends;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.MediaServers;
+using Requestarr.Core.Removals;
 using Requestarr.Core.Requests;
 using Requestarr.Core.Users;
 
@@ -36,6 +37,7 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IRequestarrUserRepository _userStore;
         private readonly IBackendService _backends;
         private readonly IConnectionMonitor _monitor;
+        private readonly IRemovalService _removals;
 
         public AdminRequestsHandler(ICallerResolver callers,
                                     IAdminQueue queue,
@@ -46,8 +48,10 @@ namespace Requestarr.Core.Discord.Handlers
                                     IUserMediaAccessRepository access,
                                     IRequestarrUserRepository userStore,
                                     IBackendService backends,
-                                    IConnectionMonitor monitor)
+                                    IConnectionMonitor monitor,
+                                    IRemovalService removals)
         {
+            _removals = removals;
             _callers = callers;
             _queue = queue;
             _requests = requests;
@@ -101,6 +105,28 @@ namespace Requestarr.Core.Discord.Handlers
                         _ => await CardAfter(at, null)
                     });
                     return;
+
+                // Force removes for good: the card asks first.
+                case WalkRoutes.Do when verb == "rm-force":
+                {
+                    if (!Waiting(at.Key))
+                    {
+                        await responder.UpdateMessageAsync(await CardAfter(at, DiscordText.AlreadyHandled));
+                        return;
+                    }
+
+                    var proposal = _removals.Find(int.Parse(at.Key.AsSpan(1)));
+                    await responder.UpdateMessageAsync(new InteractionReply
+                    {
+                        Content = DiscordText.RemovalConfirmForce(proposal.Label, proposal.Seasons),
+                        Buttons = new List<InteractionButton>
+                        {
+                            new() { CustomId = $"{WalkRoutes.Do}:rm-force-yes:{at.Ticks}:{at.Key}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger },
+                            new() { CustomId = $"{WalkRoutes.Move}:back:{at.Ticks + 1}:{at.Key}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
+                        }
+                    });
+                    return;
+                }
 
                 case WalkRoutes.Do when verb is "deny" or "cancel":
                 {
@@ -159,6 +185,10 @@ namespace Requestarr.Core.Discord.Handlers
                 case "link-a":
                 case "link-d":
                     return await _users.DecideAccessRequestAsync(id, action == "link-a", actor, adminName);
+                case "rm-force-yes":
+                    return await _removals.ForceAsync(id, actor, adminName, actor.UserId);
+                case "rm-drop":
+                    return await _removals.DropAsync(id, actor, adminName, actor.UserId);
                 case "check":
                 {
                     var instance = _backends.Find(id);
@@ -301,6 +331,19 @@ namespace Requestarr.Core.Discord.Handlers
                     lines.Add(DiscordText.FormatAccess(_access.GetForUser(link.UserId)));
                     reply.Buttons.Add(Button("link-a", DiscordText.ApproveLinkLabel, ButtonStyle.Success));
                     reply.Buttons.Add(Button("link-d", DiscordText.DenyLinkLabel, ButtonStyle.Danger));
+                    break;
+                }
+
+                case 'x':
+                {
+                    var proposal = _removals.Find(item.Id);
+                    var flaggers = _removals.FlagsOn(proposal.Id).Select(f => _userStore.Find(f.UserId)?.DisplayName ?? $"user {f.UserId}").ToList();
+                    var requester = proposal.RequesterUserId.HasValue ? _userStore.Find(proposal.RequesterUserId.Value)?.DisplayName : null;
+
+                    lines.Add(DiscordText.RemovalWaiting(proposal, requester ?? "the requester", flaggers));
+                    reply.Embeds.Add(new InteractionEmbed { Title = proposal.Label, ThumbnailUrl = proposal.PosterUrl, Color = RequestCards.PendingColor, Footer = DiscordText.RemovalFeedFooter(proposal) });
+                    reply.Buttons.Add(Button("rm-force", DiscordText.ForceRemovalLabel, ButtonStyle.Danger));
+                    reply.Buttons.Add(Button("rm-drop", DiscordText.DropRemovalLabel, ButtonStyle.Secondary));
                     break;
                 }
 

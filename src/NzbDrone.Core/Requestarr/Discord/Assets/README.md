@@ -1,5 +1,7 @@
 # Assets
 
+These images are built into Requestarr (embedded resources) and sent with each Discord message that uses them, as attachments the message's embed points to (`attachment://name.png`, see `DiscordAssets`). Nothing is loaded from GitHub or any other host, so a self-hosted install works without internet access to this repository.
+
 ## tmdb-logo.png
 
 The Movie Database (TMDB) approved "alt short" logo, from <https://www.themoviedb.org/about/logos-attribution> (`blue_short` SVG). It is rendered to PNG without changes to colour, aspect ratio or orientation, centred on a transparent square canvas, because Discord can't show SVG and draws footer icons as small circles.

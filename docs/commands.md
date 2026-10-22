@@ -88,6 +88,13 @@ For TV, the status repeats which seasons were requested.
 
 **Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
+### Removing and keeping titles
+
+- **Remove…** on your own request message, once something of it is downloaded: asks to remove it (TV: the whole show or chosen seasons). Everyone else who can watch it gets a vote.
+- **Still watching?** messages come to your channel when a title you can watch may be removed. **Keep it** keeps it (one keep is enough, nobody is told who pressed it); **Take back my keep** while the vote is open. Nothing changes until it closes.
+- **Remove your request?** comes when the admin wants to remove something you requested: **Yes, remove it** or **No, keep it**; no answer by the date shown counts as yes.
+- Everyone asked gets the outcome. A removed title can be requested again any time.
+
 ### Your panel
 
 One pinned message at the top of your channel. It welcomes you and shows what you can request, always matching your access.
@@ -111,6 +118,7 @@ Opens help that only you can see. It starts with a short overview, then you pick
 - my requests and cancelling
 - limits
 - linking Plex
+- removing and keeping titles
 - announcements
 
 You only see topics you can use: no seasons or anime topic without TV access, no Plex topic once you're linked.
@@ -154,6 +162,7 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 - members: adding and managing
 - approvals and the queue
 - the admin feed
+- removing titles
 - announcements and outages
 - downloads, webhooks and polling
 - limits
@@ -173,6 +182,7 @@ Pinned in `#requestarr-admin`. What it opens is visible only to you.
 | **Pending queue (n)** | The same as `/admin requests`; n is how many items wait on you, kept up to date. |
 | **Users** | Every user with their status, channel and access; a menu opens their member card. |
 | **Add or find a member** | Discord's member picker: pick anyone in the server to open their member card and add them from there. |
+| **Remove a title** | Searches every Sonarr and Radarr library (titles nobody requested too); pick one to start its removal. |
 | **Help** | Opens admin help, the same as `/admin help`. |
 
 ### Approval cards and the admin feed
@@ -182,6 +192,16 @@ Requests that need approval post a card in `#requestarr-admin` with **Approve**,
 `#requestarr-feed` has one small card per request, moved to the bottom on every change: new requests, someone following, approved, denied, cancelled, already available, downloading, stuck or failed, available. Its buttons are the same as the request card's. Your reply comes privately. Account events stay in `#requestarr-admin`.
 
 Media server access requests post a card here with **Approve** and **Deny**; the member's card offers the same.
+
+### Removals
+
+| Where | Button | What it does |
+|---|---|---|
+| Feed card of a downloaded title | **Delete** | Opens its removal card: TV can pick the whole show or seasons; **Start removal** asks the requester first (or goes to the vote if nobody requested it); **Force: delete now** asks, then deletes. |
+| Feed card while a removal is open | **Force removal**, **Drop removal** | Force asks, then deletes now; Drop leaves the title (and tells everyone asked that it was called off). |
+| `/admin requests` | **Force removal**, **Drop removal** | On a requester's No, a vote kept by keeps (shows who pressed Keep it), a deletion Sonarr or Radarr refused, and a removal still waiting on its requester (shows the deadline). |
+
+Deleting removes the files and the title from Sonarr or Radarr without excluding it; season removals delete those seasons' files and unmonitor them. Settings: `removal.voteDays` (7), `removal.requesterTimeoutDays` (7) and `removal.reminderDay` (5).
 
 ### Announcements
 

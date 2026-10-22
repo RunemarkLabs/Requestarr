@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -58,7 +59,37 @@ namespace Requestarr.Core.Test.Gaps
         public void the_notice_uses_the_wording_from_tmdbs_terms()
         {
             DiscordText.TmdbNotice.Should().Contain("uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB");
-            DiscordText.TmdbLogoUrl.Should().StartWith("https://raw.githubusercontent.com/RunemarkLabs/Requestarr/main/").And.EndWith(".png");
+        }
+
+        // Task 4 item 15: the images travel with the message, from inside Requestarr; nothing is loaded from GitHub.
+        [Test]
+        public async Task the_logo_and_the_feed_spacer_are_built_in_and_attached_to_the_message()
+        {
+            DiscordText.TmdbLogoUrl.Should().Be("attachment://tmdb-logo.png");
+            DiscordText.FeedCardWidthUrl.Should().Be("attachment://feed-card-width.png");
+
+            foreach (var name in new[] { DiscordAssets.TmdbLogo, DiscordAssets.FeedCardWidth })
+            {
+                var png = DiscordAssets.Bytes(name);
+                png.Should().NotBeNull($"{name} is an embedded resource");
+                png.Take(8).Should().Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, "it is a PNG");
+            }
+
+            var spacer = DiscordAssets.Bytes(DiscordAssets.FeedCardWidth);
+            (System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(spacer.AsSpan(16)), System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(spacer.AsSpan(20))).Should().Be((800, 1));
+
+            TmdbKey.Set("test-key");
+            var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{DarkMatter}"))).LastReply;
+            DiscordAssets.For(card).Select(f => f.Name).Should().Equal(DiscordAssets.TmdbLogo);
+            DiscordAssets.For(new Requestarr.Core.Discord.Interactions.InteractionReply { Content = "plain" }).Should().BeEmpty();
+        }
+
+        [Test]
+        public void no_message_image_points_at_github()
+        {
+            var source = string.Join("\n", System.IO.Directory.GetFiles(AnimeDub.Item4To6Fixture.RepoFile("src", "NzbDrone.Core", "Requestarr"), "*.cs", System.IO.SearchOption.AllDirectories).Select(System.IO.File.ReadAllText));
+
+            source.Should().NotContain("githubusercontent").And.NotContain("docs/assets");
         }
     }
 }

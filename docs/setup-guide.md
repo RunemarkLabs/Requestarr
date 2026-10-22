@@ -458,7 +458,7 @@ Requestarr registers exactly three commands:
 - **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
 - **`/admin`** has three parts: `/admin user` opens a member's card, `/admin requests` goes through everything waiting on you one item at a time, and `/admin help` opens admin help. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
-Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.9).
+Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.10).
 
 User help and admin help are separate. Admin help has its own topics, plus a **What users see** branch so you can walk someone through their help. User help never shows admin topics, even to an admin. Both are built from the same definitions as the commands and buttons, so they can't describe something that no longer exists.
 
@@ -489,14 +489,15 @@ The feed card's buttons are only those valid now, and every click is checked aga
 | **Approve**, **Deny**, **Already available** | while it waits for approval | the same as on the approval card; acting in either place updates both, and the user's message |
 | **Cancel request** | while it waits, or once sent until something starts downloading | waiting: cancels it. Sent: cancels it and unmonitors the title in Sonarr or Radarr, so nothing more is searched for or downloaded. Nothing is deleted; the title stays there. |
 | **Add seasons** | open TV requests | adds seasons for the requester (no approval, no limit) |
+| **Delete** | once something is downloaded, and no removal is open | starts a removal (5.9) |
+| **Force removal**, **Drop removal** | while a removal is open or waiting on you | Force deletes now (it asks first); Drop leaves the title |
 
-Removing titles that were already downloaded comes with removal votes, in a later version.
-
-The admin channel has a pinned panel with four buttons. Everything they open is visible only to you:
+The admin channel has a pinned panel with five buttons. Everything they open is visible only to you:
 
 - **Pending queue (n):** the same as `/admin requests`, below. The number is how many items are waiting on you, and it updates by itself.
 - **Users:** everyone with their status, channel and access, and a menu that opens their member card.
 - **Add or find a member:** Discord's member picker. Pick anyone in the server to open their member card, and add them from there.
+- **Remove a title:** searches every Sonarr and Radarr library, including titles nobody requested through Requestarr, and starts a removal (5.9).
 - **Help:** admin help (the same as `/admin help`).
 
 Requestarr posts the panel on first start and re-posts it if it is deleted.
@@ -598,13 +599,44 @@ What Requestarr posts there:
 
 Each version is announced once, even across restarts. The first time a server starts with announcements, only the current version is posted. The changes come from the project's changelog, written with every change (see [development](development.md#changelog)).
 
-### 5.9 Where everything is
+### 5.9 Removing titles
+
+Nothing leaves the library without asking the people who can watch it. A removal is of a whole title, or (TV) of chosen seasons.
+
+**Starting one**
+
+| Who | Where | Then |
+|---|---|---|
+| The requester | **Remove…** on their request message, once something of it is downloaded | Straight to the vote. |
+| An admin, a requested title | **Delete** on its feed card, or **Remove a title** on the admin panel | The requester is asked first, in their channel: **Yes, remove it** starts the vote; **No, keep it** keeps it and the removal waits on you in `/admin requests`, where **Force removal** removes it anyway. No answer by the deadline counts as yes (the message says so), with a reminder on the reminder day. |
+| An admin, a title nobody requested here | **Remove a title** on the admin panel: it searches every Sonarr and Radarr library, including titles never requested through Requestarr | Straight to the vote. A title whose requester was removed counts as nobody's. |
+
+**The vote.** Every active user with access to that content type gets a **Still watching?** message in their own channel, with the title's card, which seasons, when the vote closes, and **Keep it**. Users who gain access while it's open get it too. One keep is enough: when the vote closes with a keep, the title stays; with none, it's removed. Users can take their own keep back while it's open. Nobody is told who pressed Keep it; you see who in `/admin requests`. Nothing is changed while a vote is open: the title stays monitored and its files stay.
+
+**One at a time.** Only one removal can be open per title and season scope. The whole title overlaps every season, so a second removal of it, or of any of its seasons, is refused while one is open; removals of different seasons of the same show can run side by side.
+
+**Removing.** The whole title: its files are deleted and it's removed from Sonarr or Radarr, **without** adding it to the exclusion list, so anyone can request it again later (as a new request). Seasons: those seasons' episode files are deleted and the seasons unmonitored; the show stays. The request (and everyone following it) is closed as removed, or loses those seasons.
+
+**Force** is available at every stage: over a requester's No, over keeps, or to skip the vote altogether (**Force: delete now** when starting one). It always asks first, and the audit log records who and when.
+
+**Outcomes.** Everyone who was asked gets their message reposted with the outcome (kept, removed, or removed by the admin), without buttons; so does the requester. The feed card follows the removal through every step: requester asked, voting (with the number of keeps), kept, removed, forced, cancelled. If Sonarr or Radarr refuses the deletion, nobody is told an outcome; the removal waits in `/admin requests`, and Force tries again.
+
+**Settings.** In days, under `removal:` in `provisioning.yml` (each optional), and stored in Requestarr's settings so the admin web portal can change them:
+
+```yaml
+removal:
+  voteDays: 7              # how long a vote is open
+  requesterTimeoutDays: 7  # how long the requester has to answer an admin's removal
+  reminderDay: 5           # the day of that the requester is reminded (0: no reminder)
+```
+
+### 5.10 Where everything is
 
 For every command and button, see the [command reference](commands.md).
 
 Users can also ask for media server access themselves with the **Link Plex** button on their panel. An Approve / Deny card then appears in the admin channel, and their member card shows the same choice. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
 
-### 5.10 When someone leaves the server
+### 5.11 When someone leaves the server
 
 If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, press **Unsuspend** on their card (`/admin user`): Requestarr gives their role back and unlocks the channel. The admin channel gets a note when someone leaves.
 

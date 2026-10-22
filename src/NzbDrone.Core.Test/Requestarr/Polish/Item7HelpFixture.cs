@@ -13,8 +13,8 @@ namespace Requestarr.Core.Test.Polish
     [TestFixture]
     public class Item7HelpFixture : PolishScenario
     {
-        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "plex", "news" };
-        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "feed", "announcements", "downloads", "limits", "mediaserver", "anime", "visibility" };
+        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "plex", "removals", "news" };
+        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "feed", "removing", "announcements", "downloads", "limits", "mediaserver", "anime", "visibility" };
 
         private static string[] Topics(InteractionRun run) => run.LastReply.SelectMenu.Options.Select(o => o.Value).ToArray();
 
@@ -43,13 +43,13 @@ namespace Requestarr.Core.Test.Polish
         public async Task topics_a_user_cannot_use_are_not_shown()
         {
             await SetAccess(Alice, "tv", "off");
-            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "downloads", "mine", "limits", "plex", "news");
+            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "downloads", "mine", "limits", "plex", "removals", "news");
 
             await Harness.SendAsync(AdminCommand("user mediaserver", Alice).WithOption("service", "plex").WithOption("username", "alice_plex"));
             Topics(await UserHelp(Alice)).Should().NotContain("plex");
 
             await SetAccess(Alice, "movie", "off");
-            Topics(await UserHelp(Alice)).Should().Equal("mine", "limits", "news");
+            Topics(await UserHelp(Alice)).Should().Equal("mine", "limits", "removals", "news");
         }
 
         [Test]

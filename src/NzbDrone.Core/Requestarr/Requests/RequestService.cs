@@ -59,8 +59,20 @@ namespace Requestarr.Core.Requests
     }
 
     // A request outcome with the request it created or joined (for Cancel and the final status line).
+    // Where a series already in Sonarr really stands (anime replies say this, never "available" early).
+    public enum LibraryStanding
+    {
+        Searching,
+        Downloading,
+        PartlyAvailable,
+        Available
+    }
+
     public record RequestResult(bool Success, string Message, Request Request, RequestOutcome Outcome) : ServiceResult(Success, Message)
     {
+        // Replaces the outcome's header on the final card (a series' real state in the library).
+        public string Header { get; init; }
+
         public static RequestResult Refused(string message) => new(false, message, null, RequestOutcome.Refused);
 
         // The title as looked up, for the card on the final status (null when the lookup failed).
@@ -114,6 +126,16 @@ namespace Requestarr.Core.Requests
 
         // The title as the request's instance has it now (null when it can't be looked up).
         Task<MediaLookupResult> ItemForAsync(Request request);
+
+        // A title as an instance has it now, by its TMDB (movie) or TVDB (TV) ID; null when it can't be looked up.
+        Task<MediaLookupResult> LookupItemAsync(BackendInstance instance, ContentType type, int externalId);
+
+        // After a removal: the whole title closes the request as removed; seasons leave the request
+        // (and close it once none are left). Its people get their messages reposted with the note.
+        Task ApplyRemovalAsync(Request request, IReadOnlyCollection<int> seasons, string note);
+
+        // The owner's message edited in place (a removal opened or closed: its Remove button follows).
+        Task RefreshOwnerMessageAsync(Request request);
         List<Request> List(RequestarrUser user, bool all, RequestStatus? status, ContentType? type);
         string OwnerName(Request request);
         string DisplayName(int? userId);
@@ -139,6 +161,7 @@ namespace Requestarr.Core.Requests
         private readonly IAnimeService _anime;
         private readonly IUserIdentityRepository _identities;
         private readonly IRequestFeed _feed;
+        private readonly Removals.IRemovalProposalRepository _removals;
         private readonly NzbDrone.Core.Messaging.Events.IEventAggregator _events;
         private readonly Logger _logger;
 
@@ -156,9 +179,11 @@ namespace Requestarr.Core.Requests
                               IAnimeService anime,
                               IUserIdentityRepository identities,
                               IRequestFeed feed,
+                              Removals.IRemovalProposalRepository removals,
                               NzbDrone.Core.Messaging.Events.IEventAggregator events,
                               Logger logger)
         {
+            _removals = removals;
             _requests = requests;
             _subscribers = subscribers;
             _users = users;
@@ -831,9 +856,17 @@ namespace Requestarr.Core.Requests
         {
             var label = Titles.WithYear(state.Item.Title, state.Item.Year);
 
-            if (state.Item.LibraryId.HasValue || state.Active == null)
+            if (state.Item.LibraryId.HasValue)
             {
-                return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority), null, RequestOutcome.AlreadyAvailable);
+                var standing = await StandingAsync(state);
+                var result = await InLibraryResult(caller, state, standing, $"stays {DiscordText.Label(existing)}");
+
+                return result with { Message = DiscordText.AnimeStaysInLibrary(label, existing, priority, standing) };
+            }
+
+            if (state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeStaysInLibrary(label, existing, priority, LibraryStanding.Available), null, RequestOutcome.AlreadyAvailable);
             }
 
             if (state.CallerOwnsActive)
@@ -888,9 +921,17 @@ namespace Requestarr.Core.Requests
                 await RefreshOrNotify(request, item, DiscordText.AnimeSwitchedNotice(request.Label, language), DiscordText.AnimeSwitchedNote(language), skipUserId: caller.User?.Id);
             }
 
-            if (item.LibraryId.HasValue || state.Active == null)
+            if (item.LibraryId.HasValue)
             {
-                return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language), null, RequestOutcome.AlreadyAvailable);
+                var standing = await StandingAsync(state);
+                var result = await InLibraryResult(caller, state, standing, $"switched it to {DiscordText.Label(language)}");
+
+                return result with { Message = DiscordText.AnimeSwitchedInLibrary(label, language, standing) };
+            }
+
+            if (state.Active == null)
+            {
+                return new RequestResult(true, DiscordText.AnimeSwitchedInLibrary(label, language, LibraryStanding.Available), null, RequestOutcome.AlreadyAvailable);
             }
 
             // Re-read: the loop above changed its language.
@@ -902,6 +943,63 @@ namespace Requestarr.Core.Requests
             }
 
             return new RequestResult(true, DiscordText.AnimeSwitchedFollow(label, language, state.ActiveOwner, active.Id), active, RequestOutcome.Following);
+        }
+
+        // A series in Sonarr: its open request's state when there is one, otherwise the episodes on disk.
+        private async Task<LibraryStanding> StandingAsync(TitleState state)
+        {
+            var active = state.Active == null ? null : _requests.Find(state.Active.Id);
+
+            if (active?.Status == RequestStatus.Available)
+            {
+                return LibraryStanding.Available;
+            }
+
+            if (active?.Status == RequestStatus.Approved)
+            {
+                return active.Progress is DownloadProgress.Downloading or DownloadProgress.Stalled ? LibraryStanding.Downloading
+                    : active.AvailableSeasons?.Any() == true ? LibraryStanding.PartlyAvailable
+                    : LibraryStanding.Searching;
+            }
+
+            try
+            {
+                var episodes = await _sonarr.GetEpisodesAsync(state.Instance.Settings, state.Item.LibraryId.Value);
+                var aired = episodes?.Where(e => e.SeasonNumber > 0 && e.AirDateUtc <= Clock()).ToList();
+
+                if (aired == null || aired.Count == 0)
+                {
+                    return aired == null ? LibraryStanding.Available : LibraryStanding.Searching;
+                }
+
+                var withFiles = aired.Count(e => e.HasFile);
+                return withFiles == 0 ? LibraryStanding.Searching : withFiles < aired.Count ? LibraryStanding.PartlyAvailable : LibraryStanding.Available;
+            }
+            catch (BackendException ex)
+            {
+                _logger.Debug(ex, "Episodes of {0} could not be read", state.Item.Title);
+                return LibraryStanding.Available;
+            }
+        }
+
+        // The reply for a series already in Sonarr: "available" only when it is; while it is still on
+        // its way, the switcher follows the open request (or it's theirs).
+        private async Task<RequestResult> InLibraryResult(RequestCaller caller, TitleState state, LibraryStanding standing, string why)
+        {
+            var header = DiscordText.StandingHeader(standing);
+
+            if (standing == LibraryStanding.Available || state.Active == null)
+            {
+                return new RequestResult(true, null, null, standing == LibraryStanding.Available ? RequestOutcome.AlreadyAvailable : RequestOutcome.Sent) { Header = header };
+            }
+
+            if (!state.CallerOwnsActive && !state.CallerFollows && caller.User != null)
+            {
+                await Subscribe(state.Active, caller.User.Id, state.Item);
+                _audit.Record(caller.Actor, "request.subscribe", "request", state.Active.Id.ToString(), why);
+            }
+
+            return new RequestResult(true, null, _requests.Find(state.Active.Id), state.CallerOwnsActive ? RequestOutcome.Sent : RequestOutcome.Following) { Header = header };
         }
 
         public void AttachMessage(int requestId, ulong channelId, ulong messageId)
@@ -925,12 +1023,97 @@ namespace Requestarr.Core.Requests
 
         public Task<MediaLookupResult> ItemForAsync(Request request) => TryLookup(_backends.Find(request.BackendId ?? 0), request);
 
+        public async Task<MediaLookupResult> LookupItemAsync(BackendInstance instance, ContentType type, int externalId)
+        {
+            try
+            {
+                var item = await Lookup(instance, type, externalId);
+
+                if (item != null)
+                {
+                    await _metadata.EnrichAsync(type, new[] { item });
+                }
+
+                return item;
+            }
+            catch (BackendException)
+            {
+                return null;
+            }
+        }
+
+        public async Task ApplyRemovalAsync(Request request, IReadOnlyCollection<int> seasons, string note)
+        {
+            if (seasons == null || seasons.Count == 0)
+            {
+                request.Status = RequestStatus.Removed;
+            }
+            else
+            {
+                request.Seasons = request.Seasons.Except(seasons).ToList();
+                request.AvailableSeasons = (request.AvailableSeasons ?? new List<int>()).Except(seasons).ToList();
+
+                if (request.Seasons.Count == 0 && !request.MonitorFutureSeasons)
+                {
+                    request.Status = RequestStatus.Removed;
+                }
+            }
+
+            _requests.Update(request);
+            _audit.Record(Actor.System, "request.removed", "request", request.Id.ToString(), seasons?.Any() == true ? $"seasons {string.Join(", ", seasons)}" : "whole title");
+            await RefreshMessagesAsync(request, null, ownerRepost: true, note);
+        }
+
+        public async Task RefreshOwnerMessageAsync(Request request)
+        {
+            if (!ulong.TryParse(request.MessageChannelId, out var channel) || !ulong.TryParse(request.MessageId, out var message))
+            {
+                return;
+            }
+
+            try
+            {
+                var reply = RequestCards.Status(request, null, _backends.Find(request.BackendId ?? 0)?.Name, Mention(request.OwnerUserId), null, null);
+                await _gateway.EditMessageAsync(channel, message, WithRemoval(reply, request));
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Request {0}: its message could not be edited", request.Id);
+            }
+        }
+
+        // The owner's request message: Remove… on a downloaded title with no removal open; a line
+        // while one is (the vote itself is in their channel).
+        private InteractionReply WithRemoval(InteractionReply reply, Request request)
+        {
+            var open = _removals.ForRequest(request.Id).FirstOrDefault(p => p.IsOpen);
+
+            if (open != null)
+            {
+                return new InteractionReply
+                {
+                    Content = DiscordLimits.Truncate($"{reply.Content}\n{DiscordText.FeedRemovalLine(open, 0, OwnerName(request)).Split(" · ")[0]}", DiscordLimits.MessageLength),
+                    Embeds = reply.Embeds,
+                    KeepEmbeds = reply.KeepEmbeds,
+                    Buttons = reply.Buttons
+                };
+            }
+
+            if (RequestCards.Downloaded(request))
+            {
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{Removals.RemovalRoutes.User}:{request.Id}", Label = DiscordText.RemoveRequestLabel, Style = ButtonStyle.Secondary });
+            }
+
+            return reply;
+        }
+
         private async Task<InteractionReply> StatusReplyAsync(Request request, MediaLookupResult item, string mention, string note, string followerOf)
         {
             var instance = _backends.Find(request.BackendId ?? 0);
             item ??= await TryLookup(instance, request);
+            var reply = RequestCards.Status(request, item, instance?.Name, mention, note, followerOf);
 
-            return RequestCards.Status(request, item, instance?.Name, mention, note, followerOf);
+            return followerOf == null ? WithRemoval(reply, request) : reply;
         }
 
         public async Task<ServiceResult> CancelAsync(RequestCaller caller, int requestId)
@@ -1096,7 +1279,7 @@ namespace Requestarr.Core.Requests
             {
                 try
                 {
-                    var reply = RequestCards.Status(request, item, instance?.Name, ownerRepost ? Mention(request.OwnerUserId) : null, note, null);
+                    var reply = WithRemoval(RequestCards.Status(request, item, instance?.Name, ownerRepost ? Mention(request.OwnerUserId) : null, note, null), request);
 
                     if (ownerRepost)
                     {

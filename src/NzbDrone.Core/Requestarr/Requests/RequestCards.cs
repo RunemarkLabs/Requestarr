@@ -378,7 +378,7 @@ namespace Requestarr.Core.Requests
                 _ => (DiscordText.FinalRefused, RefusedColor)
             };
 
-            var lines = new List<string> { $"{status}{DiscordText.Dot}{result.Message}" };
+            var lines = new List<string> { $"{result.Header ?? status}{DiscordText.Dot}{result.Message}" };
 
             if (type == ContentType.Tv && seasonsText != null && (result.Outcome == RequestOutcome.Sent || result.Outcome == RequestOutcome.Pending))
             {
@@ -430,6 +430,7 @@ namespace Requestarr.Core.Requests
                 RequestStatus.Available when request.Progress == DownloadProgress.Imported => (DiscordText.FinalReady, SentColor, DiscordText.RequestReadyStatus(request)),
                 RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id)),
                 RequestStatus.Denied => (DiscordText.FinalDenied, RefusedColor, DiscordText.RequestDeniedStatus(request.Label, request.Id, request.DecisionReason)),
+                RequestStatus.Removed => (DiscordText.FinalRemoved, CancelledColor, DiscordText.RequestRemovedStatus(request)),
                 RequestStatus.Cancelled => (DiscordText.FinalCancelled, CancelledColor, request.DecidedByUserId.HasValue
                     ? DiscordText.RequestCancelledByAdmin(request.Label, request.Id, request.DecisionReason)
                     : DiscordText.RequestCancelled(request.Label, request.Id)),
@@ -488,10 +489,16 @@ namespace Requestarr.Core.Requests
         public static InteractionButton AddSeasonsButton(int requestId) =>
             new() { CustomId = $"{RequestRoutes.AddSeasons}:{requestId}", Label = DiscordText.AddSeasonsLabel, Style = ButtonStyle.Secondary };
 
-        // The admin feed card: small, one per request, only the buttons valid now.
-        public static InteractionReply FeedCard(Request request, MediaLookupResult item, string owner, string instance, IReadOnlyCollection<string> followers)
+        // The admin feed card: small, one per request, only the buttons valid now. removal: the request's
+        // open (or latest) removal, shown at every step.
+        public static InteractionReply FeedCard(Request request, MediaLookupResult item, string owner, string instance, IReadOnlyCollection<string> followers, Removals.RemovalProposal removal = null, int keeps = 0)
         {
             var lines = new List<string> { DiscordText.FeedState(request), DiscordText.FeedMeta(request, owner, instance) };
+
+            if (removal != null)
+            {
+                lines.Add(DiscordText.FeedRemovalLine(removal, keeps, owner));
+            }
 
             if (request.ContentType == ContentType.Tv)
             {
@@ -544,6 +551,54 @@ namespace Requestarr.Core.Requests
             if (request.ContentType == ContentType.Tv && request.IsActive)
             {
                 reply.Buttons.Add(AddSeasonsButton(request.Id));
+            }
+
+            // Removal: Force or drop one that's open; Delete starts one for a downloaded title.
+            if (removal?.IsOpen == true)
+            {
+                reply.Buttons.AddRange(RemovalButtons(removal));
+            }
+            else if (Downloaded(request))
+            {
+                reply.Buttons.Add(new InteractionButton { CustomId = $"{Removals.RemovalRoutes.Feed}:{request.Id}", Label = DiscordText.DeleteLabel, Style = ButtonStyle.Danger });
+            }
+
+            return reply;
+        }
+
+        // Something of it is in the library (all of it, or some seasons).
+        public static bool Downloaded(Request request) =>
+            request.ExternalItemId.HasValue && (request.Status == RequestStatus.Available || (request.Status == RequestStatus.Approved && request.AvailableSeasons?.Any() == true));
+
+        public static List<InteractionButton> RemovalButtons(Removals.RemovalProposal removal) => new()
+        {
+            new() { CustomId = $"{Removals.RemovalRoutes.Force}:{removal.Id}", Label = DiscordText.ForceRemovalLabel, Style = ButtonStyle.Danger },
+            new() { CustomId = $"{Removals.RemovalRoutes.Drop}:{removal.Id}", Label = DiscordText.DropRemovalLabel, Style = ButtonStyle.Secondary }
+        };
+
+        // A removal of a title nobody requested through Requestarr: its own feed card.
+        public static InteractionReply RemovalFeedCard(Removals.RemovalProposal removal, string instance, int keeps)
+        {
+            var lines = new List<string> { DiscordText.FeedRemovalLine(removal, keeps, null), DiscordText.RemovalFeedMeta(removal, instance) };
+            var reply = new InteractionReply
+            {
+                Embeds = new List<InteractionEmbed>
+                {
+                    new()
+                    {
+                        Title = removal.Label,
+                        Description = DiscordLimits.Truncate(string.Join("\n", lines), 1000),
+                        ThumbnailUrl = removal.PosterUrl,
+                        ImageUrl = DiscordText.FeedCardWidthUrl,
+                        Color = removal.IsOpen ? PendingColor : CancelledColor,
+                        Footer = DiscordText.RemovalFeedFooter(removal)
+                    }
+                }
+            };
+
+            if (removal.IsOpen)
+            {
+                reply.Buttons.AddRange(RemovalButtons(removal));
             }
 
             return reply;

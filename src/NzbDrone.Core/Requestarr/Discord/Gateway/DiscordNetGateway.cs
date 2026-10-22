@@ -156,12 +156,21 @@ namespace Requestarr.Core.Discord.Gateway
                 throw new InvalidOperationException($"Channel {channelId} is not a text channel");
             }
 
-            var sent = await channel.SendMessageAsync(DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength),
-                embeds: DiscordNetResponder.Embeds(message),
-                components: DiscordNetResponder.Components(message),
-                allowedMentions: new AllowedMentions(AllowedMentionTypes.Users));
+            var files = DiscordNetResponder.Files(message);
 
-            return sent.Id;
+            try
+            {
+                var text = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                var sent = files.Count == 0
+                    ? await channel.SendMessageAsync(text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users))
+                    : await channel.SendFilesAsync(files, text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users));
+
+                return sent.Id;
+            }
+            finally
+            {
+                files.ForEach(f => f.Dispose());
+            }
         }
 
         public async Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message)
@@ -172,17 +181,29 @@ namespace Requestarr.Core.Discord.Gateway
                 return false;
             }
 
-            await existing.ModifyAsync(m =>
+            var files = message.KeepEmbeds ? new List<FileAttachment>() : DiscordNetResponder.Files(message);
+
+            try
             {
-                m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
-
-                if (!message.KeepEmbeds)
+                await existing.ModifyAsync(m =>
                 {
-                    m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
-                }
+                    m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
 
-                m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
-            });
+                    if (!message.KeepEmbeds)
+                    {
+                        m.Embeds = DiscordNetResponder.Embeds(message) ?? Array.Empty<Embed>();
+
+                        // The files the new embeds point to, replacing any earlier ones.
+                        m.Attachments = files;
+                    }
+
+                    m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
+                });
+            }
+            finally
+            {
+                files.ForEach(f => f.Dispose());
+            }
 
             return true;
         }
