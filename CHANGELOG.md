@@ -4,6 +4,11 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.2.4
+
+### Internal
+- Fixed in QA: when the dev stack's test Sonarr or Radarr isn't running, `fake-download` now says to start it with `-Stack dev`.
+
 ## 0.2.3
 
 ### Internal
