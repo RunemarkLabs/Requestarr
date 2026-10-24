@@ -9,13 +9,13 @@ Code workspace.
 
 ## Conventions
 
-- Branches: every pull request targets `dev` (merged after the `build` check); `qa` moves only when the owner says "promote to QA" (`./release.sh promote-qa`); a fix found in QA is a pull request into `qa`, merged back into `dev` in the same task (`./release.sh merge-back`), and `./release.sh drift` must pass. `main` is production and is left alone until `staging` exists. Never push to `dev`, `qa` or `main` directly; the one exception is the fast-forward of `qa` that `promote-qa` makes while its pull request is open and green, which GitHub records as merging that pull request. Details: `docs/development.md#release-flow`.
+- Branches: every pull request targets `dev` (merged after the `build` check); `qa` moves only when the owner says "promote to QA" (`./release.sh promote-qa`), `staging` only on "QA passed" (`./release.sh promote-staging`, after the full suite and every live check), `main` only on "ship it". A fix found in QA or staging is a pull request into that branch, merged back down in the same task (`./release.sh merge-back`), and `./release.sh drift` must pass. Never push to `dev`, `qa`, `staging` or `main` directly; the one exception is the fast-forward a promotion makes while its pull request is open and green, which GitHub records as merging that pull request. A push to `staging` publishes the image (`ghcr.io/runemarklabs/requestarr:staging`). Details: `docs/development.md#release-flow`.
 - Stacks: automated and live testing use only the dev stack and the dev Discord server (`.\docker\dev.ps1 -Stack dev ...`, `reset-dev`, `DEV_DISCORD_*`, `LiveDev` in tests). The QA stack and the QA server (the default, `reset-qa`) are the owner's manual QA: touch them only to run `qa` after a promotion or a QA fix.
-- Branch naming: one branch per task, named after the task slug, from `dev` (from `qa` for a QA fix).
+- Branch naming: one branch per task, named after the task slug, from `dev` (from `qa` or `staging` for a fix there).
 - Commit style: ...
 - Test expectations: ...
 - Namespaces: copied Servarr foundation keeps `NzbDrone.*`; all new code is `Requestarr.*`.
-- Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z` section at the top of `CHANGELOG.md` with **For users** (plain words, only what members notice; posted to them verbatim on upgrade), **For admins** and **Internal**. CI's Changelog job and a unit test enforce it. Details: `docs/development.md#changelog`.
+- Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z` section at the top of `CHANGELOG.md` with only **For users** and **For admins**, in plain words with a bold lead per line, no code-style text, no placeholders, empty sections left out (work neither sees is not listed). Requestarr posts it in Discord as a lasting record. CI's Changelog job (`.github/changelog_check.py`) and a unit test enforce it. Details: `docs/development.md#changelog`.
 
 ## Gotchas
 

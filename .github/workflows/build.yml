@@ -129,8 +129,9 @@ jobs:
           echo "Scanning commits $range"
           docker run --rm -v "$PWD:/repo" --entrypoint sh "$GITLEAKS" -c             "git config --global --add safe.directory /repo && gitleaks git /repo --log-opts='$range' --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --no-banner --redact --verbose"
 
-  # Every pull request records its changes in CHANGELOG.md under a new, higher version (docs/development.md#changelog).
-  # Into dev or qa, the version must also be free on the other branch (release.sh check-changelog).
+  # Every pull request records its changes in CHANGELOG.md under a new, higher version, written to the changelog rule
+  # (docs/development.md#changelog; .github/changelog_check.py says what it checks). Into dev, qa or staging, the
+  # version must also be free on the other two (release.sh check-changelog).
   changelog:
     name: Changelog
     runs-on: ubuntu-latest
@@ -139,21 +140,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: CHANGELOG.md has a new version for this change
+      - name: Checker self-test (every rule must catch its sample)
+        run: python3 .github/changelog_check.py --self-test
+      - name: CHANGELOG.md has a new version for this change, written to the rule
         env:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then
-            echo "Not a pull request: nothing to check."
+            python3 .github/changelog_check.py CHANGELOG.md
             exit 0
           fi
-          ./release.sh check-changelog "$BASE_SHA" HEAD "$BASE_REF" "$HEAD_SHA"
+          ./release.sh check-changelog "$BASE_SHA" HEAD "$BASE_REF" "$HEAD_SHA" "$HEAD_REF"
 
-  # A promotion into qa (dev's commits) happens only on the owner's word, and the pull request records it
-  # (docs/development.md#release-flow).
+  # A promotion into qa (dev's commits) or staging (qa's commits) happens only on the owner's word, and the pull
+  # request records it (docs/development.md#release-flow).
   promotion:
     name: Promotion record
     runs-on: ubuntu-latest
@@ -169,21 +173,25 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [ "$EVENT" != "pull_request" ] || [ "$BASE_REF" != "qa" ]; then
-            echo "Not a pull request into qa: nothing to check."
-            exit 0
-          fi
-          if ! git merge-base --is-ancestor "$HEAD_SHA" origin/dev; then
-            echo "A fix into qa, not a promotion: nothing to check."
+          case "$EVENT:$BASE_REF" in
+            pull_request:qa) below=dev ;;
+            pull_request:staging) below=qa ;;
+            *)
+              echo "Not a pull request into qa or staging: nothing to check."
+              exit 0
+              ;;
+          esac
+          if ! git merge-base --is-ancestor "$HEAD_SHA" "origin/$below"; then
+            echo "A fix into $BASE_REF, not a promotion: nothing to check."
             exit 0
           fi
           if ! printf '%s\n' "$BODY" | grep -qE '^Requested by: .+'; then
-            echo "::error::A promotion to QA needs a 'Requested by:' line naming who asked and their words (./release.sh promote-qa writes it)."
+            echo "::error::A promotion to $BASE_REF needs a 'Requested by:' line naming who asked and their words (./release.sh promote-$BASE_REF writes it)."
             exit 1
           fi
           printf '%s\n' "$BODY" | grep -m1 -E '^Requested by: '
 
-  # Single status for the dev, qa and main branch rules to require.
+  # Single status for the dev, qa, staging and main branch rules to require.
   build:
     name: build
     if: always()
