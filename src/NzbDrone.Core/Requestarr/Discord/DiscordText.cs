@@ -822,7 +822,7 @@ namespace Requestarr.Core.Discord
         // Dev stack only (docker/dev.ps1 fast-votes): posted in the admin channel when it changes.
         public static string FastVotesOn(TimeSpan vote, TimeSpan timeout, TimeSpan reminder, int voteDays, int timeoutDays, int reminderDay) =>
             $"🧪 **Dev: fast votes are on.** Removal votes now close after {Duration(vote)}, and requesters have {Duration(timeout)} to answer (reminded after {Duration(reminder)}). " +
-            $"These are test timings for the dev stack, not the real settings ({voteDays} days, {timeoutDays} days, reminder on day {reminderDay}). Removals already open keep their times. `.\\docker\\dev.ps1 fast-votes off` turns it off.";
+            $"These are test timings for this local test stack, not the real settings ({voteDays} days, {timeoutDays} days, reminder on day {reminderDay}). Removals already open keep their times. `.\\docker\\dev.ps1 fast-votes off` turns it off.";
 
         public static string FastVotesOff(int voteDays, int timeoutDays, int reminderDay) =>
             $"🧪 **Dev: fast votes are off.** Removal timings are back to the real settings: votes {voteDays} days, requesters {timeoutDays} days, reminder on day {reminderDay}.";

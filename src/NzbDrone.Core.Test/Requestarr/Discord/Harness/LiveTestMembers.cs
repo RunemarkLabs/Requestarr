@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace Requestarr.Core.Test.Discord.Harness
 {
     // Live fixtures only ever onboard, suspend or request as the Discord members named in
-    // DISCORD_TEST_MEMBERS (comma-separated usernames, set where the live tests are run, not in the repo).
-    // Everyone else in the test server is left alone.
+    // DISCORD_TEST_MEMBERS (comma-separated usernames, set where the live tests are run, not in the repo)
+    // who are in the dev server (LiveDev). Everyone else is left alone.
     public static class LiveTestMembers
     {
         public const string Variable = "DISCORD_TEST_MEMBERS";

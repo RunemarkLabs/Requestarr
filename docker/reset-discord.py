@@ -1,11 +1,12 @@
-"""Remove everything Requestarr created in the Discord test server, for a clean UAT start.
+"""Remove everything Requestarr created in one local stack's Discord server, for a clean start.
 
 Deletes: #requestarr-admin, #requestarr-feed, #requestarr-announcements, the "Requestarr Requests" categories and
 every channel in them (including archived ones), the per-user "requestarr-*" roles and the shared "Requestarr Members" role.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
 
-Reads DISCORD_BOT_TOKEN and DISCORD_TEST_GUILD_ID from the environment. Never prints the token.
-Run through `docker/dev.sh reset-uat`.
+Reads STACK_DISCORD_BOT_TOKEN and STACK_DISCORD_GUILD_ID from the environment: the chosen stack's own bot and
+server (QA: DISCORD_*, dev: DEV_DISCORD_* in docker/secrets.env). Never prints the token.
+Run through `dev.ps1 reset-qa` / `reset-dev` (or dev.sh).
 """
 import json
 import os
@@ -23,7 +24,7 @@ MEMBERS_ROLE = "Requestarr Members"
 
 def call(method, path):
     request = urllib.request.Request(API + path, method=method, headers={
-        "Authorization": "Bot " + os.environ["DISCORD_BOT_TOKEN"],
+        "Authorization": "Bot " + os.environ["STACK_DISCORD_BOT_TOKEN"],
         "User-Agent": "DiscordBot (https://github.com/RunemarkLabs/Requestarr, 1.0)",
     })
     while True:
@@ -39,9 +40,11 @@ def call(method, path):
 
 
 def main():
-    guild = os.environ.get("DISCORD_TEST_GUILD_ID")
-    if not os.environ.get("DISCORD_BOT_TOKEN") or not guild:
-        raise SystemExit("DISCORD_BOT_TOKEN and DISCORD_TEST_GUILD_ID must be set in docker/secrets.env")
+    guild = os.environ.get("STACK_DISCORD_GUILD_ID")
+    if not os.environ.get("STACK_DISCORD_BOT_TOKEN") or not guild:
+        raise SystemExit("this stack's bot token and server ID must be set in docker/secrets.env (QA: DISCORD_*, dev: DEV_DISCORD_*)")
+    server = call("GET", f"/guilds/{guild}")
+    print(f"cleaning the Discord server '{server['name']}'")
 
     channels = call("GET", f"/guilds/{guild}/channels")
     categories = {c["id"] for c in channels if c["type"] == 4 and c["name"].startswith(CATEGORY)}

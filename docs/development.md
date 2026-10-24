@@ -30,7 +30,7 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 
 ## Continuous integration
 
-`.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `main`, which accepts changes only through a pull request with this check passing.
+`.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `dev`, `qa` and `main`, which accept changes only through a pull request with this check passing (see [Release flow](#release-flow)).
 
 | Job | Runs |
 |---|---|
@@ -38,7 +38,10 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 | Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
 | Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
 | Docker image | full `docker/Dockerfile` build (not pushed) |
-| Changelog | pull requests only: `CHANGELOG.md` changed and its top version is higher than the base branch's (see [Changelog](#changelog)) |
+| Changelog | pull requests only: `CHANGELOG.md` changed and its top version is higher than the base branch's; into `dev` or `qa`, also free on the other one (see [Changelog](#changelog)) |
+| Promotion record | pull requests that promote `dev`'s commits into `qa` only: the description has a `Requested by:` line (see [Release flow](#release-flow)) |
+
+`.github/workflows/drift.yml` runs on every push to `dev` or `qa`, daily, and by hand (Actions → Drift → Run workflow, with any two branches): it fails while `qa` has a commit `dev` doesn't. It isn't a required check, because a fix merged into `qa` is drift until it is merged back, in the same task.
 
 Not run in CI:
 
@@ -71,19 +74,74 @@ Not run in CI:
    - **For admins**: anything an admin sees or sets up.
    - **Internal**: everything else (tests, build, refactoring). Admins see it; users never do.
 
-The checks: the `Changelog` job in CI fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than `main`'s, and a unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+The checks: the `Changelog` job in CI (`./release.sh check-changelog`) fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev` or `qa`, the version must also be higher than the other branch's, unless the pull request already contains that branch (a merge-back), so `dev` and a fix made in QA never use the same number. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+
+Each server announces the versions it receives: Requestarr remembers which versions it has announced, not just the highest, so the `dev` versions a QA fix's number skipped over are announced on the QA server when they arrive with the next promotion.
+
+## Release flow
+
+Four branches, each with its own environment. `staging` comes later; until it exists, `main` is left alone.
+
+| Branch | What it's for | Where it runs |
+|---|---|---|
+| `dev` | Every pull request merges here once the `build` check passes. Claude Code's automated and live testing. | The dev stack, on the dev Discord server and bot (`DEV_DISCORD_*`). |
+| `qa` | The owner's manual QA of a version picked from `dev`. Moves only on the owner's word. | The QA stack, on the QA Discord server and bot (`DISCORD_*`). Never touched by automated testing. |
+| `staging` | Early access testers (planned). | Its own server and bot. |
+| `main` | Production: the default branch; only promoted, released code. | |
+
+All three existing branches have the same rules on GitHub: a pull request is required, `build` must pass, no force push, no deletion.
+
+**A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Bump the version above both `dev`'s and `qa`'s (the Changelog check says so if it isn't).
+
+**Promote to QA** (only when the owner says "promote to QA", or names a version):
+
+```bash
+./release.sh promote-qa 0.2.3 'the owner: "promote 0.2.3 to QA"'
+```
+
+It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`; on start, the QA bot announces the new versions in its server. Work on `dev` carries on meanwhile.
+
+**A fix found in QA.** Branch from `qa` and open a pull request into `qa` with only the fix, versioned above both `dev` and `qa`. After it merges, in the same task, merge `qa` back into `dev`:
+
+```bash
+./release.sh merge-back
+```
+
+It opens a pull request from `qa` into `dev` and merges it once `build` passes. If they conflict (usually `CHANGELOG.md` and the version, when `dev` has moved on), it says how: on a branch from `dev`, merge `origin/qa`, keep every changelog section with the highest version on top, and keep the higher version. Then `.\docker\dev.ps1 up` updates the QA stack to the fix, keeping its data.
+
+**Drift.** `dev` must always contain every commit on `qa`:
+
+```bash
+./release.sh drift                      # origin/dev and origin/qa
+./release.sh drift origin/dev some-branch
+```
+
+It lists any commit on `qa` that `dev` doesn't have and fails; the Drift workflow runs the same check on GitHub. A promotion refuses to run while there is drift.
 
 ## Docker stack
 
-One command builds Requestarr, starts it with dedicated Sonarr and Radarr test instances, waits for every health check, and runs the checks. On Windows, from a normal PowerShell tab in the repo folder:
+Two local stacks run side by side, each with its own Requestarr and dedicated Sonarr and Radarr test instances:
+
+| Stack | Runs | Discord | Who uses it |
+|---|---|---|---|
+| **QA** (the default) | the `qa` branch | the QA server and bot: `DISCORD_*` in `docker/secrets.env` | the owner's manual QA |
+| **dev** (`-Stack dev`) | the `dev` branch | the dev server and bot: `DEV_DISCORD_*` | Claude Code's automated and live testing |
+
+One command builds Requestarr from the stack's branch, starts it, waits for every health check, and runs the checks. On Windows, from a normal PowerShell tab in the repo folder:
 
 ```powershell
-.\docker\dev.ps1 up
+.\docker\dev.ps1 up               # the QA stack, from qa
+.\docker\dev.ps1 -Stack dev up    # the dev stack, from dev
+.\docker\dev.ps1 stacks           # both, side by side
 ```
 
-With Git Bash, Linux or macOS, `docker/dev.sh up` does the same. Both scripts have the same commands; the examples below use `dev.ps1`.
+With Git Bash, Linux or macOS, `docker/dev.sh up` does the same (`--stack dev` for the dev stack). Both scripts have the same commands; the examples below use `dev.ps1`, and every command acts on the QA stack unless you add `-Stack dev`.
 
-**What it needs.** Docker Desktop, running. Python 3 for `reset-uat` and `fake-download` (from https://www.python.org/downloads/, with "Add python.exe to PATH" ticked); `dev.ps1` checks for both and says what's missing. Don't run `dev.sh` by typing `bash` in PowerShell: that can start WSL's bash, which may not reach Docker Desktop or Python the same way. Use `dev.ps1`, or Git Bash.
+The image is built from the branch as it is on GitHub (`origin/qa` or `origin/dev`, fetched first), from committed files only, so a stack runs exactly that commit whatever is checked out or changed locally. `--ref <branch or commit>` builds another one (for trying a branch before it merges). `check` and `stacks` show which branch and commit each stack was built from.
+
+**How they keep apart.** Each stack is its own Compose project (`requestarr-qa`, `requestarr-dev`), so container names, volumes and the network are separate. Each has its own image (`requestarr:qa`, `requestarr:dev`) and its own ports, and its Requestarr gets only its own bot's token and server: the compose file passes nothing else from `docker/secrets.env`.
+
+**What it needs.** Docker Desktop, running, and Git. Python 3 for `check`'s Discord lines, the resets and `fake-download` (from https://www.python.org/downloads/, with "Add python.exe to PATH" ticked); `dev.ps1` checks for both and says what's missing. Don't run `dev.sh` by typing `bash` in PowerShell: that can start WSL's bash, which may not reach Docker Desktop or Python the same way. Use `dev.ps1`, or Git Bash.
 
 **If PowerShell says running scripts is disabled.** That message comes from PowerShell before the script starts. Run this once, then `dev.ps1` works in every new tab:
 
@@ -93,24 +151,26 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 If you can't change the policy, `.\docker\dev.cmd` takes the same commands and runs `dev.ps1` for that one run whatever the policy is.
 
-| Service | URL (localhost only) | Notes |
-|---|---|---|
-| Requestarr | http://localhost:9797 | provisioned from `docker/provisioning.yml` |
-| Sonarr (test) | http://localhost:18989 | root folder `/data/tv`, no login (localhost-bound) |
-| Radarr (test) | http://localhost:17878 | root folder `/data/movies`, no login (localhost-bound) |
+| Service | QA stack (localhost only) | Dev stack (localhost only) | Notes |
+|---|---|---|---|
+| Requestarr | http://localhost:9797 | http://localhost:19797 | provisioned from `docker/provisioning.yml` |
+| Sonarr (test) | http://localhost:18989 | http://localhost:28989 | root folder `/data/tv`, no login (localhost-bound) |
+| Radarr (test) | http://localhost:17878 | http://localhost:27878 | root folder `/data/movies`, no login (localhost-bound) |
 
 Other commands:
 
-- `check`: health and status checks, including whether dev fast votes are on.
-- `reset-test-backends`: wipes the test Sonarr and Radarr back to empty and reconfigures them.
-- `reset-uat`: a clean slate for testing a change. It deletes Requestarr's channels, categories, the members role and per-user roles in the Discord test server. It keeps the bot's role, the Requestarr Admin role and everything else. It also wipes the Requestarr database and the test backends, then starts Requestarr again. The bot recreates `#requestarr-admin` and its pinned panel, so the server is ready for testing. Fast votes are always off after it. Add `--stopped` to leave Requestarr stopped, for the live Discord test.
+- `check`: health and status checks: which branch and commit the stack runs, Requestarr, whether fast votes are on, its Discord bot (online, which server, registered commands, the latest what's new posts; read only), and the test backends.
+- `stacks`: both stacks side by side: branch and commit, version, address, and whether each bot is online.
+- `reset-test-backends`: wipes the stack's test Sonarr and Radarr back to empty and reconfigures them.
+- `reset-qa`: a clean slate for QA. It deletes Requestarr's channels, categories, the members role and per-user roles in the QA Discord server. It keeps the bot's role, the Requestarr Admin role and everything else. It also wipes the QA stack's Requestarr database and test backends, then starts Requestarr again from `qa`. The bot recreates `#requestarr-admin` and its pinned panel, so the server is ready for testing. Fast votes are always off after it. Add `--stopped` to leave Requestarr stopped. The old name, `reset-uat`, still works.
+- `reset-dev`: the same for the dev stack and the dev server. Live tests run after `reset-dev --stopped`, and `reset-dev` afterwards brings the dev stack back.
 - `down`: stops the stack; data is kept. `up` starts it again.
 - `logs requestarr`: follows the Requestarr logs (Ctrl+C to stop).
 - `init`: creates `docker/secrets.env` (see Secrets below); `up` runs it.
 
 ### Helpers for testing by hand
 
-The test Sonarr and Radarr have no indexer or download client, so nothing ever downloads, and removal votes take days. These helpers reach those states by hand. They only ever touch the dev stack's own containers (Compose project `requestarr-dev`).
+The test Sonarr and Radarr have no indexer or download client, so nothing ever downloads, and removal votes take days. These helpers reach those states by hand. They only ever touch the chosen stack's own containers (Compose project `requestarr-qa`, or `requestarr-dev` with `-Stack dev`).
 
 | Command | What it does | What to expect in Discord |
 |---|---|---|
@@ -118,16 +178,16 @@ The test Sonarr and Radarr have no indexer or download client, so nothing ever d
 | `start-backend sonarr` (or `radarr`) | Starts it again. | Within a minute, "… is back after N minutes" in `#requestarr-admin` (if it had alerted), and requests work again. |
 | `fake-download movie "Dune"` | Makes a movie that is already in the test Radarr look downloaded: a placeholder file (it takes no disk space) is handed to Radarr's own Manual Import, owned by its app user, exactly as a real download is imported. Radarr then sends its normal import webhook to Requestarr (the backup poll would find it too). Request the title in Discord first. | The request message is reposted as **Available**, mentioning the requester and followers; its feed card moves to the bottom showing Available, with **Delete**. |
 | `fake-download tv "Severance" 1` | The same for every aired episode of that season in the test Sonarr. | **Partly available** while other requested seasons are missing; **Available** once every requested season is there. |
-| `fast-votes on` | Dev only: new removal votes close after **5 minutes**, requesters have **5 minutes** to answer, reminded at **minute 3** (instead of 7 days, 7 days and day 5). Removals already open keep their times. | Within a minute, a **🧪 Dev: fast votes are on** notice in `#requestarr-admin`, naming the real settings, so nobody takes the minute timings for them. |
+| `fast-votes on` | Local test stacks only: new removal votes close after **5 minutes**, requesters have **5 minutes** to answer, reminded at **minute 3** (instead of 7 days, 7 days and day 5). Removals already open keep their times. | Within a minute, a **🧪 Dev: fast votes are on** notice in `#requestarr-admin`, naming the real settings, so nobody takes the minute timings for them. |
 | `fast-votes off` / `fast-votes status` | Back to the real settings / says which is on. | **🧪 Dev: fast votes are off** in `#requestarr-admin`. |
 
-Fast votes can't be on anywhere but the dev stack: they need a marker file in Requestarr's data folder (what `fast-votes on` creates) *and* the `REQUESTARR_DEV_STACK` variable that only `docker/compose.yaml` sets; any other install ignores the file. They stay on across `up`/`down` until you turn them off, and `reset-uat` always starts with them off.
+Fast votes can't be on anywhere but a local test stack: they need a marker file in Requestarr's data folder (what `fast-votes on` creates) *and* the `REQUESTARR_DEV_STACK` variable that only `docker/compose.yaml` sets; any other install ignores the file. They stay on across `up`/`down` until you turn them off, and `reset-qa` and `reset-dev` always start with them off.
 
-Host ports can be changed with `REQUESTARR_PORT`, `SONARR_TEST_PORT`, and `RADARR_TEST_PORT` in `docker/secrets.env`. The stack is its own Compose project (`requestarr-dev`) with its own volumes. It never touches another deployment.
+Host ports can be changed in `docker/secrets.env`: `REQUESTARR_PORT`, `SONARR_TEST_PORT` and `RADARR_TEST_PORT` for the QA stack, the same names starting `DEV_` for the dev stack. Neither stack touches another deployment.
 
 ### Secrets
 
-`init`, which `up` runs, creates `docker/secrets.env` from `docker/secrets.env.example`. It generates random local test keys and leaves Discord and Plex values for you to fill in. `docker/secrets.env` is gitignored. Never commit real values, and never put them in code, docs, or comms.
+`init`, which `up` runs, creates `docker/secrets.env` from `docker/secrets.env.example`. It generates random local test keys and leaves the Discord and Plex values for you to fill in: `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID` and `DISCORD_TEST_GUILD_ID` for the QA server's bot, and `DEV_DISCORD_BOT_TOKEN`, `DEV_DISCORD_APPLICATION_ID` and `DEV_DISCORD_GUILD_ID` for the dev server's bot (a separate bot application, invited only to the dev server). `docker/secrets.env` is gitignored. Never commit real values, and never put them in code, docs, or comms.
 
 ## Provisioning file
 
@@ -157,9 +217,9 @@ await harness.SendAsync(FakeInteraction.Button("request-approve:42").By(adminId)
 
 See `src/NzbDrone.Core.Test/Requestarr/Discord/Harness`. `FakeRadarr` and `FakeSonarr` stand in for the backends in the same scenarios.
 
-Live checks are tagged `ManualTest`, so they never run in CI. They read their keys from `docker/secrets.env`.
+Live checks are tagged `ManualTest`, so they never run in CI. They read their keys from `docker/secrets.env`, and they only ever use the dev environment: the dev Discord server and bot (`DEV_DISCORD_*`) and the dev stack's test Sonarr and Radarr (`LiveDev` in the test harness). Nothing in them reads the QA server's or the QA stack's values, and a unit test keeps it that way, so automated testing never interrupts the owner's QA.
 
-They only ever onboard, suspend or request as the members named in `DISCORD_TEST_MEMBERS` (comma-separated Discord usernames of your test accounts). Everyone else in the test server is left alone, so people who join it to try Requestarr are never touched. Set it in your shell, or in `docker/secrets.env`; with no named member in the server, the checks that need one are skipped. `LiveAnnouncementsFixture` shortens the outage thresholds to 15 and 30 seconds; set `LIVE_REAL_THRESHOLDS=1` to wait the real 3 and 30 minutes.
+They only ever onboard, suspend or request as the members named in `DISCORD_TEST_MEMBERS` (comma-separated Discord usernames of your test accounts) who are in the dev server. Everyone else is left alone. Set it in your shell, or in `docker/secrets.env`; with no named member in the dev server, the checks that need one are skipped. `LiveAnnouncementsFixture` shortens the outage thresholds to 15 and 30 seconds; set `LIVE_REAL_THRESHOLDS=1` to wait the real 3 and 30 minutes.
 
 ```bash
 set -a; . docker/secrets.env; set +a
@@ -167,16 +227,16 @@ export DISCORD_TEST_MEMBERS=yourtestaccount
 cd _tests/net10.0
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveDiscordFixture" --logger "console;verbosity=detailed"
 dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveBackendFixture" --logger "console;verbosity=detailed"
-dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveUatReadBackFixture" --logger "console;verbosity=detailed"
+dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveReadBackFixture" --logger "console;verbosity=detailed"
 ```
 
-For each change, test in this order:
+For each change, test in this order, all on the dev stack:
 
-1. `.\docker\dev.ps1 reset-uat --stopped` (or `docker/dev.sh reset-uat --stopped`)
-2. Run the Discord live check. It needs the dev stack's Requestarr stopped.
-3. Merge, then run `.\docker\dev.ps1 reset-uat` (or `docker/dev.sh reset-uat`) from `main`. The server is clean and has the admin channel and panel.
-4. Run the UAT read-back.
+1. `.\docker\dev.ps1 reset-dev --stopped` (or `docker/dev.sh reset-dev --stopped`)
+2. Run the Discord live check. It runs its own bot, so the dev stack's Requestarr must be stopped.
+3. Merge into `dev`, then run `.\docker\dev.ps1 reset-dev` (or `docker/dev.sh reset-dev`). It runs `dev` on a clean dev server with the admin channel and panel.
+4. Run the read-back.
 
-- **Discord:** checks the admin role, the registered commands, onboarding, permission read-back and the pinned panels in the test server. It then deletes what it created. It never onboards a member who already has a request channel.
-- **UAT read-back:** reads the running stack's registered commands and pinned panels over REST. It changes nothing.
-- **Backends:** requests a movie and a show into the dev stack's test Radarr and Sonarr only, and reads back what they stored. The titles are left there. Automating Discord user accounts is not allowed. End-to-end checks use the bot's real effects in the dedicated test server, plus a short manual pass in the Discord app.
+- **Discord:** checks the admin role, the registered commands, onboarding, permission read-back and the pinned panels in the dev server. It then deletes what it created. It never onboards a member who already has a request channel.
+- **Read-back:** reads the running dev stack's registered commands and pinned panels over REST. It changes nothing.
+- **Backends:** requests a movie and a show into the dev stack's test Radarr and Sonarr only, and reads back what they stored. The titles are left there. Automating Discord user accounts is not allowed. End-to-end checks use the bot's real effects in the dev server, plus a short manual pass in the Discord app.

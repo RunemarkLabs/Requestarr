@@ -4,6 +4,14 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.2.2
+
+### Internal
+- Release flow: pull requests merge to `dev`; `qa` moves only on the owner's word (`./release.sh promote-qa`, a pull request that records who asked, then a fast-forward of `qa`); a fix made in QA is merged back into `dev` (`./release.sh merge-back`), and the Drift workflow fails while `qa` has a commit `dev` doesn't. `dev`, `qa` and `main` all require a pull request with the `build` check, and block force pushes and deletion. Into `dev` or `qa`, a version must be free on both.
+- Two local stacks side by side: QA (the default, the `qa` branch, the QA Discord server) and dev (`-Stack dev`, the `dev` branch, a separate dev Discord server and bot). Each is built from its branch's committed files, with its own Compose project, ports and bot. `check` shows the branch and commit, and the bot's status; `stacks` shows both.
+- `reset-uat` is now `reset-qa` (the old name still works), and `reset-dev` does the same for the dev stack. Every live test uses only the dev server and the dev stack.
+- Each server remembers which versions it has announced, so versions that arrive out of order (the ones a fix made in QA skipped over) are still announced once each.
+
 ## 0.2.1
 
 ### Internal

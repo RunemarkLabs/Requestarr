@@ -26,8 +26,8 @@ namespace Requestarr.Core.Announcements
         // Posts in the announcements channel; null when there is none or Discord refused.
         Task<ulong?> PostAsync(string content);
 
-        // What's new since the last announced version: everything to the admin channel, the user-facing
-        // lines to the announcements channel (nothing to users when there are none). Once per version.
+        // What's new in every version this server hasn't announced yet: everything to the admin channel, the
+        // user-facing lines to the announcements channel (nothing to users when there are none). Once per version.
         Task PostVersionNotesAsync();
     }
 
@@ -134,18 +134,26 @@ namespace Requestarr.Core.Announcements
             }
 
             var current = Changelog.Release(CurrentVersion());
-            var announced = Version.TryParse(config.AnnouncedVersion, out var parsed) ? parsed : null;
-
-            if (announced != null && announced >= current)
-            {
-                return;
-            }
+            var announced = Announced.Parse(config.AnnouncedVersion);
 
             // First start with announcements (a new server, or one upgraded from before them): this version only.
+            // After that, every version this build has that this server hasn't announced yet, oldest first: also
+            // the ones a fix made in QA skipped over (its number is above dev's), once they arrive.
             var versions = Changelog.Parse(ChangelogText())
-                .Where(v => v.Version <= current && (announced == null ? v.Version == current : v.Version > announced))
+                .Where(v => v.Version <= current && (announced.IsEmpty ? v.Version == current : !announced.Contains(v.Version)))
                 .OrderBy(v => v.Version)
                 .ToList();
+
+            if (versions.Count == 0)
+            {
+                if (announced.IsEmpty)
+                {
+                    config.AnnouncedVersion = current.ToString();
+                    _configs.Upsert(config);
+                }
+
+                return;
+            }
 
             try
             {
@@ -176,7 +184,7 @@ namespace Requestarr.Core.Announcements
                 return;
             }
 
-            config.AnnouncedVersion = current.ToString();
+            config.AnnouncedVersion = announced.With(versions.Select(v => v.Version).Append(current)).ToString();
             _configs.Upsert(config);
         }
 

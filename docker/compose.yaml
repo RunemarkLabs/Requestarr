@@ -1,25 +1,40 @@
-# Local development and test stack. Start with:  docker/dev.sh up
-# Everything here is disposable and separate from any production deployment:
-# its own project name, volumes, network, and host ports (bound to localhost).
-name: requestarr-dev
+# Local test stacks. Start with:  .\docker\dev.ps1 up  (PowerShell)  or  docker/dev.sh up
+# One file, two stacks that run side by side: `qa` (the owner's manual QA, the default) and `dev`
+# (Claude Code's automated testing). The scripts pick the stack and set the variables below; each stack
+# is its own Compose project (requestarr-qa, requestarr-dev), so containers, volumes and the network
+# are separate, its ports differ, and it gets only its own Discord bot's values.
+# Everything here is disposable and separate from any production deployment.
+name: requestarr-${REQUESTARR_STACK:?run through docker/dev.ps1 or docker/dev.sh}
 
 services:
   requestarr:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: requestarr:dev
-    env_file: secrets.env
+    # Built by the scripts from the stack's branch (qa or dev), never from uncommitted files.
+    image: requestarr:${REQUESTARR_STACK}
+    pull_policy: never
     environment:
       REQUESTARR_PROVISIONING_FILE: /provisioning/provisioning.yml
       TZ: Etc/UTC
-      # Marks this container as the dev stack: only then can `dev.ps1 fast-votes on` take effect.
+      REQUESTARR_STACK: ${REQUESTARR_STACK}
+      # Shown as the branch in System > Status.
+      REQUESTARR__UPDATE__BRANCH: ${REQUESTARR_STACK}
+      # Marks a local test stack: only then can `dev.ps1 fast-votes on` take effect.
       REQUESTARR_DEV_STACK: "true"
+      REQUESTARR_ADMIN_USERNAME: ${REQUESTARR_ADMIN_USERNAME}
+      REQUESTARR_ADMIN_PASSWORD: ${REQUESTARR_ADMIN_PASSWORD}
+      REQUESTARR_API_KEY: ${REQUESTARR_API_KEY}
+      SONARR_TEST_API_KEY: ${SONARR_TEST_API_KEY}
+      RADARR_TEST_API_KEY: ${RADARR_TEST_API_KEY}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      # This stack's bot and server only (QA: DISCORD_*, dev: DEV_DISCORD_* in secrets.env).
+      DISCORD_BOT_TOKEN: ${STACK_DISCORD_BOT_TOKEN:-}
+      DISCORD_APPLICATION_ID: ${STACK_DISCORD_APPLICATION_ID:-}
+      DISCORD_TEST_GUILD_ID: ${STACK_DISCORD_GUILD_ID:-}
+      DISCORD_ADMIN_ROLE_ID: ${STACK_DISCORD_ADMIN_ROLE_ID:-}
     volumes:
       - requestarr-config:/config
       - ./provisioning.yml:/provisioning/provisioning.yml:ro
     ports:
-      - "127.0.0.1:${REQUESTARR_PORT:-9797}:9797"
+      - "127.0.0.1:${STACK_REQUESTARR_PORT:?run through docker/dev.ps1 or docker/dev.sh}:9797"
     depends_on:
       test-backends-init:
         condition: service_healthy
@@ -41,7 +56,7 @@ services:
       - sonarr-test-config:/config
       - test-media:/data
     ports:
-      - "127.0.0.1:${SONARR_TEST_PORT:-18989}:8989"
+      - "127.0.0.1:${STACK_SONARR_TEST_PORT:?run through docker/dev.ps1 or docker/dev.sh}:8989"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
       interval: 10s
@@ -64,7 +79,7 @@ services:
       - radarr-test-config:/config
       - test-media:/data
     ports:
-      - "127.0.0.1:${RADARR_TEST_PORT:-17878}:7878"
+      - "127.0.0.1:${STACK_RADARR_TEST_PORT:?run through docker/dev.ps1 or docker/dev.sh}:7878"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
       interval: 10s

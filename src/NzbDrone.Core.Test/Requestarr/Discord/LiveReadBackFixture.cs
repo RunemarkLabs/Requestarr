@@ -7,31 +7,32 @@ using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Test.Common.Categories;
 using Requestarr.Core.Discord;
+using Requestarr.Core.Test.Discord.Harness;
 
 namespace Requestarr.Core.Test.Discord
 {
-    // Read-only check of the running UAT stack in the Discord test server: registered commands and pinned panels.
+    // Read-only check of the running dev stack in the dev Discord server: registered commands and pinned panels.
     // REST only (no gateway session), and it never creates, edits or deletes anything.
-    // Never runs in CI (ManualTest). Run with the DISCORD_* variables exported:
-    //   dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveUatReadBackFixture" --logger "console;verbosity=detailed"
+    // Never runs in CI (ManualTest). Run with the DEV_DISCORD_* variables exported:
+    //   dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveReadBackFixture" --logger "console;verbosity=detailed"
     [TestFixture]
     [ManualTest]
-    public class LiveUatReadBackFixture
+    public class LiveReadBackFixture
     {
         [Test]
-        public async Task uat_server_has_two_commands_and_pinned_panels()
+        public async Task dev_server_has_the_commands_and_pinned_panels()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN not set");
             }
 
             using var client = new DiscordRestClient();
             await client.LoginAsync(TokenType.Bot, token);
 
-            var guild = await client.GetGuildAsync(ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")));
+            var guild = await client.GetGuildAsync(LiveDev.GuildId);
             var botRole = guild.Roles.Single(r => r.Tags?.BotId == client.CurrentUser.Id);
             Log($"[bot] {client.CurrentUser.Username} in '{guild.Name}'; role '{botRole.Name}' Pin Messages: {botRole.Permissions.PinMessages}");
 

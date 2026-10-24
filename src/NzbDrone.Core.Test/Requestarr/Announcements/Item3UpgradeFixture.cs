@@ -102,7 +102,7 @@ namespace Requestarr.Core.Test.Announcements
             AdminPosts.Should().HaveCount(2);
             AdminPosts.Last().Should().StartWith("📋 **Requestarr 0.3.0: what's new**").And.Contain("nothing was posted to users").And.Contain("• Faster startup.");
             UserPosts.Should().ContainSingle("0.3.0 has no user-facing changes");
-            Config.AnnouncedVersion.Should().Be("0.3.0");
+            Config.AnnouncedVersion.Should().Be("0.2.0,0.3.0");
         }
 
         [Test]
@@ -134,6 +134,91 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             AdminPosts.Should().ContainSingle();
+        }
+
+        // Task 4c: a fix made in QA takes the next number above dev's, so the dev versions it skipped reach QA later.
+        [Test]
+        public async Task versions_a_qa_fix_skipped_over_are_announced_when_they_arrive()
+        {
+            const string qa = @"## 0.2.6
+
+### For users
+- The fix.
+
+## 0.2.3
+
+### Internal
+- Promoted.
+";
+            const string promoted = @"## 0.2.7
+
+### Internal
+- Newer.
+
+## 0.2.6
+
+### For users
+- The fix.
+
+## 0.2.5
+
+### For users
+- Five.
+
+## 0.2.4
+
+### Internal
+- Four.
+
+## 0.2.3
+
+### Internal
+- Promoted.
+";
+
+            Service.ChangelogText = () => qa;
+            Service.CurrentVersion = () => new Version(0, 2, 3, 1);
+            await Service.PostVersionNotesAsync();
+            Service.CurrentVersion = () => new Version(0, 2, 6, 1);
+            await Service.PostVersionNotesAsync();
+            Service.ChangelogText = () => promoted;
+            Service.CurrentVersion = () => new Version(0, 2, 7, 1);
+            await Service.PostVersionNotesAsync();
+            await Service.PostVersionNotesAsync();
+
+            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal(
+                "📋 **Requestarr 0.2.3: what's new**",
+                "📋 **Requestarr 0.2.6: what's new**",
+                "📋 **Requestarr 0.2.4: what's new**",
+                "📋 **Requestarr 0.2.5: what's new**",
+                "📋 **Requestarr 0.2.7: what's new**");
+            UserPosts.Should().Equal("✨ **What's new in Requestarr**\n• The fix.", "✨ **What's new in Requestarr**\n• Five.");
+            Config.AnnouncedVersion.Should().Be("0.2.3,0.2.4,0.2.5,0.2.6,0.2.7");
+        }
+
+        [Test]
+        public async Task a_record_from_before_the_list_counts_everything_up_to_it_as_announced()
+        {
+            var config = Config;
+            config.AnnouncedVersion = "0.2.0";
+            Mocker.Resolve<IDiscordGuildConfigRepository>().Upsert(config);
+
+            await StartOn("0.3.0");
+
+            AdminPosts.Should().ContainSingle().Which.Should().StartWith("📋 **Requestarr 0.3.0: what's new**");
+            Config.AnnouncedVersion.Should().Be("0.2.0,0.3.0");
+        }
+
+        [Test]
+        public void the_announced_list_reads_and_writes_versions()
+        {
+            var announced = Announced.Parse("0.2.3, 0.2.6,junk");
+
+            announced.Contains(new Version(0, 1, 0)).Should().BeTrue("everything up to the lowest entry");
+            announced.Contains(new Version(0, 2, 6)).Should().BeTrue();
+            announced.Contains(new Version(0, 2, 4)).Should().BeFalse("skipped by the fix");
+            announced.With(new[] { new Version(0, 2, 4) }).ToString().Should().Be("0.2.3,0.2.4,0.2.6");
+            Announced.Parse(null).IsEmpty.Should().BeTrue();
         }
 
         [Test]
@@ -184,7 +269,7 @@ namespace Requestarr.Core.Test.Announcements
             File.ReadAllText(Item4To6Fixture.RepoFile("docs", "development.md")).Should().Contain("## Changelog").And.Contain("Bump the version").And.Contain("### For users");
             File.ReadAllText(Item4To6Fixture.RepoFile("CLAUDE.md")).Should().Contain("CHANGELOG.md");
             File.ReadAllText(Item4To6Fixture.RepoFile(".github", "pull_request_template.md")).Should().Contain("CHANGELOG.md");
-            File.ReadAllText(Item4To6Fixture.RepoFile(".github", "workflows", "build.yml")).Should().Contain("name: Changelog").And.Contain("secrets, changelog]");
+            File.ReadAllText(Item4To6Fixture.RepoFile(".github", "workflows", "build.yml")).Should().Contain("name: Changelog").And.Contain("secrets, changelog, promotion]");
             File.ReadAllText(Item4To6Fixture.RepoFile("docs", "setup-guide.md")).Should().Contain("### 5.8 The announcements channel").And.Contain("**Announce to users**").And.Contain("Requestarr Members");
             File.ReadAllText(Item4To6Fixture.RepoFile("docs", "commands.md")).Should().Contain("### Announcements");
         }

@@ -34,7 +34,7 @@ namespace Requestarr.Core.Test.Announcements
     // posts what's new for the current version and for a simulated upgrade; stops the test Sonarr past
     // shortened thresholds, presses Announce to users and reads back the notice, then starts it again
     // and reads back the recovery notice. Never runs in CI (ManualTest). Needs the stack's Requestarr
-    // stopped: docker/dev.sh reset-uat --stopped.
+    // stopped: docker/dev.sh reset-dev --stopped.
     [TestFixture]
     [ManualTest]
     public class LiveAnnouncementsFixture : DbTest
@@ -44,30 +44,24 @@ namespace Requestarr.Core.Test.Announcements
         private static readonly TimeSpan ShortAlert = Real ? ConnectionMonitor.DefaultAlertAfter : TimeSpan.FromSeconds(15);
         private static readonly TimeSpan ShortAnnounce = Real ? ConnectionMonitor.DefaultAnnounceAfter : TimeSpan.FromSeconds(30);
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
-        private static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("SONARR_TEST_PORT") ?? "18989"}";
-        private static string SonarrKey => Environment.GetEnvironmentVariable("SONARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
+        private static string SonarrUrl => LiveDev.SonarrUrl;
+        private static string SonarrKey => LiveDev.SonarrKey;
 
         [Test]
         public async Task announcements_channel_outage_and_upgrade_in_the_test_server()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(RadarrKey) || string.IsNullOrWhiteSpace(SonarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -272,7 +266,7 @@ namespace Requestarr.Core.Test.Announcements
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to restore the stack)");
+                Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to restore the dev stack)");
             }
         }
 
