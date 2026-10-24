@@ -73,7 +73,11 @@ namespace Requestarr.Core.Test.Releases
             var update = Read("deploy", "staging", "update.sh");
 
             update.Should().Contain("update) update ;;").And.Contain("rollback) rollback ;;").And.Contain("status) status ;;");
-            update.Should().Contain("docker compose pull -q requestarr").And.Contain("tar czf").And.Contain("pin \"$version\"");
+            update.Should().Contain("fetch \"$IMAGE:staging\"").And.Contain("fetch \"$IMAGE:$version\"").And.Contain("tar czf").And.Contain("pin \"$version\"");
+
+            // Task 4d fix in staging: a failed download says why and falls back to the copy already on the server.
+            update.Should().Contain("Couldn't download $ref").And.Contain("Using the copy of $ref already on this server").And.Contain("there's no copy of $ref on this server");
+            Read("docs", "setup-guide.md").Should().Contain("docker login ghcr.io").And.Contain("read:packages");
         }
 
         [Test]

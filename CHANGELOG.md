@@ -5,6 +5,8 @@ What changed in each version, for the people who use Requestarr. Every pull requ
 with nothing in it is left out, and a version with nothing for either has only its heading. Requestarr posts these
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word.
 
+## 0.3.3
+
 ## 0.3.2
 
 ## 0.3.1

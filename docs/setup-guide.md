@@ -670,8 +670,9 @@ Do the steps in order; each ends with what to check before going on.
 - Your download client and indexer manager (for example Prowlarr), as production uses them.
 - Your Plex server.
 - The Requestarr Beta Discord server, and a Discord application with a bot for it, set up as in [section 2](#2-create-your-discord-bot) (Server Members Intent on, invited with the same permissions). You need its bot token, application ID and the server's ID.
+- The image: `ghcr.io/runemarklabs/requestarr` downloads without a login once the package is public on GitHub. While it's private, log Docker in on the server once with a GitHub token that can only read packages (GitHub → Settings → Developer settings → Personal access tokens → classic, **read:packages**): `docker login ghcr.io -u <your GitHub user>`, with the token as the password.
 
-**Check:** `docker compose version` prints 2.17 or newer.
+**Check:** `docker compose version` prints 2.17 or newer, and `docker pull ghcr.io/runemarklabs/requestarr:staging` downloads the image.
 
 ### B.2 Get the files
 
