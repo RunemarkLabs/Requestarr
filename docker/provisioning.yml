@@ -1,11 +1,11 @@
-# Provisioning for the local dev stack. Applied by Requestarr on every start:
+# Provisioning for the local test stacks (QA and dev). Applied by Requestarr on every start:
 # keys present here win over UI changes; keys left out are untouched.
-# Secrets are ${VAR} references resolved from docker/secrets.env.
+# Secrets are ${VAR} references resolved from docker/secrets.env (each stack gets its own Discord values).
 # ${VAR:-default} supplies a default; $${VAR} is a literal.
 version: 1
 
 general:
-  instanceName: Requestarr (dev)
+  instanceName: Requestarr (${REQUESTARR_STACK:-dev})
   logLevel: debug
   analyticsEnabled: false
 

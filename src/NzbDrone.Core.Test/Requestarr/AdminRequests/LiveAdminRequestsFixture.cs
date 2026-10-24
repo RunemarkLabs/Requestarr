@@ -34,7 +34,7 @@ namespace Requestarr.Core.Test.AdminRequests
     // Sonarr for longer than a shortened alert threshold, reads back the down alert and the paused
     // message, starts it again and reads back the recovered alert. Clicks go through the real handlers
     // (their replies are private, so they're recorded here); real effects are read back from Discord.
-    // Never runs in CI (ManualTest). Needs the stack's Requestarr stopped: docker/dev.sh reset-uat --stopped.
+    // Never runs in CI (ManualTest). Needs the stack's Requestarr stopped: docker/dev.sh reset-dev --stopped.
     [TestFixture]
     [ManualTest]
     public class LiveAdminRequestsFixture : DbTest
@@ -44,30 +44,24 @@ namespace Requestarr.Core.Test.AdminRequests
 
         private static readonly TimeSpan ShortAlert = TimeSpan.FromSeconds(20);
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
-        private static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("SONARR_TEST_PORT") ?? "18989"}";
-        private static string SonarrKey => Environment.GetEnvironmentVariable("SONARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
+        private static string SonarrUrl => LiveDev.SonarrUrl;
+        private static string SonarrKey => LiveDev.SonarrKey;
 
         [Test]
         public async Task music_notice_walk_and_sonarr_outage_in_the_test_server()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(RadarrKey) || string.IsNullOrWhiteSpace(SonarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -279,15 +273,16 @@ namespace Requestarr.Core.Test.AdminRequests
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to restore the stack)");
+                Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to restore the dev stack)");
             }
         }
 
-        // docker stop/start on the dev stack's test Sonarr, found by its compose service name.
+        // docker stop/start on the dev stack's test Sonarr, found by its compose project and service (never the QA stack's).
         private static void Docker(string verb)
         {
-            var id = Run("ps", "-aq", "--filter", "label=com.docker.compose.service=sonarr-test").Trim();
+            var id = Run("ps", "-aq", "--filter", $"label=com.docker.compose.project={LiveDev.ComposeProject}", "--filter", "label=com.docker.compose.service=sonarr-test").Trim();
             id.Should().NotBeEmpty("the dev stack's test Sonarr must exist");
+            id.Should().NotContain("\n", "exactly one container");
             Run(verb, id);
             Log($"[docker] {verb} sonarr-test");
         }

@@ -32,14 +32,14 @@ using Requestarr.Core.Users;
 
 namespace Requestarr.Core.Test.DevHelpers
 {
-    // Live (task 4b): the dev helpers with the real bot in the Discord test server and the dev stack's TEST
+    // Live (task 4b): the dev helpers with the real dev bot in the dev Discord server and the dev stack's TEST
     // Radarr and Sonarr. The test member requests Dune and Severance; docker\dev.ps1 fake-download (run here
     // from a fresh Windows PowerShell) makes them look downloaded, and Requestarr's poll finds them (Available,
     // partly available). Then, with fast votes on (the same switch the dev stack's container reads, turned on
     // here for this in-process Requestarr), a user-started removal closes on its own and an admin removal goes
     // through the requester's reminder and silence to the vote, in real minutes. Only the test accounts in
     // DISCORD_TEST_MEMBERS. Never runs in CI (ManualTest). Needs the stack's Requestarr stopped:
-    // docker\dev.ps1 reset-uat --stopped.
+    // docker\dev.ps1 reset-dev --stopped.
     [TestFixture]
     [ManualTest]
     public class LiveDevHelpersFixture : DbTest
@@ -47,30 +47,24 @@ namespace Requestarr.Core.Test.DevHelpers
         private const int Dune = 438631;
         private const int Severance = 371980;
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
-        private static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("SONARR_TEST_PORT") ?? "18989"}";
-        private static string SonarrKey => Environment.GetEnvironmentVariable("SONARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
+        private static string SonarrUrl => LiveDev.SonarrUrl;
+        private static string SonarrKey => LiveDev.SonarrKey;
 
         [Test]
         public async Task fake_downloads_and_fast_votes_in_the_test_server()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(RadarrKey) || string.IsNullOrWhiteSpace(SonarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -264,13 +258,14 @@ namespace Requestarr.Core.Test.DevHelpers
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.ps1 reset-uat to restore the stack)");
+                Log("[cleanup] bot disconnected (run docker/dev.ps1 reset-dev to restore the dev stack)");
             }
         }
 
-        // Runs docker\dev.ps1 from a fresh Windows PowerShell with the owner's script policy, and logs its output.
+        // Runs docker\dev.ps1 on the dev stack from a fresh Windows PowerShell with the owner's script policy, and logs its output.
         private static void DevPs1(params string[] arguments)
         {
+            arguments = new[] { "-Stack", LiveDev.Stack }.Concat(arguments).ToArray();
             var script = System.IO.Path.Combine(AnimeDub.Item4To6Fixture.RepoFile("docker"), "dev.ps1");
             var output = Run(new[] { "powershell", "-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-File", script }.Concat(arguments).ToArray());
             Log($"[dev.ps1] PS> .\\docker\\dev.ps1 {string.Join(" ", arguments.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}");

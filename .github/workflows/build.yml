@@ -130,6 +130,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" --entrypoint sh "$GITLEAKS" -c             "git config --global --add safe.directory /repo && gitleaks git /repo --log-opts='$range' --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --no-banner --redact --verbose"
 
   # Every pull request records its changes in CHANGELOG.md under a new, higher version (docs/development.md#changelog).
+  # Into dev or qa, the version must also be free on the other branch (release.sh check-changelog).
   changelog:
     name: Changelog
     runs-on: ubuntu-latest
@@ -139,34 +140,54 @@ jobs:
         with:
           fetch-depth: 0
       - name: CHANGELOG.md has a new version for this change
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ "$EVENT" != "pull_request" ]; then
             echo "Not a pull request: nothing to check."
             exit 0
           fi
-          base="${{ github.event.pull_request.base.sha }}"
-          if ! git diff --name-only "$base" HEAD | grep -qx 'CHANGELOG.md'; then
-            echo "::error::Add a section for this change at the top of CHANGELOG.md (see docs/development.md#changelog)."
-            exit 1
-          fi
-          top() { grep -m1 -E '^## [0-9]+\.[0-9]+\.[0-9]+' | sed -E 's/^## +//; s/ .*//'; }
-          new=$(top < CHANGELOG.md)
-          old=$(git show "$base:CHANGELOG.md" 2>/dev/null | top || true)
-          echo "Top version: base ${old:-none}, this change ${new:-none}"
-          if [ -z "$new" ]; then
-            echo "::error::CHANGELOG.md needs a '## x.y.z' section at the top."
-            exit 1
-          fi
-          if [ -n "$old" ] && { [ "$new" = "$old" ] || [ "$(printf '%s\n' "$old" "$new" | sort -V | tail -1)" != "$new" ]; }; then
-            echo "::error::The top version in CHANGELOG.md ($new) must be higher than main's ($old); bump <AssemblyVersion> in src/Directory.Build.props to match."
-            exit 1
-          fi
+          ./release.sh check-changelog "$BASE_SHA" HEAD "$BASE_REF" "$HEAD_SHA"
 
-  # Single status for the main branch ruleset to require.
+  # A promotion into qa (dev's commits) happens only on the owner's word, and the pull request records it
+  # (docs/development.md#release-flow).
+  promotion:
+    name: Promotion record
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: A promotion names who asked for it
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ "$EVENT" != "pull_request" ] || [ "$BASE_REF" != "qa" ]; then
+            echo "Not a pull request into qa: nothing to check."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$HEAD_SHA" origin/dev; then
+            echo "A fix into qa, not a promotion: nothing to check."
+            exit 0
+          fi
+          if ! printf '%s\n' "$BODY" | grep -qE '^Requested by: .+'; then
+            echo "::error::A promotion to QA needs a 'Requested by:' line naming who asked and their words (./release.sh promote-qa writes it)."
+            exit 1
+          fi
+          printf '%s\n' "$BODY" | grep -m1 -E '^Requested by: '
+
+  # Single status for the dev, qa and main branch rules to require.
   build:
     name: build
     if: always()
-    needs: [backend-linux, backend-windows, frontend, docker, secrets, changelog]
+    needs: [backend-linux, backend-windows, frontend, docker, secrets, changelog, promotion]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs passed

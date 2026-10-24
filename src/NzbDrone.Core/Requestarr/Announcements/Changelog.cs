@@ -80,4 +80,35 @@ namespace Requestarr.Core.Announcements
         // The version a build announces: major.minor.build (the revision is the build number).
         public static Version Release(Version build) => new(build.Major, build.Minor, Math.Max(build.Build, 0));
     }
+
+    // The versions a server has announced, stored as "0.2.1,0.2.3,0.2.4". Every version up to the lowest one counts as
+    // announced too: a server records only its current version on its first start, and before this list the field
+    // held just the highest version announced. Versions don't arrive in order: a fix made in QA takes a number above
+    // dev's, and the dev versions it skipped reach QA later.
+    public sealed class Announced
+    {
+        private readonly SortedSet<Version> _versions;
+
+        private Announced(IEnumerable<Version> versions)
+        {
+            _versions = new SortedSet<Version>(versions);
+        }
+
+        public bool IsEmpty => _versions.Count == 0;
+
+        public static Announced Parse(string text)
+        {
+            var versions = (text ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(v => Version.TryParse(v, out var parsed) ? parsed : null)
+                .Where(v => v != null);
+
+            return new Announced(versions);
+        }
+
+        public bool Contains(Version version) => !IsEmpty && (version <= _versions.Min || _versions.Contains(version));
+
+        public Announced With(IEnumerable<Version> versions) => new(_versions.Concat(versions));
+
+        public override string ToString() => string.Join(",", _versions);
+    }
 }

@@ -652,7 +652,7 @@ _Coming in Phase 2._
 
 ## Developing Requestarr
 
-Working on Requestarr itself, or testing a build by hand? The local dev stack, with test Sonarr and Radarr instances, is started with `.\docker\dev.ps1 up` from PowerShell in the repo folder (or `docker/dev.sh up` with Git Bash). Its helpers stop and start a test instance, make a requested title look downloaded (`fake-download`), and make removal votes take minutes instead of days (`fast-votes on`). If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `.\docker\dev.cmd`). Everything is in [development](development.md#docker-stack).
+Working on Requestarr itself, or testing a build by hand? Two local stacks, each with test Sonarr and Radarr instances and its own Discord server and bot, run side by side: QA (the `qa` branch, for testing by hand) is started with `.\docker\dev.ps1 up` from PowerShell in the repo folder (or `docker/dev.sh up` with Git Bash), and dev (the `dev` branch, for automated testing) with `.\docker\dev.ps1 -Stack dev up`. Changes merge to `dev` first and reach `qa` only when promoted ([release flow](development.md#release-flow)). Their helpers stop and start a test instance, make a requested title look downloaded (`fake-download`), and make removal votes take minutes instead of days (`fast-votes on`). If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `.\docker\dev.cmd`). Everything is in [development](development.md#docker-stack).
 
 ## 8. Troubleshooting
 

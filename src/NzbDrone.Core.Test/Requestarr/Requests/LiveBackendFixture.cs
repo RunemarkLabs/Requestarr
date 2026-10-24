@@ -30,10 +30,10 @@ namespace Requestarr.Core.Test.Requests
         private const int Matrix = 603;
         private const int Severance = 371980;
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("SONARR_TEST_PORT") ?? "18989"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
-        private static string SonarrKey => Environment.GetEnvironmentVariable("SONARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string SonarrUrl => LiveDev.SonarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
+        private static string SonarrKey => LiveDev.SonarrKey;
 
         protected override void UseBackends()
         {

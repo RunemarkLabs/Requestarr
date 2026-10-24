@@ -34,7 +34,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
     // test stack has no download client, so the files are placed in the test containers and the
     // instances rescan them (an import of existing files); the backup poll then finds them. The
     // feed and the reposted messages are read back from Discord. Never runs in CI (ManualTest).
-    // Needs the stack's Requestarr stopped and a clean server: docker/dev.sh reset-uat --stopped.
+    // Needs the stack's Requestarr stopped and a clean server: docker/dev.sh reset-dev --stopped.
     [TestFixture]
     [ManualTest]
     public class LiveAvailabilityFeedFixture : DbTest
@@ -42,30 +42,24 @@ namespace Requestarr.Core.Test.AvailabilityFeed
         private const int Matrix = 603;
         private const int Severance = 371980;
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("SONARR_TEST_PORT") ?? "18989"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
-        private static string SonarrKey => Environment.GetEnvironmentVariable("SONARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string SonarrUrl => LiveDev.SonarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
+        private static string SonarrKey => LiveDev.SonarrKey;
 
         [Test]
         public async Task feed_cards_and_availability_read_back_from_the_test_server()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(RadarrKey) || string.IsNullOrWhiteSpace(SonarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY / SONARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -240,7 +234,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to restore the stack)");
+                Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to restore the dev stack)");
             }
         }
 

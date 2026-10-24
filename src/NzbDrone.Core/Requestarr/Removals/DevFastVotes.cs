@@ -4,10 +4,10 @@ using NzbDrone.Common.EnvironmentInfo;
 
 namespace Requestarr.Core.Removals
 {
-    // Dev stack only: removal timings in minutes, so a vote closing, the requester's reminder and
-    // silence-as-yes can be watched by hand. On while a marker file is in Requestarr's data folder
-    // (docker/dev.ps1 fast-votes on), and only when the container runs as the dev stack
-    // (REQUESTARR_DEV_STACK, which only docker/compose.yaml sets). reset-uat wipes the data folder,
+    // Local test stacks only (QA and dev): removal timings in minutes, so a vote closing, the requester's
+    // reminder and silence-as-yes can be watched by hand. On while a marker file is in Requestarr's data folder
+    // (docker/dev.ps1 fast-votes on), and only when the container runs as a local test stack
+    // (REQUESTARR_DEV_STACK, which only docker/compose.yaml sets). reset-qa and reset-dev wipe the data folder,
     // so a reset is always back to the real settings.
     public interface IDevFastVotes
     {

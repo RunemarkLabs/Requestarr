@@ -22,7 +22,7 @@ using ChannelPermissions = Requestarr.Core.Discord.Gateway.ChannelPermissions;
 namespace Requestarr.Core.Test.Discord
 {
     // Live check against the dedicated Discord test server from docker/secrets.env.
-    // Never runs in CI (ManualTest). Run with the DISCORD_* variables exported:
+    // Never runs in CI (ManualTest). Run with the DEV_DISCORD_* variables exported:
     //   dotnet test Requestarr.Core.Test.dll --filter "FullyQualifiedName~LiveDiscordFixture" --logger "console;verbosity=detailed"
     [TestFixture]
     [ManualTest]
@@ -31,21 +31,15 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task bot_comes_online_sets_up_server_and_onboards_a_member()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN not set");
             }
 
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -116,7 +110,7 @@ namespace Requestarr.Core.Test.Discord
                 categoryRest.Should().NotBeNull();
 
                 // Only what this run created is cleaned up; anything already in the server (for example
-                // the UAT setup) is left exactly as it was.
+                // the dev stack's setup) is left exactly as it was.
                 var audit = Mocker.Resolve<IAuditRepository>().All().Select(a => a.Action).ToList();
                 Log($"[setup] created by this run: admin channel {audit.Contains("discord.admin-channel.create")}, category {audit.Contains("discord.category.create")}, admin role {audit.Contains("discord.admin-role.create")}");
 
@@ -185,8 +179,8 @@ namespace Requestarr.Core.Test.Discord
                 var target = LiveTestMembers.Pick(members)[0];
                 Log($"[add] target member {target.Username} ({target.Id}){(target.Id == guild.OwnerId ? " (owner: no other human member)" : string.Empty)}");
 
-                // This test's database is fresh, so a member already onboarded by the UAT stack would get a second
-                // channel and role. Never do that: leave onboarded members alone and use LiveUatReadBackFixture instead.
+                // This test's database is fresh, so a member already onboarded by the dev stack would get a second
+                // channel and role. Never do that: leave onboarded members alone and use LiveReadBackFixture instead.
                 var existingChannels = await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetTextChannelsAsync();
                 if (existingChannels.Any(c => c.Name == ChannelLayout.UserChannelName(target.Username)))
                 {
@@ -313,9 +307,9 @@ namespace Requestarr.Core.Test.Discord
 
                 if (host.Client?.GetGuild(settings.Current.GuildId) is { } cleanupGuild)
                 {
-                    // Commands are shared with the UAT bot; the stack is restarted from main afterwards to re-register them.
+                    // Commands are shared with the dev stack's bot; reset-dev afterwards registers them again.
                     await cleanupGuild.BulkOverwriteApplicationCommandAsync(Array.Empty<global::Discord.ApplicationCommandProperties>());
-                    Log("[cleanup] removed guild slash commands (re-registered when the UAT stack restarts)");
+                    Log("[cleanup] removed guild slash commands (registered again when the dev stack restarts)");
 
                     var restGuild2 = await host.Client.Rest.GetGuildAsync(cleanupGuild.Id);
                     var createdIds = created.Select(c => ulong.Parse(c.Split(':').Last())).ToHashSet();

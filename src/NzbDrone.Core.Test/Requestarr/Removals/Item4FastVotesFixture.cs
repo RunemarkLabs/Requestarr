@@ -93,14 +93,14 @@ namespace Requestarr.Core.Test.Removals
             var compose = File.ReadAllText(AnimeDub.Item4To6Fixture.RepoFile("docker", "compose.yaml"));
             var docs = File.ReadAllText(AnimeDub.Item4To6Fixture.RepoFile("docs", "development.md"));
 
-            foreach (var command in new[] { "init", "up", "check", "down", "reset-test-backends", "reset-uat", "logs", "stop-backend", "start-backend", "fake-download", "fast-votes" })
+            foreach (var command in new[] { "init", "up", "check", "stacks", "down", "reset-test-backends", "reset-qa", "reset-uat", "reset-dev", "logs", "stop-backend", "start-backend", "fake-download", "fast-votes" })
             {
                 ps1.Should().Contain($"'{command}'", $"dev.ps1 has {command}");
-                sh.Should().Contain($"    {command})", $"dev.sh has {command}");
+                System.Text.RegularExpressions.Regex.IsMatch(sh, $@"\n    ([a-z-]+\|)*{command}(\|[a-z-]+)*\)").Should().BeTrue($"dev.sh has {command}");
             }
 
             ps1.Where(c => c > 127).Should().BeEmpty("Windows PowerShell 5.1 misreads non-ASCII in a script saved without a byte order mark");
-            compose.Should().Contain($"{DevFastVotes.DevStackVariable}: \"true\"", "only the dev stack's container may honour fast votes");
+            compose.Should().Contain($"{DevFastVotes.DevStackVariable}: \"true\"", "only the local test stacks' container may honour fast votes");
             docs.Should().Contain("### Helpers for testing by hand").And.Contain("Set-ExecutionPolicy -Scope CurrentUser RemoteSigned").And.Contain("fake-download movie").And.Contain("fast-votes on").And.Contain("stop-backend sonarr");
         }
 

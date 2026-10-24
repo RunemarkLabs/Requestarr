@@ -32,35 +32,29 @@ namespace Requestarr.Core.Test.AdminConsole
     // simulated through the real handlers (their replies are private, so they're recorded here);
     // the real effects (role, channel, panel, request message) are read back from Discord.
     // Never runs in CI (ManualTest). Needs the stack's Requestarr stopped and a clean server:
-    // docker/dev.sh reset-uat --stopped.
+    // docker/dev.sh reset-dev --stopped.
     [TestFixture]
     [ManualTest]
     public class LiveAdminConsoleFixture : DbTest
     {
         private const int Matrix = 603;
 
-        private static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}";
-        private static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
+        private static string RadarrUrl => LiveDev.RadarrUrl;
+        private static string RadarrKey => LiveDev.RadarrKey;
 
         [Test]
         public async Task commands_member_card_and_request_card_in_the_test_server()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
+            var token = LiveDev.Token;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(RadarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -315,7 +309,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to restore the stack)");
+                Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to restore the dev stack)");
             }
         }
 

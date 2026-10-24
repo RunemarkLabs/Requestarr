@@ -1,4 +1,4 @@
-"""Make a title in the dev stack's TEST Radarr or Sonarr look downloaded, the way a real download is imported.
+"""Make a title in a local stack's TEST Radarr or Sonarr look downloaded, the way a real download is imported.
 
     fake-download.py movie "<title>"
     fake-download.py tv "<title>" <season>
@@ -9,9 +9,10 @@ Import. They move it into the title's folder and send their normal import webhoo
 exactly as it sees a real download (and its backup poll would find it too). TV: every aired episode of
 the season that has no file yet.
 
-Only ever touches the dev stack's test containers (compose project requestarr-dev, services radarr-test
-and sonarr-test) and their localhost ports. Reads the API keys from the environment (dev.ps1 / dev.sh pass
-them from docker/secrets.env) and never prints them. Needs Python 3 and Docker.
+Only ever touches one local stack's test containers (compose project requestarr-qa or requestarr-dev, from
+REQUESTARR_COMPOSE_PROJECT; services radarr-test and sonarr-test) and their localhost ports. Reads the API
+keys and ports from the environment (dev.ps1 / dev.sh pass them from docker/secrets.env for the chosen
+stack) and never prints them. Needs Python 3 and Docker.
 """
 import json
 import os
@@ -24,7 +25,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-PROJECT = "requestarr-dev"
+STACKS = ("requestarr-qa", "requestarr-dev")
+PROJECT = os.environ.get("REQUESTARR_COMPOSE_PROJECT", "requestarr-qa")
 APPS = {
     "movie": {"service": "radarr-test", "app": "Radarr", "port": "RADARR_TEST_PORT", "default_port": "17878", "key": "RADARR_TEST_API_KEY"},
     "tv": {"service": "sonarr-test", "app": "Sonarr", "port": "SONARR_TEST_PORT", "default_port": "18989", "key": "SONARR_TEST_API_KEY"},
@@ -38,14 +40,16 @@ def fail(message):
 
 def container(service):
     """The running test container for the service, found by its compose labels; refuses anything else."""
+    if PROJECT not in STACKS:
+        fail(f"{PROJECT} isn't a local test stack ({' or '.join(STACKS)}).")
     out = subprocess.run(["docker", "ps", "--filter", f"label=com.docker.compose.project={PROJECT}",
                           "--filter", f"label=com.docker.compose.service={service}", "--format", "{{.Names}}"],
                          capture_output=True, text=True)
     if out.returncode != 0:
-        fail("Docker isn't answering. Start Docker Desktop, then the dev stack (dev.ps1 up).")
+        fail("Docker isn't answering. Start Docker Desktop, then the stack (dev.ps1 up).")
     names = out.stdout.split()
     if len(names) != 1:
-        fail(f"the dev stack's {service} container isn't running (dev.ps1 up, or dev.ps1 start-backend).")
+        fail(f"the {PROJECT.split('-')[1]} stack's {service} container isn't running (dev.ps1 up, or dev.ps1 start-backend).")
     return names[0]
 
 

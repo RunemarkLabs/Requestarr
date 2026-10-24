@@ -27,7 +27,7 @@ namespace Requestarr.Core.Test.Gaps
     // Live: the real bot in the Discord test server and the dev stack's TEST Radarr. A request
     // made in a real message is approved (and another denied) from the admin side; the edited
     // messages are read back from Discord. Never runs in CI (ManualTest). Needs the dev stack's
-    // Requestarr stopped and a clean server (docker/dev.sh reset-uat --stopped).
+    // Requestarr stopped and a clean server (docker/dev.sh reset-dev --stopped).
     [TestFixture]
     [ManualTest]
     public class LiveRequestMessageFixture : DbTest
@@ -41,23 +41,17 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task decided_requests_edit_their_real_messages()
         {
-            var token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN");
-            var radarrKey = Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
+            var token = LiveDev.Token;
+            var radarrKey = LiveDev.RadarrKey;
 
             if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(radarrKey))
             {
-                Assert.Ignore("DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY not set");
+                Assert.Ignore("DEV_DISCORD_BOT_TOKEN / RADARR_TEST_API_KEY not set");
             }
 
             UseRealHttp();
             var settings = new DiscordSettingsStore();
-            settings.Set(new DiscordSettings
-            {
-                BotToken = token,
-                ApplicationId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_APPLICATION_ID")),
-                GuildId = ulong.Parse(Environment.GetEnvironmentVariable("DISCORD_TEST_GUILD_ID")),
-                AdminRoleId = ulong.TryParse(Environment.GetEnvironmentVariable("DISCORD_ADMIN_ROLE_ID"), out var adminRole) ? adminRole : null
-            });
+            settings.Set(LiveDev.Settings());
 
             Mocker.SetConstant<IDiscordSettingsStore>(settings);
             Mocker.SetConstant<IRequestarrUserRepository>(Mocker.Resolve<RequestarrUserRepository>());
@@ -81,7 +75,7 @@ namespace Requestarr.Core.Test.Gaps
             {
                 Radarr = new List<BackendInstanceProvisioning>
                 {
-                    new() { Name = "Radarr (test)", Url = $"http://localhost:{Environment.GetEnvironmentVariable("RADARR_TEST_PORT") ?? "17878"}", ApiKey = radarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true }
+                    new() { Name = "Radarr (test)", Url = LiveDev.RadarrUrl, ApiKey = radarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true }
                 }
             });
             Mocker.Resolve<IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
@@ -219,7 +213,7 @@ namespace Requestarr.Core.Test.Gaps
                 }
 
                 await host.StopAsync();
-                Log("[cleanup] bot disconnected (run docker/dev.sh reset-uat to clean the server)");
+                Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to clean the dev server)");
             }
         }
 

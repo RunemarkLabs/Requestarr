@@ -1,0 +1,36 @@
+name: Drift
+
+# dev and qa must never drift: every commit on qa (a fix made in QA, say) must also be on dev.
+# Fails while qa has a commit dev doesn't; ./release.sh merge-back fixes that (docs/development.md#release-flow).
+# Not a required check: a fix into qa is drift until it is merged back, which happens in the same task.
+on:
+  push:
+    branches: [dev, qa]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dev_ref:
+        description: Branch that must contain everything
+        default: dev
+      qa_ref:
+        description: Branch checked against it
+        default: qa
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: qa has nothing dev doesn't
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit on qa is on dev
+        env:
+          DEV_REF: ${{ inputs.dev_ref || 'dev' }}
+          QA_REF: ${{ inputs.qa_ref || 'qa' }}
+        run: ./release.sh drift "origin/$DEV_REF" "origin/$QA_REF"
