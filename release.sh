@@ -117,6 +117,17 @@ commit_for_version() {
     return 1
 }
 
+# Waits for a pull request's checks, then requires the build check (what the branch rules require) to have passed.
+# gh's --required doesn't see checks that repository rulesets require, so build is looked up by name.
+wait_for_build() {
+    sleep 15
+    gh pr checks "$1" --watch --interval 30 >/dev/null 2>&1 || true
+    local state
+    state=$(gh pr checks "$1" --json name,state --jq '[.[] | select(.name == "build")][0].state')
+    echo "build: ${state:-not reported}"
+    [ "$state" = "SUCCESS" ]
+}
+
 promote_qa() {
     local what="${1:-}" who="${2:-}"
     [ -n "$what" ] && [ -n "$who" ] || die 'promote-qa <version | commit> "<who asked, and their words>"'
@@ -157,8 +168,7 @@ $commits
 EOF
 )"
     echo "Waiting for the build check…"
-    sleep 15
-    gh pr checks "$branch" --watch --required --interval 30 || die "the build check failed; qa is unchanged"
+    wait_for_build "$branch" || die "the build check didn't pass; qa is unchanged"
 
     git push origin "$target:refs/heads/qa"
     sleep 5
@@ -179,10 +189,9 @@ merge_back() {
 
     local version
     version=$(top_version origin/qa)
-    if gh pr create --base dev --head qa --title "Merge QA fix $version back into dev" \
-        --body "Merges \`qa\` (version $version) into \`dev\`, so dev has every fix made in QA and the drift check passes."; then
-        :
-    fi
+    gh pr create --base dev --head qa --title "Merge QA fix $version back into dev" \
+        --body "Merges \`qa\` (version $version) into \`dev\`, so dev has every fix made in QA and the drift check passes."
+    sleep 10
     if [ "$(gh pr view qa --json mergeable --jq .mergeable)" = "CONFLICTING" ]; then
         cat <<EOF
 qa and dev conflict (usually CHANGELOG.md and the version). Resolve on a branch:
@@ -194,8 +203,8 @@ EOF
     fi
 
     echo "Waiting for the build check…"
-    sleep 15
-    gh pr checks qa --watch --required --interval 30 || die "the build check failed; nothing merged"
+    wait_for_build qa || die "the build check didn't pass; nothing merged"
+    # A merge commit (never squash): dev then contains qa's own commits, which is what the drift check looks for.
     gh pr merge qa --merge
     drift
 }
