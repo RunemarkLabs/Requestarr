@@ -206,7 +206,7 @@ case "${1:-}" in
     promote-qa) shift; promote_qa "$@" ;;
     merge-back) merge_back ;;
     *)
-        sed -n '2,17p' "$0"
+        sed -n '2,14p' "$0"
         exit 1
         ;;
 esac
