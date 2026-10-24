@@ -26,7 +26,8 @@ $Secrets = Join-Path $Dir 'secrets.env'
 $Template = Join-Path $Dir 'secrets.env.example'
 $Project = 'requestarr-dev'
 $Command = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
-$Rest = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
+# @() keeps it an array even with one argument (PowerShell would unwrap it to a string).
+$Rest = @($args | Select-Object -Skip 1)
 
 function Fail([string]$message) {
     Write-Host "dev.ps1: $message" -ForegroundColor Red
