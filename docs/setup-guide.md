@@ -42,7 +42,7 @@ Do not verify a self-hosted bot. Verification is only for bots in 100 or more se
 
 ## 3. Install Requestarr (Docker Compose)
 
-There is no published image yet, so you build it from source. This needs Git and Docker with Compose v2.
+Requestarr's image is published to GitHub's container registry as `ghcr.io/runemarklabs/requestarr` for x86-64 and ARM servers, but only the early access `staging` tag so far; `latest` and version tags arrive with the first release. Until then you build it from source. This needs Git and Docker with Compose v2.
 
 ### 3.1 Build the image
 
@@ -595,9 +595,9 @@ What Requestarr posts there:
 |---|---|---|
 | A Sonarr or Radarr is still down after 30 minutes and you press **Announce to users** on its alert | A plain notice, for example "TV requests are paused" and that the admin knows. The button then goes away. | The alert says who announced it. |
 | That outage ends | "TV requests work again", automatically, only if it was announced. An outage you never announced is never mentioned to users. | The usual "is back" message. |
-| Requestarr starts on a new version | The changes for users, in plain words. Nothing if a version has none. | The full list of changes. |
+| Requestarr starts on a new version | The changes for users, in plain words. Nothing if a version has none. | The changes for users and for admins; a section with nothing in it isn't shown, and a version with nothing for either isn't posted. |
 
-Each version is announced once, even across restarts. The first time a server starts with announcements, only the current version is posted. The changes come from the project's changelog, written with every change (see [development](development.md#changelog)).
+The "what's new" posts are a lasting record: each version is posted once, oldest first, even across restarts, and stays. The first time a server starts, it posts the full history from 0.1.0 on. The changes come from the project's changelog, written with every change in plain words (see [development](development.md#changelog)). Test servers keep them differently ([version posts](development.md#version-posts)).
 
 ### 5.9 Removing titles
 
@@ -653,6 +653,154 @@ _Coming in Phase 2._
 ## Developing Requestarr
 
 Working on Requestarr itself, or testing a build by hand? Two local stacks, each with test Sonarr and Radarr instances and its own Discord server and bot, run side by side: QA (the `qa` branch, for testing by hand) is started with `.\docker\dev.ps1 up` from PowerShell in the repo folder (or `docker/dev.sh up` with Git Bash), and dev (the `dev` branch, for automated testing) with `.\docker\dev.ps1 -Stack dev up`. Changes merge to `dev` first and reach `qa` only when promoted ([release flow](development.md#release-flow)). Their helpers stop and start a test instance, make a requested title look downloaded (`fake-download`), and make removal votes take minutes instead of days (`fast-votes on`). If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `.\docker\dev.cmd`). Everything is in [development](development.md#docker-stack).
+
+## Running the beta (staging) environment
+
+For the project owner: an always-on Requestarr for early access testers, on its own Discord server (Requestarr Beta), whose requests really download and show up in your existing Plex, without any risk to your production Sonarr, Radarr or their files. It runs the published `staging` image: only versions you passed in QA ([release flow](development.md#release-flow)).
+
+What runs: its own Requestarr, Sonarr and Radarr, all separate from production: own containers, own settings volumes, own ports, own Docker network (`requestarr-beta`), and two media folders of its own. They share only your download client and indexer manager, each beta download in a category of its own.
+
+**How beta is kept away from production's files.** The beta Sonarr and Radarr see only the two beta media folders (as `/tv-beta` and `/movies-beta`) and the downloads folder. Production's media folders aren't mounted at all, so nothing in beta can read, change or delete them, and a beta removal vote can only ever delete beta files. Before Sonarr and Radarr start, a folder check refuses to start the stack unless both media folders are named `…-beta`, each holds a `.requestarr-beta` file you create once, they differ from each other, and neither is inside the downloads folder (nor it inside them). Requestarr's only root folders are `/tv-beta` and `/movies-beta`.
+
+Do the steps in order; each ends with what to check before going on.
+
+### B.1 What you need
+
+- The server with Docker and Compose 2.17 or newer, and Git.
+- Your download client and indexer manager (for example Prowlarr), as production uses them.
+- Your Plex server.
+- The Requestarr Beta Discord server, and a Discord application with a bot for it, set up as in [section 2](#2-create-your-discord-bot) (Server Members Intent on, invited with the same permissions). You need its bot token, application ID and the server's ID.
+
+**Check:** `docker compose version` prints 2.17 or newer.
+
+### B.2 Get the files
+
+The beta stack is the `deploy/staging` folder of the repository. Put it in a folder of its own, outside any media folder:
+
+```bash
+git clone --depth 1 --branch staging https://github.com/RunemarkLabs/Requestarr.git requestarr-src
+cp -r requestarr-src/deploy/staging requestarr-beta
+cd requestarr-beta
+```
+
+**Check:** `ls` shows `compose.yaml`, `env.example`, `provisioning.yml`, `check-folders.sh`, `root-folders.sh` and `update.sh`.
+
+### B.3 Make the beta media folders
+
+Make two new, empty folders beside your production TV and movie folders (same disk, so Plex reads them the same way), named so they end in `-beta`. Create a `.requestarr-beta` file in each, which confirms the folder is for beta only, and give both to the user your production Sonarr and Radarr run as:
+
+```bash
+mkdir -p /path/to/media/tv-beta /path/to/media/movies-beta
+touch /path/to/media/tv-beta/.requestarr-beta /path/to/media/movies-beta/.requestarr-beta
+chown -R <media user>:<media group> /path/to/media/tv-beta /path/to/media/movies-beta
+```
+
+Never put the `.requestarr-beta` file in a production folder.
+
+**Check:** `ls -la /path/to/media/tv-beta /path/to/media/movies-beta` shows the `.requestarr-beta` file in each, owned by your media user.
+
+### B.4 Fill in the settings
+
+```bash
+cp env.example .env
+chmod 600 .env
+```
+
+Open `.env` and fill in every value; the comments say what each is. In particular:
+
+- **`BETA_TV_FOLDER`, `BETA_MOVIES_FOLDER`:** the two folders from B.3, full paths.
+- **`BETA_DOWNLOADS_FOLDER`, `BETA_DOWNLOADS_PATH`:** the same downloads folder, and the same path inside the container, as your production Sonarr's compose file mounts (look for its downloads line, for example `/srv/downloads:/downloads`). Only the downloads folder: if production mounts one folder that holds both downloads and media (a single `/data`), mount just its downloads subfolder here. Imports then copy instead of hardlinking, which uses extra space only while a download is still seeding.
+- **The three ports:** free ports, different from production's. `ss -ltn | grep :<port>` prints nothing for a free port.
+- **`PUID`, `PGID`:** the same as your production Sonarr and Radarr, so Plex can read what beta downloads.
+- **`BETA_SONARR_API_KEY`, `BETA_RADARR_API_KEY`, `REQUESTARR_API_KEY`:** made up here, one each: `openssl rand -hex 16`.
+- **`BETA_DISCORD_BOT_TOKEN`, `BETA_DISCORD_APPLICATION_ID`, `BETA_DISCORD_GUILD_ID`:** the beta bot and the Requestarr Beta server (B.1). This file is the only place they're kept.
+- **`TMDB_API_KEY`:** optional, as in [4.6](#46-cast-from-the-movie-database-optional).
+
+**Check:** `docker compose config --quiet` prints nothing. If it names a variable, fill that one in.
+
+### B.5 Start it
+
+```bash
+docker compose up -d
+```
+
+**Check:**
+
+- `docker compose ps -a` shows `requestarr`, `sonarr` and `radarr` running (Sonarr and Radarr healthy), and `folder-check` and `root-folders` exited with 0.
+- `docker compose logs folder-check` ends with "folder check passed".
+- `docker compose logs root-folders` shows `/tv-beta` and `/movies-beta` added (or already there).
+
+If the folder check failed, nothing else started; its message says what's wrong. Fix `.env` and run `docker compose up -d` again.
+
+### B.6 Connect the beta Sonarr and Radarr to your downloads
+
+Open the beta Sonarr at `http://<server>:<BETA_SONARR_PORT>` and set a login when it asks. Then:
+
+1. **Settings → Media Management → Root Folders:** only `/tv-beta` is there. Don't add another.
+2. **Settings → Download Clients → +:** your download client, with the same host, port and login as in your production Sonarr, and **Category `tv-beta`**. If production uses remote path mappings, add the same ones. **Test**, then **Save**.
+3. **Your indexer manager:** add the beta Sonarr as a new app. In Prowlarr: **Settings → Apps → + → Sonarr**, name it "Sonarr (beta)", Sonarr Server `http://<server>:<BETA_SONARR_PORT>`, API Key `BETA_SONARR_API_KEY` from `.env`, the rest as for production. **Test**, then **Save**. Prowlarr adds its indexers to the beta Sonarr.
+
+Do the same in the beta Radarr (`http://<server>:<BETA_RADARR_PORT>`): root folder `/movies-beta` only, the download client with **Category `movies-beta`**, and "Radarr (beta)" as an app in Prowlarr.
+
+If your download client needs categories made first (SABnzbd does; qBittorrent makes them on first use), add `tv-beta` and `movies-beta` there, each saving into its own folder inside the downloads folder. Beta and production downloads then never mix.
+
+**Check:** in both: **System → Status** has no download client or indexer warnings, **Settings → Indexers** lists the indexers Prowlarr added, and **Settings → Connect** lists a "Requestarr" connection. Requestarr adds that one itself: it's the webhook that tells Requestarr about downloads. Sonarr and Radarr call it as `http://requestarr:9797` on the beta stack's own network, never through the server's ports, so there's nothing to set; **Test** on it should pass.
+
+### B.7 Add the beta folders to Plex
+
+Add each beta folder to the matching library you already have, so testers watch in the Plex they already use: **Plex → Settings → Manage → Libraries → (your TV library) → Edit → Add folders →** the `tv-beta` folder, then the same for `movies-beta` in your Movies library. If Plex runs in Docker, first mount the two beta folders into the Plex container (read-only is enough) and pick them by the path Plex sees.
+
+**Check:** both libraries list the beta folder under their folders, and a library scan finishes without errors.
+
+### B.8 Check Requestarr in Discord
+
+Open the beta web portal at `http://<server>:<BETA_REQUESTARR_PORT>` and sign in with `REQUESTARR_ADMIN_USERNAME` and the password.
+
+**Check:**
+
+- **System → Status** has no Discord, provisioning, Sonarr, Radarr or webhook warnings.
+- In the Requestarr Beta server: the bot is online, and `#requestarr-admin` has the pinned admin panel.
+- `#requestarr-admin` shows "what's new" for every version from 0.1.0 on, oldest first, and `#requestarr-announcements` the members' part. On beta these posts stay for good: each new version is added once.
+
+### B.9 A first real request
+
+Add yourself as a member from the admin panel ([5.5](#55-add-your-first-user)), then request a small movie with `/request` in your request channel.
+
+**Check:** in your download client the download has the category `movies-beta`; when it finishes, the files are in your `movies-beta` folder (not your production movies folder); the request message says it's ready to watch; and after Plex's next scan the movie is in your Movies library.
+
+### B.10 Testers
+
+Add the testers from the admin panel's member picker ([5.5](#55-add-your-first-user)), once they've joined the Requestarr Beta server. Tell them about the known limitation below.
+
+### Updating the beta
+
+When a new version reaches staging, update with one command in the beta folder:
+
+```bash
+./update.sh
+```
+
+It pulls the newest `staging` image. If it's newer than what runs, it stops Requestarr, backs up its data to `backups/`, and starts the new version (Sonarr and Radarr are left alone). It prints the old and new versions.
+
+**Check:** it ends with "Requestarr updated: 0.3.0 -> 0.3.1" (your versions), and `#requestarr-admin` gets the new version's "what's new".
+
+To go back to the version that ran before the last update, with the data as it was then:
+
+```bash
+./update.sh rollback
+```
+
+Anything done in Discord since that update (new requests, votes) is lost with the rollback. It pins that version (`REQUESTARR_TAG` in `.env`), so a restart keeps it; the next `./update.sh` returns to the newest `staging` image. `./update.sh status` shows which version runs and what a rollback would go back to.
+
+**Automatic updates:** not recommended. Promotions to staging happen when you say "QA passed", so you know when to run it, and an update tool such as Watchtower would skip the backup that makes a rollback safe. If you'd rather not think about it, a nightly cron job is safe, because `./update.sh` does nothing when there's no new version: `0 4 * * * cd /path/to/requestarr-beta && ./update.sh >> update.log 2>&1`.
+
+### Known limitation: beta can download a second copy
+
+Beta only knows what the beta Sonarr and Radarr have. A title that's already in your production Plex can still be requested on beta, and it downloads a second copy into the beta folders. Plex shows both copies under one title (as two versions). Tell testers to check Plex first. Removing it on beta deletes only the beta copy.
+
+### Taking the beta down
+
+`docker compose down` stops it and keeps everything. `docker compose down -v` also deletes the beta Requestarr's, Sonarr's and Radarr's settings. The beta media folders are yours to delete; remove them from the Plex libraries first.
 
 ## 8. Troubleshooting
 

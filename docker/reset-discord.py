@@ -3,6 +3,8 @@
 Deletes: #requestarr-admin, #requestarr-feed, #requestarr-announcements, the "Requestarr Requests" categories and
 every channel in them (including archived ones), the per-user "requestarr-*" roles and the shared "Requestarr Members" role.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
+The "what's new" posts go with their channels and are rebuilt when Requestarr starts again, as that stack keeps them
+(docs/development.md#version-posts): QA posts every version staging doesn't have yet, dev the version it runs.
 
 Reads STACK_DISCORD_BOT_TOKEN and STACK_DISCORD_GUILD_ID from the environment: the chosen stack's own bot and
 server (QA: DISCORD_*, dev: DEV_DISCORD_* in docker/secrets.env). Never prints the token.

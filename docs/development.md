@@ -30,7 +30,7 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 
 ## Continuous integration
 
-`.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `dev`, `qa` and `main`, which accept changes only through a pull request with this check passing (see [Release flow](#release-flow)).
+`.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `dev`, `qa`, `staging` and `main`, which accept changes only through a pull request with this check passing (see [Release flow](#release-flow)).
 
 | Job | Runs |
 |---|---|
@@ -38,60 +38,60 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 | Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
 | Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
 | Docker image | full `docker/Dockerfile` build (not pushed) |
-| Changelog | pull requests only: `CHANGELOG.md` changed and its top version is higher than the base branch's; into `dev` or `qa`, also free on the other one (see [Changelog](#changelog)) |
-| Promotion record | pull requests that promote `dev`'s commits into `qa` only: the description has a `Requested by:` line (see [Release flow](#release-flow)) |
+| Changelog | the checker's self-test, then `CHANGELOG.md` against the changelog rule; on pull requests also: `CHANGELOG.md` changed, its top version is higher than the base branch's, and into `dev`, `qa` or `staging` free on the other two (see [Changelog](#changelog)) |
+| Promotion record | pull requests that promote `dev`'s commits into `qa`, or `qa`'s into `staging`: the description has a `Requested by:` line (see [Release flow](#release-flow)) |
 
-`.github/workflows/drift.yml` runs on every push to `dev` or `qa`, daily, and by hand (Actions → Drift → Run workflow, with any two branches): it fails while `qa` has a commit `dev` doesn't. It isn't a required check, because a fix merged into `qa` is drift until it is merged back, in the same task.
+`.github/workflows/drift.yml` runs on every push to `dev`, `qa` or `staging`, daily, and by hand (Actions → Drift → Run workflow, with any branches): it fails while `qa` has a commit `dev` doesn't, or `staging` one `qa` doesn't. It isn't a required check, because a fix merged into `qa` or `staging` is drift until it is merged back, in the same task.
+
+`.github/workflows/image.yml` publishes the container image (see [Published images](#published-images)).
 
 Not run in CI:
 
 - `Requestarr.Integration.Test`: needs a packaged app layout started as a separate process.
 - `Requestarr.Automation.Test`: needs Selenium and a browser against a running app.
 - `Requestarr.Benchmark.Test`: performance measurements, not pass or fail.
-- Tests tagged `ManualTest`: these call live third-party services.
 
 ## Changelog
 
-`CHANGELOG.md` at the repo root records every change, and Requestarr announces it: when it starts on a new version, the whole entry goes to the admin channel and the **For users** lines go to the members' announcements channel, word for word. So every pull request does this:
+`CHANGELOG.md` at the repo root records what changed for the people who use Requestarr, and Requestarr posts it in Discord: when a server starts on a new version, the whole entry goes to the admin channel and the **For users** lines go to the announcements channel, word for word (which versions each server shows: [Version posts](#version-posts)). So every pull request does this:
 
 1. **Bump the version** in `src/Directory.Build.props` (`<AssemblyVersion>x.y.z.*</AssemblyVersion>`): the patch number for fixes and internal work, the minor number for new things people can do. Only `x.y.z` counts; the last part is the build number.
-2. **Add a `## x.y.z` section at the top of `CHANGELOG.md`** with the lines that apply:
+2. **Add a `## x.y.z` section at the top of `CHANGELOG.md`**, following the changelog rule:
 
    ```markdown
    ## 0.1.1
 
    ### For users
-   - You can now cancel a request after it was approved, until it starts downloading.
+   - **Cancel later:** you can now cancel a request after it was approved, until it starts downloading.
 
    ### For admins
-   - The member card shows when someone last made a request.
-
-   ### Internal
-   - Faster tests for the request flow.
+   - **Member cards:** each card shows when the member last made a request.
    ```
 
-   - **For users**: what members can now do or will notice, in plain words a non-technical person understands. No product names of the servers behind Requestarr, no settings, no "fixed a bug in…". Leave the section out if nothing changes for them; then nothing is posted to users.
-   - **For admins**: anything an admin sees or sets up.
-   - **Internal**: everything else (tests, build, refactoring). Admins see it; users never do.
+**The changelog rule** (the same rule as the Claude Code workspace's "Changelog: hard rule"):
 
-The checks: the `Changelog` job in CI (`./release.sh check-changelog`) fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev` or `qa`, the version must also be higher than the other branch's, unless the pull request already contains that branch (a merge-back), so `dev` and a fix made in QA never use the same number. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+- **Two audiences only.** Exactly two sections, **For users** and **For admins**. There is no "Internal" section: work that changes nothing a user or an admin sees or does (tests, build and CI, refactoring, the dev and QA tools) is left out and lives in the pull request. A section with nothing in it is left out, heading included; a version with nothing for either has only its `## x.y.z` heading and posts nothing anywhere.
+- **What changed and why it matters, in plain English.** Lead each line with the thing that changed in bold, then one sentence on what it means for the reader: "**Long TV shows:** you can now pick any season, not just the 24 most recent."
+- **No code-style text** in either section: no backticks, file names, paths, commands or flags, settings keys, environment variable names, branch names or internal jargon. Name things the way the reader sees them in Discord ("the request message", "the admin panel"). Discord commands such as /request are fine: that's what people type.
+- **Summary words only with substance.** "Minor fixes" or "various improvements" may lead a line only if the same line says what changes for the reader. No placeholders ("nothing this time", "n/a").
+- **Group related changes**, three to seven lines per section is normal; fixes say what was wrong in the reader's terms ("Fixed: approving a request sometimes left the old Cancel button working.").
 
-Each server announces the versions it receives: Requestarr remembers which versions it has announced, not just the highest, so the `dev` versions a QA fix's number skipped over are announced on the QA server when they arrive with the next promotion.
+**The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also be higher than the other two branches', unless the pull request already contains that branch, so a fix made in QA or staging never shares a number with `dev`. A merge-back keeps every version from both branches instead of adding one. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
 
 ## Release flow
 
-Four branches, each with its own environment. `staging` comes later; until it exists, `main` is left alone.
+Four branches, each with its own environment.
 
 | Branch | What it's for | Where it runs |
 |---|---|---|
 | `dev` | Every pull request merges here once the `build` check passes. Claude Code's automated and live testing. | The dev stack, on the dev Discord server and bot (`DEV_DISCORD_*`). |
-| `qa` | The owner's manual QA of a version picked from `dev`. Moves only on the owner's word. | The QA stack, on the QA Discord server and bot (`DISCORD_*`). Never touched by automated testing. |
-| `staging` | Early access testers (planned). | Its own server and bot. |
-| `main` | Production: the default branch; only promoted, released code. | |
+| `qa` | The owner's manual QA of a version picked from `dev`. Moves only on the owner's word ("promote to QA"). | The QA stack, on the QA Discord server and bot (`DISCORD_*`). Never touched by automated testing. |
+| `staging` | Early access testers, on a version the owner passed in QA. Moves only on "QA passed". | The beta stack on the owner's server (`deploy/staging`), the Requestarr Beta server and bot, with its own Sonarr and Radarr that really download. Runs the published `staging` image. |
+| `main` | Production: the default branch; only released code. Moves only on the owner's "ship it". | Published as `latest` and version tags. |
 
-All three existing branches have the same rules on GitHub: a pull request is required, `build` must pass, no force push, no deletion.
+All four branches have the same rules on GitHub (one ruleset): a pull request is required, `build` must pass, no force push, no deletion, nobody bypasses.
 
-**A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Bump the version above both `dev`'s and `qa`'s (the Changelog check says so if it isn't).
+**A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Bump the version above `dev`'s, `qa`'s and `staging`'s (the Changelog check says so if it isn't).
 
 **Promote to QA** (only when the owner says "promote to QA", or names a version):
 
@@ -99,24 +99,58 @@ All three existing branches have the same rules on GitHub: a pull request is req
 ./release.sh promote-qa 0.2.3 'the owner: "promote 0.2.3 to QA"'
 ```
 
-It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`; on start, the QA bot announces the new versions in its server. Work on `dev` carries on meanwhile.
+It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`. Work on `dev` carries on meanwhile.
 
-**A fix found in QA.** Branch from `qa` and open a pull request into `qa` with only the fix, versioned above both `dev` and `qa`. After it merges, in the same task, merge `qa` back into `dev`:
+**Promote to staging** (only when the owner says "QA passed", or names a version). First run the full suite and every live check, and report them ("Testing scope" in the workspace rules: nothing reaches staging without this). Then:
+
+```bash
+./release.sh promote-staging 0.3.0 'the owner: "QA passed"'
+```
+
+The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:`, then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/runemarklabs/requestarr:staging` and `:0.3.0`. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
+
+**Ship it** (staging to `main`, only on the owner's "ship it"): not scripted yet. It will be the same shape, and the push to `main` publishes the version tags and `latest`.
+
+**A fix found in QA or staging.** Branch from that branch (`qa` or `staging`) and open a pull request into it with only the fix, versioned above all of `dev`, `qa` and `staging`. After it merges, in the same task, merge it back down:
 
 ```bash
 ./release.sh merge-back
 ```
 
-It opens a pull request from `qa` into `dev` and merges it once `build` passes. If they conflict (usually `CHANGELOG.md` and the version, when `dev` has moved on), it says how: on a branch from `dev`, merge `origin/qa`, keep every changelog section with the highest version on top, and keep the higher version. Then `.\docker\dev.ps1 up` updates the QA stack to the fix, keeping its data.
+It merges `staging` into `qa` (if `staging` has anything `qa` doesn't), then `qa` into `dev`, each through a pull request merged once `build` passes, and runs the drift check. If two branches conflict (usually `CHANGELOG.md` and the version, when the branch below has moved on), it says how: on a branch from the lower one named `merge-back/…`, merge the upper one, keep every changelog section with the highest version on top, and keep the higher version. Then `.\docker\dev.ps1 up` updates the QA stack, keeping its data. A fix into `staging` publishes a new `staging` image on its own.
 
-**Drift.** `dev` must always contain every commit on `qa`:
+**Drift.** `dev` must always contain every commit on `qa`, and `qa` every commit on `staging`:
 
 ```bash
-./release.sh drift                      # origin/dev and origin/qa
-./release.sh drift origin/dev some-branch
+./release.sh drift                                   # origin/dev, origin/qa and origin/staging
+./release.sh drift origin/dev origin/qa some-branch
 ```
 
-It lists any commit on `qa` that `dev` doesn't have and fails; the Drift workflow runs the same check on GitHub. A promotion refuses to run while there is drift.
+It lists any commit a lower branch is missing and fails; the Drift workflow runs the same check on GitHub. A promotion refuses to run while there is drift.
+
+### Published images
+
+`.github/workflows/image.yml` builds `docker/Dockerfile` for **linux/amd64** (most home servers and NAS boxes) and **linux/arm64** (Raspberry Pi 4 and 5, ARM NAS boxes, Apple silicon), the same pair the other Servarr apps publish, and pushes it to GitHub's container registry as `ghcr.io/runemarklabs/requestarr`:
+
+| When | Tags |
+|---|---|
+| a push to `staging` (a promotion, or a fix into `staging`) | `staging`, and the exact version (`0.3.0`) |
+| a push to `main` (a release) | the version (`0.3.0`), `0.3` and `latest` |
+| Actions → Image → Run workflow on any branch, with a tag starting `test-` | that tag only, to try the workflow (delete it afterwards from the package's page) |
+
+The web UI and backend are built on the runner's own platform and the backend is published for the target, so only the last image stage runs emulated. Images never contain secrets: the build uses only committed files (`secrets.env` and every `.env` file are in `.gitignore` and `.dockerignore`), and the workflow checks each platform's published image for files that could hold secrets (outside the base image's public CA certificates), secret-looking environment variables and build steps, and that it starts and answers on its port. The image carries the `org.opencontainers.image.*` labels: version, commit, branch and source repository.
+
+### Version posts
+
+The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-announcements` (For users) are a record that stays, kept in step with each environment. Requestarr reads `REQUESTARR_ENVIRONMENT` (`dev`, `qa`, `staging`; unset means production):
+
+| Environment | Shows | How it knows |
+|---|---|---|
+| production, staging | every version, each posted once, oldest first, never removed. A new install's first start posts the full history. | It records the versions it has posted. If its data is lost but the channels are kept, it finds its posts in the channels and doesn't repeat them. |
+| QA | every version in QA that staging doesn't have yet; versions drop off when they're promoted, and a reset rebuilds the list instead of wiping it | The local scripts read the versions in the `staging` branch's changelog when the QA stack starts and pass them as `REQUESTARR_STAGED_VERSIONS`; after a promotion to staging, `dev.ps1 up` refreshes them. |
+| dev | only the version running now; a new version replaces the previous post | |
+
+On every start QA and dev make the channels match: posts for versions that no longer apply are deleted, a post whose words changed is edited in place, and from the first post out of order onward everything is posted again, so the list always reads oldest to newest. Requestarr finds its own posts by their first line (`📋 **Requestarr x.y.z: what's new**`, `✨ **What's new in Requestarr x.y.z**`, and "(continued)" on a long post's later messages), among the newest 1,000 messages of each channel. Everything else in the channels is left alone.
 
 ## Docker stack
 
