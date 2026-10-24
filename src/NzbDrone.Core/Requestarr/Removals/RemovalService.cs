@@ -75,6 +75,7 @@ namespace Requestarr.Core.Removals
         private readonly IRequestService _requestService;
         private readonly IRequestFeed _feed;
         private readonly IDiscordGuildGateway _gateway;
+        private readonly IGuildSetupService _guildSetup;
         private readonly IAuditService _audit;
         private readonly IRemovalSettings _settings;
         private readonly IEventAggregator _events;
@@ -91,6 +92,7 @@ namespace Requestarr.Core.Removals
                               IRequestService requestService,
                               IRequestFeed feed,
                               IDiscordGuildGateway gateway,
+                              IGuildSetupService guildSetup,
                               IAuditService audit,
                               IRemovalSettings settings,
                               IEventAggregator events,
@@ -107,11 +109,14 @@ namespace Requestarr.Core.Removals
             _requestService = requestService;
             _feed = feed;
             _gateway = gateway;
+            _guildSetup = guildSetup;
             _audit = audit;
             _settings = settings;
             _events = events;
             _logger = logger;
         }
+
+        private bool? _fastVotesNoticed;
 
         public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
 
@@ -254,7 +259,7 @@ namespace Requestarr.Core.Removals
             if (target.Value.Requester != null)
             {
                 proposal.Status = RemovalStatus.AwaitingRequester;
-                proposal.AnswerBy = Clock().AddDays(_settings.RequesterTimeoutDays);
+                proposal.AnswerBy = Clock() + _settings.RequesterTimeout;
                 var message = await PostToUser(proposal.RequesterUserId.Value, DiscordText.RemovalAskRequester(proposal, proposal.AnswerBy.Value, ReminderAt(proposal)), AnswerButtons(proposal), await Card(proposal));
                 proposal.RequesterChannelId = message.Channel;
                 proposal.RequesterMessageId = message.Id;
@@ -375,6 +380,7 @@ namespace Requestarr.Core.Removals
 
         public async Task TickAsync()
         {
+            await NoticeFastVotes();
             var now = Clock();
 
             foreach (var proposal in _proposals.WithStatus(RemovalStatus.AwaitingRequester))
@@ -407,6 +413,37 @@ namespace Requestarr.Core.Removals
                 else
                 {
                     await SyncPrompts(proposal);
+                }
+            }
+        }
+
+        // Dev fast votes: the admin channel says when they go on or off, so nobody takes minute-long
+        // votes for the real settings. Checked with every removal check (every minute).
+        private async Task NoticeFastVotes()
+        {
+            var on = _settings.FastVotes;
+
+            if (_fastVotesNoticed == on || (_fastVotesNoticed == null && !on))
+            {
+                _fastVotesNoticed = on;
+                return;
+            }
+
+            _fastVotesNoticed = on;
+            _logger.Info(on ? "Dev fast votes are on: removal timings are in minutes" : "Dev fast votes are off");
+
+            if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var channel))
+            {
+                try
+                {
+                    var text = on
+                        ? DiscordText.FastVotesOn(DevFastVotes.VoteWindow, DevFastVotes.RequesterTimeout, DevFastVotes.Reminder, _settings.VoteDays, _settings.RequesterTimeoutDays, _settings.ReminderDay)
+                        : DiscordText.FastVotesOff(_settings.VoteDays, _settings.RequesterTimeoutDays, _settings.ReminderDay);
+                    await _gateway.SendMessageAsync(channel, new InteractionReply { Content = text });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Could not post the fast votes notice");
                 }
             }
         }
@@ -466,7 +503,7 @@ namespace Requestarr.Core.Removals
         {
             proposal.Status = RemovalStatus.Voting;
             proposal.VotingStarted = Clock();
-            proposal.WindowClosesAt = Clock().AddDays(_settings.VoteDays);
+            proposal.WindowClosesAt = Clock() + _settings.VoteWindow;
             Save(proposal);
             await SyncPrompts(proposal);
             await Changed(proposal);
@@ -718,9 +755,9 @@ namespace Requestarr.Core.Removals
         }
 
         private DateTime? ReminderAt(RemovalProposal proposal) =>
-            _settings.ReminderDay > 0 ? proposal.Created.AddDays(_settings.ReminderDay) : null;
+            _settings.ReminderAfter is { } after ? proposal.Created + after : null;
 
-        private DateTime Closes(RemovalProposal proposal) => Clock().AddDays(_settings.VoteDays);
+        private DateTime Closes(RemovalProposal proposal) => Clock() + _settings.VoteWindow;
 
         private static List<InteractionButton> AnswerButtons(RemovalProposal proposal) => new()
         {

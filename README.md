@@ -49,7 +49,7 @@ Follow the [setup guide](docs/setup-guide.md) to create your Discord bot and ins
 
 ## Development
 
-- [docs/development.md](docs/development.md): building, tests, the Docker dev stack (`docker/dev.sh up`), the provisioning file, and the Discord interaction test harness
+- [docs/development.md](docs/development.md): building, tests, the Docker dev stack (`.\docker\dev.ps1 up` in PowerShell, or `docker/dev.sh up`) and its helpers for testing by hand, the provisioning file, and the Discord interaction test harness
 - [docs/upstream.md](docs/upstream.md): which Prowlarr commit the foundation came from, what was removed, and how to pull upstream fixes
 
 ## Background

@@ -4,6 +4,11 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.2.1
+
+### Internal
+- `docker\dev.ps1` runs the dev stack from PowerShell with the same commands as `docker/dev.sh`, which gains the same helpers: `stop-backend` and `start-backend` for one test instance, `fake-download` to make a requested title look downloaded through Radarr's or Sonarr's own import, and `fast-votes` to make removal votes take minutes on the dev stack only (announced in the admin channel). `docker\dev.cmd` runs it whatever the PowerShell script policy is.
+
 ## 0.2.0
 
 ### For users

@@ -68,6 +68,10 @@ namespace Requestarr.Core.Test.Discord
             var notes = (await admin.GetMessagesAsync(30).FlattenAsync()).Where(m => m.Content.StartsWith("📋")).ToList();
             Log($"[announcements] what's new in #{admin.Name}: {string.Join(" / ", notes.Select(m => m.Content.Split('\n')[0]))}");
 
+            // The newest messages in the admin channel (alerts, dev notices), oldest first.
+            var latest = (await admin.GetMessagesAsync(8).FlattenAsync()).OrderBy(m => m.Id).ToList();
+            latest.ForEach(m => Log($"[admin] {m.Timestamp:HH:mm:ss}Z \"{m.Content.Replace("\n", " | ")}\""));
+
             foreach (var channel in userChannels)
             {
                 await CheckPanel(channel, PanelRoutes.MyRequests, client.CurrentUser.Id);
