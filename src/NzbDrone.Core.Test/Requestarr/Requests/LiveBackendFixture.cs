@@ -139,10 +139,20 @@ namespace Requestarr.Core.Test.Requests
 
             var results = (await Harness.SendAsync(Search(Alice, "tv", term))).LastReply;
             var tvdbId = int.Parse(results.SelectMenu.Options.First(o => o.Label == label).Value);
+            await RemoveFromSonarr(Mocker.Resolve<IHttpClient>(), tvdbId);
             var card = (await Harness.SendAsync(Search(Alice, "tv", $"tvdb:{tvdbId}"))).LastReply.Embeds.Single();
             Log($"[card] {card.Title}: {string.Join(" · ", card.Fields.Where(f => f.Key is "Genres" or "Seasons" or "Episodes").Select(f => $"{f.Key} {f.Value}"))}");
 
             var step = (await Click($"{RequestRoutes.TvChoose}:{tvdbId}")).LastReply;
+
+            if (step.SelectMenu == null)
+            {
+                // Anime asks dub or sub before the seasons (task 2d), then offers all seasons or a choice.
+                Log($"[anime] {label} asks first: {step.Content.Split('\n')[0]}; picking dub, then Choose seasons");
+                await Click($"{RequestRoutes.TvLanguage}:{tvdbId}:d");
+                step = (await Click($"{RequestRoutes.TvChoose}:{tvdbId}:d")).LastReply;
+            }
+
             Log($"[pages] page 1: {step.SelectMenu.Options.Count} options ({step.SelectMenu.Options.First().Label} … {step.SelectMenu.Options.Last().Label}); buttons {string.Join(" ", step.Buttons.Select(b => $"[{b.Label}]"))}");
             step = (await Pick(step.SelectMenu.CustomId, "s1", "s2")).LastReply;
 
@@ -334,6 +344,17 @@ namespace Requestarr.Core.Test.Requests
         {
             var request = new HttpRequestBuilder($"{url}/api/v3/").Resource(resource).SetHeader("X-Api-Key", key).Build();
             return JArray.Parse((await http.GetAsync(request)).Content);
+        }
+
+        // Removes a show from the test Sonarr (the anime test adds One Piece), so the next request for it is a new one.
+        private static async Task RemoveFromSonarr(IHttpClient http, int tvdbId)
+        {
+            foreach (var series in (await Get(http, SonarrUrl, SonarrKey, "series")).Children<JObject>().Where(s => (int)s["tvdbId"] == tvdbId))
+            {
+                var request = new HttpRequestBuilder($"{SonarrUrl}/api/v3/").Resource($"series/{(int)series["id"]}?deleteFiles=true").SetHeader("X-Api-Key", SonarrKey).Build();
+                request.Method = System.Net.Http.HttpMethod.Delete;
+                await http.ExecuteAsync(request);
+            }
         }
 
         private string LastMessage(ulong user) => ChannelFor(user).Messages.LastOrDefault()?.Content;

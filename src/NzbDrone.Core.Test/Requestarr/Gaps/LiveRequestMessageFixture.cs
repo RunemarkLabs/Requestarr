@@ -162,9 +162,17 @@ namespace Requestarr.Core.Test.Gaps
                 var admin = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
                 var requests = Mocker.Resolve<IRequestRepository>();
 
+                // A decided request's message is deleted and posted again at the bottom of the channel (it pings the user),
+                // so each one is read back by the message its request stores now.
+                ulong Now(int id) => ulong.Parse(requests.Get(id).MessageId);
+
+                // A reposted message starts by mentioning the user, so they get a ping.
+                async Task<string> Text(ulong id) => System.Text.RegularExpressions.Regex.Replace((await userChannel.GetMessageAsync(id)).Content, @"^<@\d+> ", string.Empty);
+
                 foreach (var (label, messageId, request) in new[] { ("approved", approved, requests.Get(1)), ("denied", denied, requests.Get(2)), ("in library", inLibrary, requests.Get(3)), ("user cancel", userCancelled, requests.Get(4)), ("on disc", onDisc, requests.Get(5)) })
                 {
-                    var message = await userChannel.GetMessageAsync(messageId);
+                    var message = await userChannel.GetMessageAsync(ulong.Parse(request.MessageId));
+                    Log($"[{label}] first message {messageId} {(await userChannel.GetMessageAsync(messageId) == null ? "deleted" : "kept")}; now {request.MessageId}");
                     var card = await admin.GetMessageAsync(ulong.Parse(request.AdminMessageId));
                     var buttons = message.Components.OfType<global::Discord.ActionRowComponent>().SelectMany(r => r.Components).Count();
                     var cardButtons = card.Components.OfType<global::Discord.ActionRowComponent>().SelectMany(r => r.Components).Count();
@@ -177,24 +185,24 @@ namespace Requestarr.Core.Test.Gaps
                     cardButtons.Should().Be(0);
                 }
 
-                (await userChannel.GetMessageAsync(approved)).Content.Should().StartWith(DiscordText.FinalApproved);
-                (await userChannel.GetMessageAsync(denied)).Content.Should().StartWith(DiscordText.FinalDenied).And.Contain("not something this server collects");
+                (await Text(Now(1))).Should().StartWith(DiscordText.FinalApproved);
+                (await Text(Now(2))).Should().StartWith(DiscordText.FinalDenied).And.Contain("not something this server collects");
 
                 // Already there is a win for the user: green and good news, whatever the admin pressed.
-                foreach (var (messageId, label) in new[] { (inLibrary, "Inception (2010)"), (onDisc, "Arrival (2016)") })
+                foreach (var (messageId, label) in new[] { (Now(3), "Inception (2010)"), (Now(5), "Arrival (2016)") })
                 {
                     var win = await userChannel.GetMessageAsync(messageId);
-                    win.Content.Should().StartWith(DiscordText.FinalAvailable).And.Contain($"Good news: {label} is already in the library");
+                    (await Text(messageId)).Should().StartWith(DiscordText.FinalAvailable).And.Contain($"Good news: {label} is already in the library");
                     win.Content.Should().NotContainAny("⛔", "🚫", "⚠️", "Cancelled", "Denied");
                     win.Embeds.Single().Color.Value.RawValue.Should().Be(RequestCards.SentColor);
                 }
 
-                (await userChannel.GetMessageAsync(userCancelled)).Content.Should().StartWith(DiscordText.FinalCancelled).And.Contain("Request #4 for Interstellar (2014) was cancelled.");
+                (await Text(Now(4))).Should().StartWith(DiscordText.FinalCancelled).And.Contain("Request #4 for Interstellar (2014) was cancelled.");
                 (await admin.GetMessageAsync(ulong.Parse(requests.Get(3).AdminMessageId))).Content.Should().StartWith("**Request #3: already available**");
                 (await admin.GetMessageAsync(ulong.Parse(requests.Get(5).AdminMessageId))).Content.Should().StartWith("**Request #5: already available**");
                 (await admin.GetMessageAsync(ulong.Parse(requests.Get(4).AdminMessageId))).Content.Should().StartWith("**Request #4: cancelled** by OneRadChad");
 
-                var mine = new[] { approved, denied, inLibrary, userCancelled, onDisc };
+                var mine = new[] { Now(1), Now(2), Now(3), Now(4), Now(5) };
                 var notices = (await userChannel.GetMessagesAsync(10).FlattenAsync()).Where(m => m.Author.IsBot && !mine.Contains(m.Id)).Select(m => m.Content).ToList();
                 var repeats = notices.Where(n => n.StartsWith("Your request") || n.StartsWith("🎉 Good news!")).ToList();
                 Log($"[notices] separate notices repeating an edited request message: {repeats.Count}");
