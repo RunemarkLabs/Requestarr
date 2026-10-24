@@ -66,14 +66,27 @@ wait_healthy() {
     docker compose up -d --wait requestarr >/dev/null || die "Requestarr didn't come up healthy: docker compose logs requestarr"
 }
 
+# Downloads an image. When it can't (the server is offline, or the package isn't public and Docker isn't logged in to
+# ghcr.io), it says why and carries on with the copy already on this server, if there is one (one loaded by hand too).
+fetch() {
+    local ref="$1" error
+    if error=$(docker pull -q "$ref" 2>&1 >/dev/null); then
+        return 0
+    fi
+    echo "Couldn't download $ref: $(echo "$error" | tail -1)" >&2
+    echo "  (offline, or the image isn't public and Docker on this server isn't logged in to ghcr.io: setup guide B.1)" >&2
+    docker image inspect "$ref" >/dev/null 2>&1 || die "and there's no copy of $ref on this server, so nothing changed"
+    echo "Using the copy of $ref already on this server." >&2
+}
+
 update() {
     local before before_image after
     before=$(running_version)
     before_image=$(running_image)
 
     pin ""
-    echo "Pulling the newest staging image…"
-    docker compose pull -q requestarr
+    echo "Getting the newest staging image…"
+    fetch "$IMAGE:staging"
     after=$(image_version "$IMAGE:staging")
 
     if [ -n "$before_image" ] && [ "$before_image" = "$(docker image inspect --format '{{.Id}}' "$IMAGE:staging")" ]; then
@@ -101,7 +114,7 @@ rollback() {
     [ -f "$file" ] || die "the backup $file is gone; to go back without it: set REQUESTARR_TAG=$version in .env, then docker compose up -d"
 
     echo "Rolling back from $(running_version) to $version, with the data from $file…"
-    docker pull -q "$IMAGE:$version" >/dev/null
+    fetch "$IMAGE:$version"
     docker compose stop requestarr >/dev/null
     docker run --rm -v "$VOLUME:/config" -v "$PWD/backups:/backups:ro" busybox:stable \
         sh -c "find /config -mindepth 1 -delete && tar xzf /backups/$(basename "$file") -C /config"
