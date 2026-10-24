@@ -6,18 +6,21 @@ using System.Reflection;
 
 namespace Requestarr.Core.Announcements
 {
-    // One "## x.y.z" section of CHANGELOG.md. Users: posted to members in these exact words.
-    // Admins and Internal: posted to the admin channel only.
-    public record ChangelogVersion(Version Version, IReadOnlyList<string> Users, IReadOnlyList<string> Admins, IReadOnlyList<string> Internal);
+    // One "## x.y.z" section of CHANGELOG.md. Users: posted to members in these exact words, and to the admin
+    // channel with Admins. A version with nothing for either posts nothing anywhere.
+    public record ChangelogVersion(Version Version, IReadOnlyList<string> Users, IReadOnlyList<string> Admins)
+    {
+        public bool HasNews => Users.Count + Admins.Count > 0;
+    }
 
     // CHANGELOG.md at the repo root is the source of truth for what changed; it is embedded in the build.
-    // Format: "## x.y.z", then "### For users", "### For admins" and "### Internal", each a list of "- " lines.
+    // Format: "## x.y.z", then "### For users" and "### For admins", each a list of "- " lines; a section with
+    // nothing in it is left out, heading included. Any other section is ignored here (CI's changelog check refuses it).
     public static class Changelog
     {
         public const string ResourceName = "Requestarr.CHANGELOG.md";
         public const string UsersHeading = "For users";
         public const string AdminsHeading = "For admins";
-        public const string InternalHeading = "Internal";
 
         public static string Embedded()
         {
@@ -43,7 +46,7 @@ namespace Requestarr.Core.Announcements
             {
                 if (version != null)
                 {
-                    versions.Add(new ChangelogVersion(version, Get(UsersHeading), Get(AdminsHeading), Get(InternalHeading)));
+                    versions.Add(new ChangelogVersion(version, Get(UsersHeading), Get(AdminsHeading)));
                 }
 
                 sections = new Dictionary<string, List<string>>();

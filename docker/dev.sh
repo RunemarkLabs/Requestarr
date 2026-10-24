@@ -108,8 +108,17 @@ prepare() {
 
     PROJECT="requestarr-$STACK"
     REQUESTARR_STACK="$STACK"
+    REQUESTARR_STAGED_VERSIONS=$(staged_versions)
     export REQUESTARR_STACK STACK_REQUESTARR_PORT STACK_SONARR_TEST_PORT STACK_RADARR_TEST_PORT \
-        STACK_DISCORD_BOT_TOKEN STACK_DISCORD_APPLICATION_ID STACK_DISCORD_GUILD_ID STACK_DISCORD_ADMIN_ROLE_ID
+        STACK_DISCORD_BOT_TOKEN STACK_DISCORD_APPLICATION_ID STACK_DISCORD_GUILD_ID STACK_DISCORD_ADMIN_ROLE_ID \
+        REQUESTARR_STAGED_VERSIONS
+}
+
+# QA only: the versions staging has (every "## x.y.z" in the staging branch's changelog), which QA's what's-new posts
+# leave out (docs/development.md#version-posts). Empty for dev, or before staging exists.
+staged_versions() {
+    [ "$STACK" = qa ] || return 0
+    git -C "$REPO" show origin/staging:CHANGELOG.md 2>/dev/null | sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | paste -sd, - || true
 }
 
 compose() {
@@ -123,6 +132,11 @@ build_image() {
     if [ -z "$ref" ]; then
         git -C "$REPO" fetch -q origin "$STACK" 2>/dev/null || echo "Couldn't fetch origin/$STACK; using the copy already here."
         ref="origin/$STACK"
+    fi
+    if [ "$STACK" = qa ]; then
+        git -C "$REPO" fetch -q origin staging 2>/dev/null || true
+        REQUESTARR_STAGED_VERSIONS=$(staged_versions)
+        echo "Versions staging has (QA's what's new leaves them out): ${REQUESTARR_STAGED_VERSIONS:-none}"
     fi
     sha=$(git -C "$REPO" rev-parse --verify -q "$ref^{commit}") || die "no branch or commit '$ref' (git fetch first?)"
     version=$(git -C "$REPO" show "$sha:src/Directory.Build.props" | sed -nE 's/.*<AssemblyVersion>([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')

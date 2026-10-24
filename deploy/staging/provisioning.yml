@@ -1,0 +1,56 @@
+# Provisioning for the beta (staging) Requestarr. Applied on every start: keys here win over changes made in the web
+# portal; keys left out are untouched. Every value that differs per server comes from .env (${VAR} references).
+version: 1
+
+general:
+  instanceName: Requestarr (beta)
+  logLevel: info
+  analyticsEnabled: false
+
+auth:
+  method: forms
+  required: enabled
+  username: ${REQUESTARR_ADMIN_USERNAME}
+  password: ${REQUESTARR_ADMIN_PASSWORD}
+  apiKey: ${REQUESTARR_API_KEY}
+
+discord:
+  botToken: ${DISCORD_BOT_TOKEN}
+  applicationId: ${DISCORD_APPLICATION_ID}
+  guildId: ${DISCORD_GUILD_ID}
+  # Requestarr creates a "Requestarr Admin" role on first start; holders are admins (the server owner always is).
+  adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}
+
+tmdb:
+  apiKey: ${TMDB_API_KEY:-}
+
+# Sonarr and Radarr call Requestarr's webhook on the beta stack's own network; the poll backs it up.
+availability:
+  webhookUrl: http://requestarr:9797
+  pollMinutes: 5
+
+removal:
+  voteDays: 7
+  requesterTimeoutDays: 7
+  reminderDay: 5
+
+# The beta Sonarr and Radarr only. Their only media folders are /tv-beta and /movies-beta (compose.yaml).
+backends:
+  sonarr:
+    - name: Sonarr (beta)
+      url: http://sonarr:8989
+      apiKey: ${SONARR_API_KEY}
+      qualityProfile: ${QUALITY_PROFILE:-HD-1080p}
+      rootFolder: /tv-beta
+      seriesType: standard
+      default: true
+  radarr:
+    - name: Radarr (beta)
+      url: http://radarr:7878
+      apiKey: ${RADARR_API_KEY}
+      qualityProfile: ${QUALITY_PROFILE:-HD-1080p}
+      rootFolder: /movies-beta
+      default: true
+
+mediaServers:
+  plex: []

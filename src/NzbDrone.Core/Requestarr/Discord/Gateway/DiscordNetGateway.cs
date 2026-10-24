@@ -226,6 +226,19 @@ namespace Requestarr.Core.Discord.Gateway
             return false;
         }
 
+        public async Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel)
+            {
+                return Array.Empty<ChannelMessage>();
+            }
+
+            // Pages through Discord's 100-message batches; a bot always sees the content of its own messages.
+            var messages = await channel.GetMessagesAsync(limit).FlattenAsync();
+
+            return messages.Where(m => m.Author.Id == BotUserId).OrderBy(m => m.Id).Select(m => new ChannelMessage(m.Id, m.Content)).ToList();
+        }
+
         public async Task PinMessageAsync(ulong channelId, ulong messageId)
         {
             if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&

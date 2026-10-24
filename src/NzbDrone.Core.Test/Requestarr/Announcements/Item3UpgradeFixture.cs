@@ -14,6 +14,8 @@ namespace Requestarr.Core.Test.Announcements
 {
     // Task 3d item 3: on a new version, the full list to the admin channel, the user-facing lines to the
     // announcements channel (nothing to users when there are none), once per version, across restarts.
+    // Task 4d: two sections only, empty ones never shown; production and staging (the default here) keep every post
+    // and start with the full history.
     [TestFixture]
     public class Item3UpgradeFixture : DiscordScenario
     {
@@ -21,8 +23,10 @@ namespace Requestarr.Core.Test.Announcements
 
 ## 0.3.0
 
-### Internal
+### For admins
 - Faster startup.
+
+## 0.2.5
 
 ## 0.2.0
 
@@ -32,9 +36,6 @@ namespace Requestarr.Core.Test.Announcements
 
 ### For admins
 - New member card layout.
-
-### Internal
-- Database migration 8.
 
 ## 0.1.0
 
@@ -60,11 +61,11 @@ namespace Requestarr.Core.Test.Announcements
         {
             var versions = Changelog.Parse(Text);
 
-            versions.Select(v => v.Version.ToString()).Should().Equal("0.3.0", "0.2.0", "0.1.0");
-            versions[1].Users.Should().Equal("You can now follow a request from its card.", "Your panel shows your limits.");
-            versions[1].Admins.Should().Equal("New member card layout.");
-            versions[1].Internal.Should().Equal("Database migration 8.");
+            versions.Select(v => v.Version.ToString()).Should().Equal("0.3.0", "0.2.5", "0.2.0", "0.1.0");
+            versions[2].Users.Should().Equal("You can now follow a request from its card.", "Your panel shows your limits.");
+            versions[2].Admins.Should().Equal("New member card layout.");
             versions[0].Users.Should().BeEmpty();
+            versions[1].HasNews.Should().BeFalse("a version with nothing for users or admins has only its heading");
         }
 
         [Test]
@@ -72,13 +73,11 @@ namespace Requestarr.Core.Test.Announcements
         {
             await StartOn("0.2.0");
 
-            AdminPosts.Single().Should().StartWith("📋 **Requestarr 0.2.0: what's new**")
-                .And.Contain("• You can now follow a request from its card.")
-                .And.Contain("• New member card layout.")
-                .And.Contain("• Database migration 8.")
-                .And.Contain($"(posted in #{ChannelLayout.AnnouncementsChannelName})");
-            UserPosts.Single().Should().Be("✨ **What's new in Requestarr**\n• You can now follow a request from its card.\n• Your panel shows your limits.");
-            Config.AnnouncedVersion.Should().Be("0.2.0");
+            AdminPosts.Last().Should().Be("📋 **Requestarr 0.2.0: what's new**\n" +
+                $"**For users** (posted in #{ChannelLayout.AnnouncementsChannelName})\n• You can now follow a request from its card.\n• Your panel shows your limits.\n" +
+                "**For admins**\n• New member card layout.");
+            UserPosts.Last().Should().Be("✨ **What's new in Requestarr 0.2.0**\n• You can now follow a request from its card.\n• Your panel shows your limits.");
+            Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0");
         }
 
         [Test]
@@ -89,20 +88,34 @@ namespace Requestarr.Core.Test.Announcements
             await Mocker.Resolve<IGuildSetupService>().EnsureAsync();
             await StartOn("0.2.0");
 
-            AdminPosts.Should().ContainSingle();
-            UserPosts.Should().ContainSingle();
+            AdminPosts.Should().HaveCount(2, "0.1.0 and 0.2.0, once each");
+            UserPosts.Should().HaveCount(2);
         }
 
         [Test]
-        public async Task a_version_with_nothing_for_users_posts_nothing_to_users()
+        public async Task a_version_with_nothing_for_users_posts_nothing_to_users_and_no_users_section()
         {
             await StartOn("0.2.0");
             await StartOn("0.3.0");
 
-            AdminPosts.Should().HaveCount(2);
-            AdminPosts.Last().Should().StartWith("📋 **Requestarr 0.3.0: what's new**").And.Contain("nothing was posted to users").And.Contain("• Faster startup.");
-            UserPosts.Should().ContainSingle("0.3.0 has no user-facing changes");
-            Config.AnnouncedVersion.Should().Be("0.2.0,0.3.0");
+            AdminPosts.Should().HaveCount(3);
+            AdminPosts.Last().Should().Be("📋 **Requestarr 0.3.0: what's new**\n**For admins**\n• Faster startup.");
+            UserPosts.Should().HaveCount(2, "0.3.0 has nothing for users");
+            Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0,0.2.5,0.3.0");
+        }
+
+        [Test]
+        public async Task a_version_with_nothing_for_anyone_posts_nothing_anywhere()
+        {
+            await StartOn("0.2.0");
+            var admin = AdminPosts.Count;
+            var users = UserPosts.Count;
+
+            await StartOn("0.2.5");
+
+            (AdminPosts.Count, UserPosts.Count).Should().Be((admin, users));
+            Config.AnnouncedVersion.Should().Contain("0.2.5", "recorded, so it never posts later");
+            string.Join("\n", AdminPosts.Concat(UserPosts)).Should().NotContain("nothing this time").And.NotContain("Internal");
         }
 
         [Test]
@@ -117,13 +130,28 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
-        public async Task the_first_start_with_announcements_posts_only_the_current_version()
+        public async Task the_first_start_posts_the_full_history_oldest_first()
         {
-            Config.AnnouncedVersion.Should().BeNull("a new server, or one from before announcements");
+            Config.AnnouncedVersion.Should().BeNull("a new server");
 
+            await StartOn("0.3.0");
+
+            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal("📋 **Requestarr 0.1.0: what's new**", "📋 **Requestarr 0.2.0: what's new**", "📋 **Requestarr 0.3.0: what's new**");
+            UserPosts.Select(p => p.Split('\n')[0]).Should().Equal("✨ **What's new in Requestarr 0.1.0**", "✨ **What's new in Requestarr 0.2.0**");
+        }
+
+        [Test]
+        public async Task a_server_set_up_again_with_its_channels_kept_does_not_repeat_the_history()
+        {
             await StartOn("0.2.0");
+            var config = Config;
+            config.AnnouncedVersion = null;
+            Mocker.Resolve<IDiscordGuildConfigRepository>().Upsert(config);
 
-            AdminPosts.Should().ContainSingle().Which.Should().NotContain("Request movies and TV.");
+            await StartOn("0.3.0");
+
+            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal("📋 **Requestarr 0.1.0: what's new**", "📋 **Requestarr 0.2.0: what's new**", "📋 **Requestarr 0.3.0: what's new**");
+            UserPosts.Should().HaveCount(2);
         }
 
         [Test]
@@ -133,7 +161,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.2.0");
             await StartOn("0.3.0");
 
-            AdminPosts.Should().ContainSingle();
+            AdminPosts.Should().HaveCount(3, "0.1.0, 0.2.0 and 0.3.0, once each");
         }
 
         // Task 4c: a fix made in QA takes the next number above dev's, so the dev versions it skipped reach QA later.
@@ -147,12 +175,12 @@ namespace Requestarr.Core.Test.Announcements
 
 ## 0.2.3
 
-### Internal
+### For admins
 - Promoted.
 ";
             const string promoted = @"## 0.2.7
 
-### Internal
+### For admins
 - Newer.
 
 ## 0.2.6
@@ -167,12 +195,12 @@ namespace Requestarr.Core.Test.Announcements
 
 ## 0.2.4
 
-### Internal
+### For admins
 - Four.
 
 ## 0.2.3
 
-### Internal
+### For admins
 - Promoted.
 ";
 
@@ -192,7 +220,7 @@ namespace Requestarr.Core.Test.Announcements
                 "📋 **Requestarr 0.2.4: what's new**",
                 "📋 **Requestarr 0.2.5: what's new**",
                 "📋 **Requestarr 0.2.7: what's new**");
-            UserPosts.Should().Equal("✨ **What's new in Requestarr**\n• The fix.", "✨ **What's new in Requestarr**\n• Five.");
+            UserPosts.Should().Equal("✨ **What's new in Requestarr 0.2.6**\n• The fix.", "✨ **What's new in Requestarr 0.2.5**\n• Five.");
             Config.AnnouncedVersion.Should().Be("0.2.3,0.2.4,0.2.5,0.2.6,0.2.7");
         }
 
@@ -206,7 +234,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             AdminPosts.Should().ContainSingle().Which.Should().StartWith("📋 **Requestarr 0.3.0: what's new**");
-            Config.AnnouncedVersion.Should().Be("0.2.0,0.3.0");
+            Config.AnnouncedVersion.Should().Be("0.2.0,0.2.5,0.3.0");
         }
 
         [Test]
@@ -244,6 +272,7 @@ namespace Requestarr.Core.Test.Announcements
             var posts = Discord.Channels[AdminChannel].Messages.Skip(Discord.Channels[AdminChannel].Messages.FindIndex(m => m.Content.StartsWith("📋"))).ToList();
             posts.Should().HaveCountGreaterThan(1);
             posts.Should().OnlyContain(p => p.Content.Length <= DiscordLimits.MessageLength);
+            posts.Skip(1).Should().OnlyContain(p => p.Content.StartsWith("📋 **Requestarr 0.9.0: what's new** (continued)\n"), "each part says what it is");
             string.Join("\n", posts.Select(p => p.Content)).Should().Contain("Change number 1 ").And.Contain("Change number 60 ");
         }
 
@@ -259,7 +288,7 @@ namespace Requestarr.Core.Test.Announcements
             versions.Should().NotBeEmpty();
             versions[0].Version.ToString().Should().Be(assembly, "the top entry is the version this build announces");
             versions.Select(v => v.Version).Should().OnlyHaveUniqueItems();
-            versions.Should().OnlyContain(v => v.Users.Count + v.Admins.Count + v.Internal.Count > 0, "every version says what changed");
+            versions.Should().Contain(v => v.HasNews);
             Changelog.Embedded().Replace("\r", string.Empty).Should().Be(file.Replace("\r", string.Empty), "the build embeds the file");
         }
 

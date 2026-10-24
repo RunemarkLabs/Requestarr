@@ -1,0 +1,135 @@
+# Requestarr's beta (staging) environment, for the owner's server: its own Requestarr, Sonarr and Radarr, separate from
+# production in every way: own containers, config volumes, ports, network and media folders.
+# Every path, port, ID and secret comes from .env next to this file (copy env.example); nothing personal is kept here.
+#
+# Setup, in order: docs/setup-guide.md, "Running the beta (staging) environment".
+# Update to the newest staging version: ./update.sh   (./update.sh rollback goes back one version)
+#
+# Why beta can never touch production's files:
+#   - Sonarr and Radarr here see only two folders of media, mounted as /tv-beta and /movies-beta, plus the downloads
+#     folder. Production's media folders are not mounted at all, so nothing here can read, write or delete them.
+#   - folder-check refuses to start the stack unless both media folders are named *-beta, hold a .requestarr-beta file
+#     the owner creates once, differ from each other, and aren't inside the downloads folder (or it inside them).
+#   - Requestarr's only root folders are /tv-beta and /movies-beta, so a beta removal vote can only delete beta files.
+name: requestarr-beta
+
+services:
+  # Runs once before Sonarr and Radarr start; the stack doesn't start if a folder looks wrong (docker compose logs).
+  folder-check:
+    image: ${BETA_HELPER_IMAGE:-busybox:stable}
+    environment:
+      BETA_TV_FOLDER: ${BETA_TV_FOLDER:?set BETA_TV_FOLDER in .env}
+      BETA_MOVIES_FOLDER: ${BETA_MOVIES_FOLDER:?set BETA_MOVIES_FOLDER in .env}
+      BETA_DOWNLOADS_FOLDER: ${BETA_DOWNLOADS_FOLDER:?set BETA_DOWNLOADS_FOLDER in .env}
+    volumes:
+      - ${BETA_TV_FOLDER}:/check/tv-beta:ro
+      - ${BETA_MOVIES_FOLDER}:/check/movies-beta:ro
+      - ./check-folders.sh:/check-folders.sh:ro
+    entrypoint: ["/bin/sh", "/check-folders.sh"]
+    restart: "no"
+
+  sonarr:
+    image: ${BETA_SONARR_IMAGE:-lscr.io/linuxserver/sonarr:latest}
+    environment:
+      PUID: ${PUID:?set PUID in .env}
+      PGID: ${PGID:?set PGID in .env}
+      TZ: ${TZ:-Etc/UTC}
+      SONARR__AUTH__APIKEY: ${BETA_SONARR_API_KEY:?set BETA_SONARR_API_KEY in .env}
+      SONARR__LOG__ANALYTICSENABLED: "false"
+    volumes:
+      - sonarr-config:/config
+      - ${BETA_TV_FOLDER}:/tv-beta
+      - ${BETA_DOWNLOADS_FOLDER}:${BETA_DOWNLOADS_PATH:-/downloads}
+    ports:
+      - "${BETA_SONARR_PORT:?set BETA_SONARR_PORT in .env}:8989"
+    depends_on:
+      folder-check:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    restart: unless-stopped
+
+  radarr:
+    image: ${BETA_RADARR_IMAGE:-lscr.io/linuxserver/radarr:latest}
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ:-Etc/UTC}
+      RADARR__AUTH__APIKEY: ${BETA_RADARR_API_KEY:?set BETA_RADARR_API_KEY in .env}
+      RADARR__LOG__ANALYTICSENABLED: "false"
+    volumes:
+      - radarr-config:/config
+      - ${BETA_MOVIES_FOLDER}:/movies-beta
+      - ${BETA_DOWNLOADS_FOLDER}:${BETA_DOWNLOADS_PATH:-/downloads}
+    ports:
+      - "${BETA_RADARR_PORT:?set BETA_RADARR_PORT in .env}:7878"
+    depends_on:
+      folder-check:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    restart: unless-stopped
+
+  # Registers /tv-beta and /movies-beta as the only root folders Requestarr uses, once both are up (idempotent).
+  root-folders:
+    image: ${BETA_CURL_IMAGE:-curlimages/curl:latest}
+    environment:
+      SONARR_API_KEY: ${BETA_SONARR_API_KEY}
+      RADARR_API_KEY: ${BETA_RADARR_API_KEY}
+    volumes:
+      - ./root-folders.sh:/root-folders.sh:ro
+    entrypoint: ["/bin/sh", "/root-folders.sh"]
+    depends_on:
+      sonarr:
+        condition: service_healthy
+      radarr:
+        condition: service_healthy
+    restart: "no"
+
+  requestarr:
+    # The staging image; ./update.sh pulls the newest, ./update.sh rollback pins the one before (REQUESTARR_TAG in .env).
+    image: ghcr.io/runemarklabs/requestarr:${REQUESTARR_TAG:-staging}
+    environment:
+      # Keeps every "what's new" post for good, like production (docs/development.md#version-posts).
+      REQUESTARR_ENVIRONMENT: staging
+      REQUESTARR_PROVISIONING_FILE: /provisioning/provisioning.yml
+      TZ: ${TZ:-Etc/UTC}
+      REQUESTARR_ADMIN_USERNAME: ${REQUESTARR_ADMIN_USERNAME:?set REQUESTARR_ADMIN_USERNAME in .env}
+      REQUESTARR_ADMIN_PASSWORD: ${REQUESTARR_ADMIN_PASSWORD:?set REQUESTARR_ADMIN_PASSWORD in .env}
+      REQUESTARR_API_KEY: ${REQUESTARR_API_KEY:?set REQUESTARR_API_KEY in .env}
+      DISCORD_BOT_TOKEN: ${BETA_DISCORD_BOT_TOKEN:?set BETA_DISCORD_BOT_TOKEN in .env}
+      DISCORD_APPLICATION_ID: ${BETA_DISCORD_APPLICATION_ID:?set BETA_DISCORD_APPLICATION_ID in .env}
+      DISCORD_GUILD_ID: ${BETA_DISCORD_GUILD_ID:?set BETA_DISCORD_GUILD_ID in .env}
+      DISCORD_ADMIN_ROLE_ID: ${BETA_DISCORD_ADMIN_ROLE_ID:-}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      SONARR_API_KEY: ${BETA_SONARR_API_KEY}
+      RADARR_API_KEY: ${BETA_RADARR_API_KEY}
+      QUALITY_PROFILE: ${BETA_QUALITY_PROFILE:-HD-1080p}
+    volumes:
+      - requestarr-config:/config
+      - ./provisioning.yml:/provisioning/provisioning.yml:ro
+    ports:
+      - "${BETA_REQUESTARR_PORT:?set BETA_REQUESTARR_PORT in .env}:9797"
+    depends_on:
+      root-folders:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+# Sonarr and Radarr call Requestarr's webhook as http://requestarr:9797 on this network, never through the server's
+# ports; the name keeps it apart from production's network.
+networks:
+  default:
+    name: requestarr-beta
+
+volumes:
+  requestarr-config:
+  sonarr-config:
+  radarr-config:

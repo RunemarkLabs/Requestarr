@@ -199,3 +199,8 @@ node_modules.nosync
 
 # Local dev stack secrets (template: docker/secrets.env.example)
 docker/secrets.env
+
+# The staging server's own settings and secrets, and its update backups (template: deploy/staging/env.example)
+deploy/staging/.env
+deploy/staging/backups/
+deploy/staging/.previous-version

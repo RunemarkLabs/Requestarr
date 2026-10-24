@@ -8,3 +8,7 @@ _artifacts
 **/obj
 docker/secrets.env
 docker/*.local.*
+# Anything that holds secrets or server settings never enters an image.
+**/*.env
+**/.env
+deploy/staging/backups
