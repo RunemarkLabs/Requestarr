@@ -650,6 +650,10 @@ _Coming in Phase 3:_ Plex token and library-to-content-type mapping.
 
 _Coming in Phase 2._
 
+## Developing Requestarr
+
+Working on Requestarr itself, or testing a build by hand? The local dev stack, with test Sonarr and Radarr instances, is started with `.\docker\dev.ps1 up` from PowerShell in the repo folder (or `docker/dev.sh up` with Git Bash). Its helpers stop and start a test instance, make a requested title look downloaded (`fake-download`), and make removal votes take minutes instead of days (`fast-votes on`). If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `.\docker\dev.cmd`). Everything is in [development](development.md#docker-stack).
+
 ## 8. Troubleshooting
 
 - **"Private application cannot have a default authorization link":** set Installation → Install Link to None first.

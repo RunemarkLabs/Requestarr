@@ -14,6 +14,12 @@ namespace Requestarr.Core.Removals
         // The day of the requester's answer window they're reminded on; 0 when it's too short for one.
         int ReminderDay { get; }
 
+        // The timings removals use: the days above, or minutes while dev fast votes are on.
+        bool FastVotes { get; }
+        TimeSpan VoteWindow { get; }
+        TimeSpan RequesterTimeout { get; }
+        TimeSpan? ReminderAfter { get; }
+
         void Apply(RemovalProvisioning provisioning);
     }
 
@@ -24,11 +30,21 @@ namespace Requestarr.Core.Removals
         public const int DefaultReminderDay = 5;
 
         private readonly IConfigService _config;
+        private readonly IDevFastVotes _fastVotes;
 
-        public RemovalSettings(IConfigService config)
+        public RemovalSettings(IConfigService config, IDevFastVotes fastVotes)
         {
             _config = config;
+            _fastVotes = fastVotes;
         }
+
+        public bool FastVotes => _fastVotes.On;
+
+        public TimeSpan VoteWindow => FastVotes ? DevFastVotes.VoteWindow : TimeSpan.FromDays(VoteDays);
+
+        public TimeSpan RequesterTimeout => FastVotes ? DevFastVotes.RequesterTimeout : TimeSpan.FromDays(RequesterTimeoutDays);
+
+        public TimeSpan? ReminderAfter => FastVotes ? DevFastVotes.Reminder : ReminderDay > 0 ? TimeSpan.FromDays(ReminderDay) : null;
 
         public int VoteDays => AtLeastOne(_config.RemovalVoteDays, DefaultVoteDays);
 

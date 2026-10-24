@@ -11,8 +11,14 @@
 #                                       stopped, for the live Discord test
 #   docker/dev.sh init                  create docker/secrets.env from the template (run by `up`)
 #   docker/dev.sh logs [service]        follow logs
+#   docker/dev.sh stop-backend sonarr|radarr      stop only that test instance (Requestarr alerts after 3 minutes)
+#   docker/dev.sh start-backend sonarr|radarr     start it again (Requestarr says it's back)
+#   docker/dev.sh fake-download movie "<title>"   make a title in the test Radarr look downloaded, like a real import
+#   docker/dev.sh fake-download tv "<title>" <n>  the same for season n in the test Sonarr
+#   docker/dev.sh fast-votes on|off|status        dev only: removal votes in minutes (vote 5, answer 5, reminder at 3)
 #
-# Secret values are read from docker/secrets.env and never printed.
+# On Windows, docker/dev.ps1 does the same from PowerShell. Secret values are read from docker/secrets.env
+# and never printed.
 set -euo pipefail
 
 # On Git Bash, pwd -W gives a Windows path that docker understands.
@@ -125,6 +131,46 @@ reset_uat() {
     echo "UAT reset: clean and UAT ready. The bot recreates #requestarr-admin and its panel on start."
 }
 
+backend_service() {
+    case "${1:-}" in
+        sonarr) echo sonarr-test ;;
+        radarr) echo radarr-test ;;
+        *) echo "say which test instance: sonarr or radarr" >&2; exit 1 ;;
+    esac
+}
+
+# The dev stack's Requestarr container, and only if it is marked as the dev stack.
+requestarr_container() {
+    local name
+    name=$(docker ps --filter "label=com.docker.compose.project=requestarr-dev" --filter "label=com.docker.compose.service=requestarr" --format '{{.Names}}')
+    [ -n "$name" ] || { echo "the dev stack's Requestarr isn't running (docker/dev.sh up)" >&2; exit 1; }
+    docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$name" | grep -qx 'REQUESTARR_DEV_STACK=true'         || { echo "$name isn't marked as the dev stack; fast votes stay off" >&2; exit 1; }
+    echo "$name"
+}
+
+fast_votes() {
+    local name
+    case "${1:-}" in
+        on)
+            name=$(requestarr_container)
+            docker exec "$name" sh -c 'touch /config/dev-fast-votes'
+            echo "Fast votes ON (dev stack only): new removal votes close after 5 minutes; requesters have 5 minutes to answer, reminded at minute 3."
+            echo "Requestarr picks it up within a minute and posts a \"Dev: fast votes\" notice in #requestarr-admin. Removals already open keep their times."
+            echo "It stays on until docker/dev.sh fast-votes off, or reset-uat (which always starts with the real settings)."
+            ;;
+        off)
+            name=$(requestarr_container)
+            docker exec "$name" sh -c 'rm -f /config/dev-fast-votes'
+            echo "Fast votes off: removal timings are back to the real settings. Requestarr posts a \"Dev: fast votes\" notice in #requestarr-admin within a minute."
+            ;;
+        status)
+            name=$(requestarr_container)
+            if docker exec "$name" test -e /config/dev-fast-votes; then echo "Fast votes: ON (test timings, minutes)"; else echo "Fast votes: off"; fi
+            ;;
+        *) echo "fast-votes on, off or status" >&2; exit 1 ;;
+    esac
+}
+
 case "${1:-}" in
     init) init ;;
     up)
@@ -137,8 +183,24 @@ case "${1:-}" in
     reset-test-backends) reset_test_backends ;;
     reset-uat) reset_uat "${2:-}" ;;
     logs) shift; compose logs -f "$@" ;;
+    stop-backend)
+        service=$(backend_service "${2:-}")
+        compose stop "$service"
+        echo "Stopped $service. Requestarr checks every minute: after 3 minutes down it posts an alert in #requestarr-admin, new requests of that type say they're paused, and the instance waits in /admin requests. After 30 minutes the alert offers Announce to users."
+        ;;
+    start-backend)
+        service=$(backend_service "${2:-}")
+        compose start "$service"
+        echo "Started $service. Within a minute Requestarr posts that it's back (if it had alerted) and requests work again."
+        ;;
+    fake-download)
+        shift
+        load_secrets
+        python -I "$DIR/fake-download.py" "$@"
+        ;;
+    fast-votes) fast_votes "${2:-}" ;;
     *)
-        sed -n '2,15p' "$0"
+        sed -n '2,23p' "$0"
         exit 1
         ;;
 esac

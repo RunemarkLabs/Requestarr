@@ -191,7 +191,7 @@ namespace Requestarr.Core.Provisioning
                 : $"availability (polling every {_availability.PollMinutes} min; no webhookUrl)");
 
             _removal.Apply(document.Removal);
-            applied.Add($"removal votes ({_removal.VoteDays} days; requester answers within {_removal.RequesterTimeoutDays} days{(_removal.ReminderDay > 0 ? $", reminded on day {_removal.ReminderDay}" : string.Empty)})");
+            applied.Add($"removal votes ({(_removal.FastVotes ? "DEV FAST VOTES ON (minutes); settings: " : string.Empty)}{_removal.VoteDays} days; requester answers within {_removal.RequesterTimeoutDays} days{(_removal.ReminderDay > 0 ? $", reminded on day {_removal.ReminderDay}" : string.Empty)})");
 
             _backends.SyncFromProvisioning(document.Backends);
 

@@ -13,6 +13,8 @@ services:
     environment:
       REQUESTARR_PROVISIONING_FILE: /provisioning/provisioning.yml
       TZ: Etc/UTC
+      # Marks this container as the dev stack: only then can `dev.ps1 fast-votes on` take effect.
+      REQUESTARR_DEV_STACK: "true"
     volumes:
       - requestarr-config:/config
       - ./provisioning.yml:/provisioning/provisioning.yml:ro
