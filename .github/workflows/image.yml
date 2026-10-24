@@ -114,7 +114,7 @@ jobs:
             echo "== $platform"
             digest=$(docker buildx imagetools inspect "$REF" --raw | jq -r --arg arch "${platform#linux/}" '.manifests[] | select(.platform.architecture == $arch) | .digest')
             size=$(docker buildx imagetools inspect "$IMAGE@$digest" --raw | jq '[.layers[].size] | add')
-            echo "| $platform | \`$digest\` | $((size / 1048576)) MB |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| $platform | \`$digest\` | $((size / 1048576)) MB |" | tee -a "$GITHUB_STEP_SUMMARY"
             docker pull -q --platform "$platform" "$IMAGE@$digest"
 
             # The public CA certificates the base image trusts are .pem files; everything else is searched.

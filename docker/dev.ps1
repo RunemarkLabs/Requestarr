@@ -120,12 +120,18 @@ function Value([hashtable]$secrets, [string]$name, [string]$default) {
     if ($secrets[$name]) { return $secrets[$name] } else { return $default }
 }
 
-# QA only: the versions staging has (every "## x.y.z" in the staging branch's changelog), which QA's what's-new posts
-# leave out (docs/development.md#version-posts). Empty before staging exists.
+# QA only: the versions staging has (what was last published for it, staged-versions.py), which QA's what's-new
+# posts leave out (docs/development.md#version-posts). Empty before anything is published for staging.
 function Staged-Versions {
-    $changelog = git -C $Repo show 'origin/staging:CHANGELOG.md' 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $changelog) { return '' }
-    return (($changelog | Where-Object { $_ -match '^## (\d+\.\d+\.\d+)$' } | ForEach-Object { $_.Substring(3) }) -join ',')
+    $python = Get-Python -Optional
+    if (-not $python) {
+        Write-Host "Python isn't installed, so the QA stack can't tell what staging has: its what's new shows every version."
+        return ''
+    }
+    $extra = @($python | Select-Object -Skip 1)
+    $out = & $python[0] @extra -I (Join-Path $Dir 'staged-versions.py')
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return ("$out").Trim()
 }
 
 # What the chosen stack uses: its Compose project, ports, and its own Discord bot (QA: DISCORD_*, dev: DEV_DISCORD_*).
@@ -144,7 +150,8 @@ function Get-StackInfo([string]$which) {
                     STACK_DISCORD_APPLICATION_ID = $s['DISCORD_APPLICATION_ID']
                     STACK_DISCORD_GUILD_ID = $s['DISCORD_TEST_GUILD_ID']
                     STACK_DISCORD_ADMIN_ROLE_ID = $s['DISCORD_ADMIN_ROLE_ID']
-                    REQUESTARR_STAGED_VERSIONS = (Staged-Versions)
+                    # Set when the stack is built (Build-Image), the only time Requestarr's container is recreated.
+                    REQUESTARR_STAGED_VERSIONS = ''
                 }
             }
         }
@@ -188,7 +195,6 @@ function Build-Image {
         $ref = "origin/$Stack"
     }
     if ($Stack -eq 'qa') {
-        git -C $Repo fetch -q origin staging 2>$null
         $script:Info.Env.REQUESTARR_STAGED_VERSIONS = Staged-Versions
         $staged = if ($script:Info.Env.REQUESTARR_STAGED_VERSIONS) { $script:Info.Env.REQUESTARR_STAGED_VERSIONS } else { 'none' }
         Write-Host "Versions staging has (QA's what's new leaves them out): $staged"

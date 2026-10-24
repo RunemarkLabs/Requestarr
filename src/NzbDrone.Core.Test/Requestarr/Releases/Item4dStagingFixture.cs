@@ -104,8 +104,10 @@ namespace Requestarr.Core.Test.Releases
         public void the_local_stacks_tell_requestarr_their_environment()
         {
             Read("docker", "compose.yaml").Should().Contain($"{ReleaseEnvironment.EnvironmentVariable}: ${{REQUESTARR_STACK}}").And.Contain(ReleaseEnvironment.StagedVersionsVariable);
-            Read("docker", "dev.ps1").Should().Contain("origin/staging:CHANGELOG.md").And.Contain(ReleaseEnvironment.StagedVersionsVariable);
-            Read("docker", "dev.sh").Should().Contain("origin/staging:CHANGELOG.md").And.Contain(ReleaseEnvironment.StagedVersionsVariable);
+            Read("docker", "dev.ps1").Should().Contain("staged-versions.py").And.Contain(ReleaseEnvironment.StagedVersionsVariable);
+            Read("docker", "dev.sh").Should().Contain("staged-versions.py").And.Contain(ReleaseEnvironment.StagedVersionsVariable);
+            Read("docker", "staged-versions.py").Should().Contain("actions/workflows/image.yml/runs").And.Contain("branch=staging").And.Contain("status=success")
+                .And.Contain("origin/staging", "offline, the staging branch is the next best record");
         }
 
         [Test]

@@ -16,7 +16,7 @@ services:
       TZ: Etc/UTC
       REQUESTARR_STACK: ${REQUESTARR_STACK}
       # Which "what's new" posts this server keeps (docs/development.md#version-posts): QA shows the versions staging
-      # doesn't have yet (the scripts read staging's from the staging branch), dev only the version running now.
+      # doesn't have yet (the scripts look up what was last published for staging), dev only the version running now.
       REQUESTARR_ENVIRONMENT: ${REQUESTARR_STACK}
       REQUESTARR_STAGED_VERSIONS: ${REQUESTARR_STAGED_VERSIONS:-}
       # Marks a local test stack: only then can `dev.ps1 fast-votes on` take effect.
