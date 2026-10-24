@@ -122,6 +122,9 @@ namespace Requestarr.Core.Test.Announcements
                 Mocker.Resolve<PlexLinkSource>(),
                 Mocker.Resolve<DownInstanceSource>()
             }));
+
+            // The dev server keeps only the version running now (task 4d), as the dev stack does.
+            Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? "dev" : null });
             var announcements = Mocker.Resolve<AnnouncementService>();
             Mocker.SetConstant<IAnnouncementService>(announcements);
             var monitor = Mocker.Resolve<ConnectionMonitor>();
@@ -180,7 +183,8 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[members] {member.Username} holds {Name(membersRole)}: after add {afterAdd}, after suspend {afterSuspend}, after unsuspend {afterUnsuspend}");
                 (afterAdd, afterSuspend, afterUnsuspend).Should().Be((true, false, true));
 
-                // 3. What's new: the current version on first start, then a simulated upgrade, then a restart.
+                // 3. What's new on the dev server: only the current version, then a simulated upgrade replaces it, and a
+                // restart changes nothing (task 4d: dev shows only the version running now).
                 async Task<List<IMessage>> Recent(IMessageChannel c) => (await c.GetMessagesAsync(30).FlattenAsync()).OrderBy(m => m.Id).ToList();
                 var current = Changelog.Release(announcements.CurrentVersion());
                 await announcements.PostVersionNotesAsync();
@@ -189,15 +193,14 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] start on {current}: {adminNotes.Count} admin post(s), {userNotes.Count} user post(s)");
                 adminNotes.ForEach(m => Log($"[upgrade]   admin, read back: \"{m.Content.Replace("\n", " | ")}\""));
                 userNotes.ForEach(m => Log($"[upgrade]   users, read back: \"{m.Content.Replace("\n", " | ")}\""));
-                adminNotes.Should().NotBeEmpty();
-                adminNotes[0].Content.Should().StartWith($"📋 **Requestarr {current}: what's new**");
+                adminNotes.Should().ContainSingle().Which.Content.Should().StartWith($"📋 **Requestarr {current}: what's new**");
                 var hasUserLines = Changelog.Parse(announcements.ChangelogText()).Single(v => v.Version == current).Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
                 var next = new Version(current.Major, current.Minor, current.Build + 1);
                 announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
                 var shipped = announcements.ChangelogText();
-                announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n### Internal\n- Live check: internal work stays with the admins.\n\n" + shipped;
+                announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
                 var adminAfter = (await Recent(adminRest)).Where(m => m.Content.StartsWith("📋")).ToList();
@@ -205,9 +208,10 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] simulated upgrade to {next}, started twice: admin posts {adminAfter.Count}, user posts {usersAfter.Count}; stored version {guildSetup.GetConfig().AnnouncedVersion}");
                 Log($"[upgrade]   admin, read back: \"{adminAfter.Last().Content.Replace("\n", " | ")}\"");
                 Log($"[upgrade]   users, read back: \"{usersAfter.Last().Content.Replace("\n", " | ")}\"");
-                adminAfter.Should().HaveCount(adminNotes.Count + 1, "once per version, even across restarts");
-                usersAfter.Should().HaveCount(userNotes.Count + 1);
-                usersAfter.Last().Content.Should().NotContain("admins").And.NotContain("Internal");
+                adminAfter.Should().ContainSingle("the new version replaces the old post, once, even across restarts")
+                    .Which.Content.Should().Be($"📋 **Requestarr {next}: what's new**\n**For users** (posted in #{ChannelLayout.AnnouncementsChannelName})\n" +
+                        "• Live check: this is how something new is announced to you.\n**For admins**\n• Live check: admins get the full list.");
+                usersAfter.Should().ContainSingle().Which.Content.Should().Be($"✨ **What's new in Requestarr {next}**\n• Live check: this is how something new is announced to you.");
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
                 Docker("stop");

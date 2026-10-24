@@ -1029,29 +1029,35 @@ namespace Requestarr.Core.Discord
             $"✅ **{Label(type)} requests work again**\nEverything is back to normal after {Duration(downFor)}. Thanks for your patience.";
 
         // What's new on upgrade: the full list for admins; only the "For users" lines, as written, for members.
+        // What's new in one version. Only sections with something in them are shown; a version with nothing for
+        // users or admins isn't posted at all. Each post starts with its header, so a server can find its posts again.
+        public static string VersionNotesAdminHeader(Version version) => $"📋 **Requestarr {version}: what's new**";
+
+        public static string VersionNotesUsersHeader(Version version) => $"✨ **What's new in Requestarr {version}**";
+
+        public const string VersionNotesContinued = " (continued)";
+
         public static string VersionNotesForAdmins(Announcements.ChangelogVersion version, bool postedToUsers)
         {
-            var lines = new List<string> { $"📋 **Requestarr {version.Version}: what's new**" };
+            var lines = new List<string> { VersionNotesAdminHeader(version.Version) };
 
-            lines.Add(version.Users.Count == 0
-                ? $"**{Announcements.Changelog.UsersHeading}:** nothing this time, so nothing was posted to users."
-                : $"**{Announcements.Changelog.UsersHeading}**{(postedToUsers ? $" (posted in #{ChannelLayout.AnnouncementsChannelName})" : string.Empty)}");
-            lines.AddRange(version.Users.Select(l => $"• {l}"));
-
-            foreach (var (heading, items) in new[] { (Announcements.Changelog.AdminsHeading, version.Admins), (Announcements.Changelog.InternalHeading, version.Internal) })
+            if (version.Users.Count > 0)
             {
-                if (items.Count > 0)
-                {
-                    lines.Add($"**{heading}**");
-                    lines.AddRange(items.Select(l => $"• {l}"));
-                }
+                lines.Add($"**{Announcements.Changelog.UsersHeading}**{(postedToUsers ? $" (posted in #{ChannelLayout.AnnouncementsChannelName})" : string.Empty)}");
+                lines.AddRange(version.Users.Select(l => $"• {l}"));
+            }
+
+            if (version.Admins.Count > 0)
+            {
+                lines.Add($"**{Announcements.Changelog.AdminsHeading}**");
+                lines.AddRange(version.Admins.Select(l => $"• {l}"));
             }
 
             return string.Join("\n", lines);
         }
 
         public static string VersionNotesForUsers(Announcements.ChangelogVersion version) =>
-            $"✨ **What's new in Requestarr**\n{string.Join("\n", version.Users.Select(l => $"• {l}"))}";
+            string.Join("\n", version.Users.Select(l => $"• {l}").Prepend(VersionNotesUsersHeader(version.Version)));
 
         // /admin requests: one thing waiting on the admin at a time, oldest first.
         public const string WalkDone = "Nothing left waiting on you. 🎉";

@@ -233,6 +233,14 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.FromResult(true);
         }
 
+        public Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
+        {
+            IReadOnlyList<ChannelMessage> messages = Channels.TryGetValue(channelId, out var channel)
+                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.Content)).TakeLast(limit).ToList()
+                : new List<ChannelMessage>();
+            return Task.FromResult(messages);
+        }
+
         public void DeleteMessage(ulong channelId, ulong messageId)
         {
             var channel = Channels[channelId];

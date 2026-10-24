@@ -28,6 +28,8 @@ namespace Requestarr.Core.Discord.Gateway
 
     public record PermissionOverwrite(ulong TargetId, OverwriteTarget TargetType, ChannelPermissions Allow, ChannelPermissions Deny);
 
+    public record ChannelMessage(ulong Id, string Content);
+
     // Operations Requestarr performs in its one Discord server. Implemented over Discord.Net
     // for the live bot and in memory for tests, so all rules are testable without Discord.
     public interface IDiscordGuildGateway
@@ -69,5 +71,8 @@ namespace Requestarr.Core.Discord.Gateway
 
         // False when the message is gone already or can't be deleted.
         Task<bool> DeleteMessageAsync(ulong channelId, ulong messageId);
+
+        // The bot's own messages among the channel's newest `limit`, oldest first; empty when the channel is gone.
+        Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit);
     }
 }
