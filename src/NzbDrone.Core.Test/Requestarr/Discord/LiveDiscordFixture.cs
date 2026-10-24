@@ -51,6 +51,14 @@ namespace Requestarr.Core.Test.Discord
             Mocker.SetConstant<IDiscordGuildConfigRepository>(Mocker.Resolve<DiscordGuildConfigRepository>());
             Mocker.SetConstant<IAuditService>(Mocker.Resolve<AuditService>());
 
+            // What the bot's start-up reads since the request feed and removals arrived (an empty database, not mocks).
+            Mocker.SetConstant<Requestarr.Core.Backends.IBackendRepository>(Mocker.Resolve<Requestarr.Core.Backends.BackendRepository>());
+            Mocker.SetConstant<Requestarr.Core.Requests.IRequestRepository>(Mocker.Resolve<Requestarr.Core.Requests.RequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Requests.IRequestSubscriberRepository>(Mocker.Resolve<Requestarr.Core.Requests.RequestSubscriberRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalProposalRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalProposalRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalFlagRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalFlagRepository>());
+            Mocker.SetConstant<Requestarr.Core.Removals.IRemovalPromptRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalPromptRepository>());
+
             IGuildSetupService guildSetup = null;
             IUserManagementService users = null;
             IPanelService panels = null;
@@ -71,6 +79,13 @@ namespace Requestarr.Core.Test.Discord
             feed = Mocker.Resolve<Requestarr.Core.Requests.RequestFeed>();
             Mocker.SetConstant(guildSetup);
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
+            Mocker.SetConstant<Requestarr.Core.Admin.IAdminQueue>(new Requestarr.Core.Admin.AdminQueue(new Requestarr.Core.Admin.IAdminQueueSource[]
+            {
+                Mocker.Resolve<Requestarr.Core.Admin.PendingRequestsSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>()
+            }));
             panels = Mocker.Resolve<PanelService>();
             Mocker.SetConstant(panels);
             users = Mocker.Resolve<UserManagementService>();
