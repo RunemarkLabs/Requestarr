@@ -4,6 +4,11 @@ Every pull request adds its changes here, under the version it ships in (see "Ho
 docs/development.md). On start, Requestarr posts each new version once: everything to the admin
 channel, and only **For users** to the announcements channel, in the words written here.
 
+## 0.2.3
+
+### Internal
+- `docker\dev.cmd` says it acts on the QA stack unless given `-Stack dev`, like `dev.ps1`.
+
 ## 0.2.2
 
 ### Internal
