@@ -78,6 +78,9 @@ namespace Requestarr.Core.Test.Releases
             // Task 4d fix in staging: a failed download says why and falls back to the copy already on the server.
             update.Should().Contain("Couldn't download $ref").And.Contain("Using the copy of $ref already on this server").And.Contain("there's no copy of $ref on this server");
             Read("docs", "setup-guide.md").Should().Contain("docker login ghcr.io").And.Contain("read:packages");
+
+            // A backup that fails stops the update and starts the old version again: a rollback needs that data.
+            update.Should().Contain("if ! file=$(backup \"$before\"); then").And.Contain("[ -s \"$file\" ] || return 1").And.Contain("MSYS_NO_PATHCONV=1");
         }
 
         [Test]
