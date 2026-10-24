@@ -49,7 +49,7 @@ def container(service):
         fail("Docker isn't answering. Start Docker Desktop, then the stack (dev.ps1 up).")
     names = out.stdout.split()
     if len(names) != 1:
-        fail(f"the {PROJECT.split('-')[1]} stack's {service} container isn't running (dev.ps1 up, or dev.ps1 start-backend).")
+        fail(f"the {PROJECT.split('-')[1]} stack's {service} container isn't running (dev.ps1{' -Stack dev' if PROJECT.endswith('-dev') else ''} up, or start-backend).")
     return names[0]
 
 
