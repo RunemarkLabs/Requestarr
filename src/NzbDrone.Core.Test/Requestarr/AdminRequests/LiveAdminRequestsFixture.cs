@@ -277,11 +277,12 @@ namespace Requestarr.Core.Test.AdminRequests
             }
         }
 
-        // docker stop/start on the dev stack's test Sonarr, found by its compose service name.
+        // docker stop/start on the dev stack's test Sonarr, found by its compose project and service (never the QA stack's).
         private static void Docker(string verb)
         {
-            var id = Run("ps", "-aq", "--filter", "label=com.docker.compose.service=sonarr-test").Trim();
+            var id = Run("ps", "-aq", "--filter", $"label=com.docker.compose.project={LiveDev.ComposeProject}", "--filter", "label=com.docker.compose.service=sonarr-test").Trim();
             id.Should().NotBeEmpty("the dev stack's test Sonarr must exist");
+            id.Should().NotContain("\n", "exactly one container");
             Run(verb, id);
             Log($"[docker] {verb} sonarr-test");
         }

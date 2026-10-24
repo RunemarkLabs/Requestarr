@@ -10,6 +10,7 @@ namespace Requestarr.Core.Test.Discord.Harness
     public static class LiveDev
     {
         public const string Stack = "dev";
+        public const string ComposeProject = "requestarr-dev";
         public const string TokenVariable = "DEV_DISCORD_BOT_TOKEN";
 
         public static string Token => Environment.GetEnvironmentVariable(TokenVariable);

@@ -54,6 +54,11 @@ namespace Requestarr.Core.Test.Releases
 
             tests.Where(f => qa.IsMatch(File.ReadAllText(f))).Select(Path.GetFileName).Should().BeEmpty("the QA server and stack are the owner's; live checks use LiveDev");
 
+            tests.Where(f => File.ReadAllText(f).Contains("com.docker.compose.service=") && !File.ReadAllText(f).Contains("com.docker.compose.project={LiveDev.ComposeProject}"))
+                .Select(Path.GetFileName).Should().BeEmpty("a container found by its service alone could be the QA stack's");
+            tests.Where(f => Path.GetFileName(f) != "Item4cReleaseFlowFixture.cs" && File.ReadAllText(f).Contains("\"requestarr-qa-"))
+                .Select(Path.GetFileName).Should().BeEmpty("live checks never name a QA container");
+
             var live = tests.Where(f => Path.GetFileName(f).StartsWith("Live") && File.ReadAllText(f).Contains("[ManualTest]")).ToList();
             live.Should().HaveCountGreaterThan(5);
             live.Where(f => File.ReadAllText(f).Contains("DiscordSettingsStore") && !File.ReadAllText(f).Contains("LiveDev.Settings()"))
