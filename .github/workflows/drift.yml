@@ -1,11 +1,12 @@
 name: Drift
 
-# dev and qa must never drift: every commit on qa (a fix made in QA, say) must also be on dev.
-# Fails while qa has a commit dev doesn't; ./release.sh merge-back fixes that (docs/development.md#release-flow).
-# Not a required check: a fix into qa is drift until it is merged back, which happens in the same task.
+# The release branches must never drift: every commit on qa (a fix made in QA, say) must also be on dev, and every
+# commit on staging must be on qa. Fails while one isn't; ./release.sh merge-back fixes that
+# (docs/development.md#release-flow). Not a required check: a fix into qa or staging is drift until it is merged
+# back, which happens in the same task.
 on:
   push:
-    branches: [dev, qa]
+    branches: [dev, qa, staging]
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
@@ -14,23 +15,32 @@ on:
         description: Branch that must contain everything
         default: dev
       qa_ref:
-        description: Branch checked against it
+        description: Branch checked against it, and that must contain staging
         default: qa
+      staging_ref:
+        description: Branch checked against qa (empty for none)
+        default: staging
 
 permissions:
   contents: read
 
 jobs:
   drift:
-    name: qa has nothing dev doesn't
+    name: qa has nothing dev doesn't, staging nothing qa doesn't
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Every commit on qa is on dev
+      - name: Every commit on qa is on dev, and every commit on staging is on qa
         env:
           DEV_REF: ${{ inputs.dev_ref || 'dev' }}
           QA_REF: ${{ inputs.qa_ref || 'qa' }}
-        run: ./release.sh drift "origin/$DEV_REF" "origin/$QA_REF"
+          STAGING_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_ref || 'staging' }}
+        run: |
+          staging=""
+          if [ -n "$STAGING_REF" ] && git rev-parse -q --verify "origin/$STAGING_REF" >/dev/null; then
+            staging="origin/$STAGING_REF"
+          fi
+          ./release.sh drift "origin/$DEV_REF" "origin/$QA_REF" $staging

@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build: web UI (Node), backend (.NET 10 SDK), then a slim ASP.NET runtime image.
 # Build from the repository root:  docker build -f docker/Dockerfile -t requestarr:dev .
+# The web UI and backend are built on the build machine's own platform and the backend is published for the target
+# (linux-x64 or linux-arm64), so a multi-platform build (.github/workflows/image.yml) only emulates the last stage.
+# Nothing secret goes in: the build context is the committed files only (secrets.env is never committed).
 
-FROM node:20-bookworm-slim AS frontend
+FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend
 WORKDIR /src
 COPY package.json yarn.lock .yarnrc tsconfig.json ./
 RUN yarn install --frozen-lockfile --network-timeout 120000
 COPY frontend/ frontend/
 RUN yarn build --env production
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
 ARG TARGETARCH
 WORKDIR /src
 COPY .editorconfig LICENSE CHANGELOG.md ./

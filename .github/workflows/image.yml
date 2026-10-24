@@ -1,0 +1,142 @@
+name: Image
+
+# Publishes Requestarr's container image to GitHub's container registry (docs/development.md#published-images):
+#   push to staging (a promotion, or a fix into staging): ghcr.io/runemarklabs/requestarr:staging and :x.y.z
+#   push to main (a release, only on the owner's "ship it"):  :x.y.z, :x.y and :latest
+#   Run workflow on any branch with a tag starting "test-": that tag only, for trying the workflow (delete it after).
+# Two architectures: linux/amd64 (most home servers and NAS boxes) and linux/arm64 (Raspberry Pi 4 and 5, ARM NAS
+# boxes, Apple silicon), the same pair the other Servarr apps publish.
+on:
+  push:
+    branches: [staging, main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: A test tag to publish this branch under, starting "test-" (nothing else is tagged)
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/runemarklabs/requestarr
+
+jobs:
+  publish:
+    name: Publish image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version and tags
+        id: tags
+        env:
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          TEST_TAG: ${{ inputs.tag }}
+        run: |
+          version=$(sed -nE 's|.*<AssemblyVersion>([0-9]+\.[0-9]+\.[0-9]+).*|\1|p' src/Directory.Build.props | head -1)
+          top=$(grep -m1 -E '^## [0-9]+\.[0-9]+\.[0-9]+$' CHANGELOG.md | cut -c4-)
+          if [ -z "$version" ] || [ "$version" != "$top" ]; then
+            echo "::error::The build's version ($version) and CHANGELOG.md's top version ($top) must match."
+            exit 1
+          fi
+          case "$EVENT:$BRANCH" in
+            push:staging) tags="$IMAGE:staging,$IMAGE:$version" ;;
+            push:main) tags="$IMAGE:$version,$IMAGE:${version%.*},$IMAGE:latest" ;;
+            workflow_dispatch:*)
+              if ! [[ "$TEST_TAG" =~ ^test-[a-z0-9.-]+$ ]]; then
+                echo "::error::A test tag starts with 'test-' and has only lowercase letters, digits, dots and dashes."
+                exit 1
+              fi
+              tags="$IMAGE:$TEST_TAG"
+              ;;
+            *)
+              echo "::error::Images are published from staging and main only (or a test tag by hand)."
+              exit 1
+              ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "first=${tags%%,*}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $version as: $tags"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Requestarr
+            org.opencontainers.image.description=Discord requests for Sonarr and Radarr, with per-user access, approvals and removal votes.
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=GPL-3.0-only
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+
+      # Each platform's image, as published: no file that could hold secrets, no secret-looking environment variable or
+      # build step, and it starts and answers on its port.
+      - name: Check the published image
+        env:
+          REF: ${{ steps.tags.outputs.first }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Published"
+            echo "Tags: \`${TAGS//,/\`, \`}\`"
+            echo
+            echo "| Platform | Digest | Compressed size |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for platform in linux/amd64 linux/arm64; do
+            echo "== $platform"
+            digest=$(docker buildx imagetools inspect "$REF" --raw | jq -r --arg arch "${platform#linux/}" '.manifests[] | select(.platform.architecture == $arch) | .digest')
+            size=$(docker buildx imagetools inspect "$IMAGE@$digest" --raw | jq '[.layers[].size] | add')
+            echo "| $platform | \`$digest\` | $((size / 1048576)) MB |" >> "$GITHUB_STEP_SUMMARY"
+            docker pull -q --platform "$platform" "$IMAGE@$digest"
+
+            # The public CA certificates the base image trusts are .pem files; everything else is searched.
+            files=$(docker run --rm --user 0 --platform "$platform" --entrypoint sh "$IMAGE@$digest" -c \
+              'find / -xdev \( -path /etc/ssl/certs -o -path /usr/lib/ssl -o -path /usr/share/ca-certificates -o -path /proc \) -prune -o \( -name "*.env" -o -name ".env" -o -name "secrets*" -o -name "*.pem" -o -name "*.key" -o -name "id_rsa*" -o -name "*.pfx" \) -print')
+            if [ -n "$files" ]; then echo "::error::$platform image has files that could hold secrets: $files"; exit 1; fi
+            env_names=$(docker image inspect "$IMAGE@$digest" --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1)
+            echo "Environment: $(echo $env_names)"
+            if echo "$env_names" | grep -iE 'TOKEN|SECRET|PASSWORD|API_?KEY'; then echo "::error::secret-looking environment variable"; exit 1; fi
+            if docker history --no-trunc --format '{{.CreatedBy}}' "$IMAGE@$digest" | grep -iE '(TOKEN|SECRET|PASSWORD|API_?KEY)='; then
+              echo "::error::a build step sets a secret-looking value"; exit 1
+            fi
+
+            docker run -d --name "check-${platform#linux/}" --platform "$platform" -e DOTNET_EnableWriteXorExecute=0 "$IMAGE@$digest" >/dev/null
+            for i in $(seq 1 60); do
+              if docker exec "check-${platform#linux/}" curl -fsS http://localhost:9797/ping >/dev/null 2>&1; then
+                echo "$platform: starts and answers /ping"
+                break
+              fi
+              [ "$i" = 60 ] && { docker logs "check-${platform#linux/}" | tail -40; echo "::error::$platform image didn't start"; exit 1; }
+              sleep 5
+            done
+            docker rm -f "check-${platform#linux/}" >/dev/null
+          done
+          echo "No secret files, variables or build steps; both platforms start." >> "$GITHUB_STEP_SUMMARY"
