@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -47,7 +48,9 @@ def latest(channels, name, prefix):
     post = next((m for m in messages if m.get("content", "").startswith(prefix)), None)
     if post is None:
         return f"#{name}: none yet"
-    return f"#{name} {post['timestamp'][11:19]}Z \"{post['content'].splitlines()[0]}\""
+    # ASCII only: Windows PowerShell shows an emoji from Python as "?".
+    title = post["content"].splitlines()[0].encode("ascii", "ignore").decode().strip()
+    return f"#{name} {post['timestamp'][11:19]}Z \"{title}\""
 
 
 def main():
@@ -62,9 +65,13 @@ def main():
                             "--filter", "label=com.docker.compose.service=requestarr", "--format", "{{.Names}}"],
                            capture_output=True, text=True).stdout.split()
     ready = []
-    if names:
+    # Just started (dev.ps1 up): the bot connects a few seconds after Requestarr answers, so wait up to a minute.
+    for _ in range(12 if names else 0):
         log = subprocess.run(["docker", "logs", names[0]], capture_output=True, text=True, encoding="utf-8", errors="replace")
         ready = [entry for entry in (log.stdout + log.stderr).splitlines() if READY in entry]
+        if ready:
+            break
+        time.sleep(5)
     if ready:
         line("bot online", ready[-1][ready[-1].index(READY):])
     else:

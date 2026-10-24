@@ -177,7 +177,7 @@ check() {
     echo
     echo "== Requestarr ($rq)"
     printf '%-26s %s\n' "ping" "$(curl -s "$rq/ping" | tr -d ' \n')"
-    status_line "system/status" "$rq/api/v1/system/status" "$REQUESTARR_API_KEY" "appName,instanceName,version,branch,authentication" || ok=1
+    status_line "system/status" "$rq/api/v1/system/status" "$REQUESTARR_API_KEY" "appName,instanceName,version,authentication" || ok=1
     status_line "config/host (provisioned)" "$rq/api/v1/config/host" "$REQUESTARR_API_KEY" "instanceName,authenticationMethod,authenticationRequired,username,logLevel,analyticsEnabled" || ok=1
     status_line "health" "$rq/api/v1/health" "$REQUESTARR_API_KEY" "source,type,message" || ok=1
     printf '%-26s %s\n' "fast votes" "$(fast_votes_state)"

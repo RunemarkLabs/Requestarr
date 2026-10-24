@@ -160,8 +160,10 @@ function Get-StackInfo([string]$which) {
 
 function Compose {
     $info = $script:Info
+    # Inside the script block $args would be the block's own (empty) arguments.
+    $composeArgs = $args
     With-Env $info.Env {
-        docker compose -p $info.Project -f (Join-Path $Dir 'compose.yaml') --env-file $Secrets @args
+        docker compose -p $info.Project -f (Join-Path $Dir 'compose.yaml') --env-file $Secrets @composeArgs
     }
     if ($LASTEXITCODE -ne 0) { Fail "docker compose $($args -join ' ') failed (exit $LASTEXITCODE)" }
 }
@@ -249,8 +251,11 @@ function Requestarr-Name([string]$project) {
 function Image-Line([string]$project) {
     $name = Requestarr-Name $project
     if (-not $name) { return 'not running' }
-    $line = docker inspect --format '{{index .Config.Labels "org.opencontainers.image.ref.name"}} @ {{index .Config.Labels "org.opencontainers.image.revision"}} (version {{index .Config.Labels "org.opencontainers.image.version"}})' $name
-    return ($line -replace '@ ([0-9a-f]{7})[0-9a-f]+', '@ $1')
+    # As JSON: Windows PowerShell drops the double quotes a Go template would need in its arguments.
+    $labels = (docker inspect --format '{{json .Config.Labels}}' $name) -join '' | ConvertFrom-Json
+    $revision = [string]$labels.'org.opencontainers.image.revision'
+    if (-not $revision) { return 'unknown (not built by dev.ps1 or dev.sh)' }
+    return "$($labels.'org.opencontainers.image.ref.name') @ $($revision.Substring(0, 7)) (version $($labels.'org.opencontainers.image.version'))"
 }
 
 function Check {
@@ -270,7 +275,7 @@ function Check {
     Write-Host "== Requestarr ($rq)"
     $ping = try { (Invoke-WebRequest -Uri "$rq/ping" -UseBasicParsing -TimeoutSec 10).Content -replace '\s', '' } catch { '(no answer)' }
     Write-Host ('{0,-26} {1}' -f 'ping', $ping)
-    $ok = (Status-Line 'system/status' "$rq/api/v1/system/status" $s['REQUESTARR_API_KEY'] @('appName', 'instanceName', 'version', 'branch', 'authentication')) -and $ok
+    $ok = (Status-Line 'system/status' "$rq/api/v1/system/status" $s['REQUESTARR_API_KEY'] @('appName', 'instanceName', 'version', 'authentication')) -and $ok
     $ok = (Status-Line 'config/host (provisioned)' "$rq/api/v1/config/host" $s['REQUESTARR_API_KEY'] @('instanceName', 'authenticationMethod', 'authenticationRequired', 'username', 'logLevel', 'analyticsEnabled')) -and $ok
     $ok = (Status-Line 'health' "$rq/api/v1/health" $s['REQUESTARR_API_KEY'] @('source', 'type', 'message')) -and $ok
     Write-Host ('{0,-26} {1}' -f 'fast votes', (Fast-Votes-State))
