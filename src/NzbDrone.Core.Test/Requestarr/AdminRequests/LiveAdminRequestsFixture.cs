@@ -175,7 +175,9 @@ namespace Requestarr.Core.Test.AdminRequests
                 Log($"[music] private notice: {music.LastReply.Content}");
                 var panelOne = (await restOne.GetPinnedMessagesAsync()).Single();
                 Log($"[music] {one.Username}'s pinned panel, read back: \"{panelOne.Content.Replace("\n", " | ")}\"");
-                music.LastReply.Content.Should().Be(DiscordText.NotConnectedYet(one.Username, ContentType.Music));
+
+                // The member's name as Requestarr stored it (their display name, which can differ from the username).
+                music.LastReply.Content.Should().Be(DiscordText.NotConnectedYet(users.FindByDiscordId(one.Id).DisplayName, ContentType.Music));
                 panelOne.Content.Should().NotContain("Music");
 
                 // 2. Two pending requests from two members and one Plex link, walked through /admin requests.

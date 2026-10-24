@@ -51,8 +51,18 @@ namespace Requestarr.Core.Test.Discord
             Mocker.SetConstant<IDiscordGuildConfigRepository>(Mocker.Resolve<DiscordGuildConfigRepository>());
             Mocker.SetConstant<IAuditService>(Mocker.Resolve<AuditService>());
 
-            // What the bot's start-up reads since the request feed and removals arrived (an empty database, not mocks).
+            // What the bot's start-up and onboarding read since the request feed, removals and per-member instances
+            // arrived: an empty database, and the dev stack's test Sonarr and Radarr (not mocks).
             Mocker.SetConstant<Requestarr.Core.Backends.IBackendRepository>(Mocker.Resolve<Requestarr.Core.Backends.BackendRepository>());
+            Mocker.SetConstant<Requestarr.Core.Backends.IRadarrApi>(Mocker.Resolve<Requestarr.Core.Backends.RadarrApi>());
+            Mocker.SetConstant<Requestarr.Core.Backends.ISonarrApi>(Mocker.Resolve<Requestarr.Core.Backends.SonarrApi>());
+            Mocker.SetConstant<Requestarr.Core.Backends.IBackendService>(Mocker.Resolve<Requestarr.Core.Backends.BackendService>());
+            Mocker.Resolve<Requestarr.Core.Backends.IBackendService>().SyncFromProvisioning(new Requestarr.Core.Provisioning.BackendsProvisioning
+            {
+                Radarr = new List<Requestarr.Core.Provisioning.BackendInstanceProvisioning> { new() { Name = "Radarr (test)", Url = LiveDev.RadarrUrl, ApiKey = LiveDev.RadarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/movies", Default = true } },
+                Sonarr = new List<Requestarr.Core.Provisioning.BackendInstanceProvisioning> { new() { Name = "Sonarr (test)", Url = LiveDev.SonarrUrl, ApiKey = LiveDev.SonarrKey, QualityProfile = "HD-1080p", RootFolder = "/data/tv", SeriesType = "standard", Default = true } }
+            });
+            Mocker.Resolve<Requestarr.Core.Backends.IBackendService>().CheckAllAsync().GetAwaiter().GetResult();
             Mocker.SetConstant<Requestarr.Core.Requests.IRequestRepository>(Mocker.Resolve<Requestarr.Core.Requests.RequestRepository>());
             Mocker.SetConstant<Requestarr.Core.Requests.IRequestSubscriberRepository>(Mocker.Resolve<Requestarr.Core.Requests.RequestSubscriberRepository>());
             Mocker.SetConstant<Requestarr.Core.Removals.IRemovalProposalRepository>(Mocker.Resolve<Requestarr.Core.Removals.RemovalProposalRepository>());

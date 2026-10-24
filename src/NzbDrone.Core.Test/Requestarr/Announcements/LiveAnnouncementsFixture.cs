@@ -193,8 +193,10 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] start on {current}: {adminNotes.Count} admin post(s), {userNotes.Count} user post(s)");
                 adminNotes.ForEach(m => Log($"[upgrade]   admin, read back: \"{m.Content.Replace("\n", " | ")}\""));
                 userNotes.ForEach(m => Log($"[upgrade]   users, read back: \"{m.Content.Replace("\n", " | ")}\""));
-                adminNotes.Should().ContainSingle().Which.Content.Should().StartWith($"📋 **Requestarr {current}: what's new**");
-                var hasUserLines = Changelog.Parse(announcements.ChangelogText()).Single(v => v.Version == current).Users.Count > 0;
+                var running = Changelog.Parse(announcements.ChangelogText()).SingleOrDefault(v => v.Version == current);
+                adminNotes.Should().HaveCount(running?.HasNews == true ? 1 : 0, "only the version running now, and a version with nothing for anyone posts nothing");
+                adminNotes.Select(m => m.Content.Split('\n')[0]).Should().BeSubsetOf(new[] { $"📋 **Requestarr {current}: what's new**" });
+                var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
                 var next = new Version(current.Major, current.Minor, current.Build + 1);
