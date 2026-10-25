@@ -88,6 +88,8 @@ For TV, the status repeats which seasons were requested.
 
 **Buttons clicked late are safe.** Every button re-checks the request first. If it has changed (approved, denied, cancelled, or requested by someone else meanwhile), nothing happens; you're told privately why, and the message is refreshed to show the current state. **Follow request** only ever follows; it never creates a new request.
 
+**One private copy per button.** A button that answers only you (Help, My requests, Read changes, the admin panel's Pending queue and Users, and the rest) replaces your earlier answer from the same button when you press it again, so copies don't stack up. Discord allows this for 15 minutes; an older copy stays until you dismiss it or reload Discord. Typed commands are answered fresh each time.
+
 ### Removing and keeping titles
 
 - **Remove…** on your own request message, once something of it is downloaded: asks to remove it (TV: the whole show or chosen seasons). Everyone else who can watch it gets a vote.

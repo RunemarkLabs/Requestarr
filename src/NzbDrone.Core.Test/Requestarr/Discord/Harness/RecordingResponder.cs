@@ -139,6 +139,17 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.CompletedTask;
         }
 
+        public bool HasPrivateReplies => _responses.Any(r => r.Ephemeral && (r.Kind == ResponseKind.Response || r.Kind == ResponseKind.Followup));
+
+        // Set once Requestarr removes this interaction's private replies (a later press of the same button).
+        public bool PrivateRepliesDeleted { get; private set; }
+
+        public Task DeletePrivateRepliesAsync()
+        {
+            PrivateRepliesDeleted = true;
+            return Task.CompletedTask;
+        }
+
         private void EnsureFirstResponse(string action)
         {
             if (HasResponded)

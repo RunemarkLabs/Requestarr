@@ -32,5 +32,11 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Autocomplete only: up to 25 suggestions for the focused option.
         Task SuggestAsync(IReadOnlyList<InteractionChoice> choices);
+
+        // Whether this interaction posted a private message of its own (a private response or private follow-up).
+        bool HasPrivateReplies { get; }
+
+        // Removes those private messages. Discord allows it for 15 minutes after the interaction.
+        Task DeletePrivateRepliesAsync();
     }
 }

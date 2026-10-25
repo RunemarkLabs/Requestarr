@@ -30,6 +30,8 @@ namespace Requestarr.Core.Test.Discord.Harness
             _dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger(nameof(InteractionHarness)));
         }
 
+        public InteractionDispatcher Dispatcher => _dispatcher;
+
         public async Task<InteractionRun> SendAsync(DiscordInteraction interaction)
         {
             var responder = Guild == null ? new RecordingResponder() : new RecordingResponder(Guild, interaction.ChannelId, interaction.MessageId, interaction.Kind == InteractionKind.SlashCommand);
