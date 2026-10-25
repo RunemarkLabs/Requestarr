@@ -5,8 +5,8 @@
             change Dependabot can't size), plus "security" for a security fix and "for admins" when that fix is in
             something Requestarr ships (the backend, the base images, or a web app package the built app contains).
   update    the oldest open "automatic update": bring it up to date with dev, give it the next version and its
-            changelog section, run build on that commit and let GitHub merge it once build passes. One at a time, so
-            two updates never take the same version; the next one goes when this one has merged.
+            changelog section, run build on that commit and merge it once build passes (hold it if build fails). One
+            at a time, so two updates never take the same version; the next one goes when this one has merged.
   --self-test  checks the parts that decide, against built-in samples.
 
 Needs git, the GitHub CLI (GH_TOKEN) and the repository checked out with full history.
@@ -228,14 +228,22 @@ def build_runs(repo, sha):
 def update():
     repo = os.environ["REPO"]
     ensure_labels(repo)
-    waiting = json.loads(gh("pr", "list", "--repo", repo, "--base", "dev", "--state", "open", "--label", AUTOMATIC,
+    # An update that merged or was held makes way for the next one in the same run.
+    for _ in range(10):
+        if not update_next(repo):
+            return
+
+
+def update_next(repo):
+    """Moves the oldest automatic update on; True when it merged or was held, so the next one can go."""
+    waiting =json.loads(gh("pr", "list", "--repo", repo, "--base", "dev", "--state", "open", "--label", AUTOMATIC,
                             "--json", "number,headRefName,labels,author,createdAt,isDraft"))
     waiting = [p for p in waiting if p["author"]["login"] in ("app/dependabot", "dependabot[bot]", "dependabot")
                and REVIEW not in {l["name"] for l in p["labels"]}]
     if not waiting:
         print("No automatic update is waiting.")
-        return
-    pr = sorted(waiting, key=lambda p: p["createdAt"])[0]
+        return False
+    pr =sorted(waiting, key=lambda p: p["createdAt"])[0]
     number, branch = pr["number"], pr["headRefName"]
     labels = {l["name"] for l in pr["labels"]}
     print("Next automatic update: #%d (%s); %d waiting" % (number, branch, len(waiting)))
@@ -257,7 +265,7 @@ def update():
                 if others:
                     git("merge", "--abort", check=False)
                     hold(repo, number, "it conflicts with dev in %s." % ", ".join(others))
-                    return
+                    return True
         # Dependabot never changes these two: start from dev's and add this update's version on top.
         git("checkout", "origin/dev", "--", "CHANGELOG.md", "src/Directory.Build.props")
         version = next_version(*tops.values())
@@ -276,7 +284,7 @@ def update():
         if pushed.returncode != 0:
             sys.stderr.write(pushed.stderr)
             hold(repo, number, "its version and changelog section could not be added (the push was refused).")
-            return
+            return True
         print("#%d: version %d.%d.%d added" % ((number,) + version))
 
     sha = git("rev-parse", "HEAD")
@@ -286,13 +294,20 @@ def update():
     if any(r["status"] == "completed" and r["conclusion"] in FAILED for r in runs) \
             and not any(r["conclusion"] == "success" for r in runs):
         hold(repo, number, "build failed on it.")
-        return
-    if not any(r["status"] != "completed" or r["conclusion"] == "success" for r in runs):
+        return True
+    if any(r["conclusion"] == "success" for r in runs):
+        # Build passed on this commit (this run was started when it finished): merge now rather than wait for
+        # auto-merge, whose merge into dev wouldn't start this workflow again for the next update.
+        if subprocess.run(["gh", "pr", "merge", str(number), "--repo", repo, "--merge"]).returncode == 0:
+            print("#%d: build passed, merged into dev" % number)
+            return True
+    elif not any(r["status"] != "completed" for r in runs):
         # Commits pushed by this workflow don't start workflows, so build is started here on this commit.
         gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
         print("#%d: build started on %s" % (number, sha[:7]))
     gh("pr", "merge", str(number), "--repo", repo, "--auto", "--merge")
     print("#%d: merges on its own once build passes" % number)
+    return False
 
 
 # ---- self-test --------------------------------------------------------------------------------------------------
