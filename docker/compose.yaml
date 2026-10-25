@@ -19,8 +19,6 @@ services:
       # doesn't have yet (the scripts look up what was last published for staging), dev only the version running now.
       REQUESTARR_ENVIRONMENT: ${REQUESTARR_STACK}
       REQUESTARR_STAGED_VERSIONS: ${REQUESTARR_STAGED_VERSIONS:-}
-      # false starts the stack with botProfile.keepUpToDate off (provisioning.yml), for the live check.
-      REQUESTARR_BOT_PROFILE: ${REQUESTARR_BOT_PROFILE:-true}
       # Marks a local test stack: only then can `dev.ps1 fast-votes on` take effect.
       REQUESTARR_DEV_STACK: "true"
       REQUESTARR_ADMIN_USERNAME: ${REQUESTARR_ADMIN_USERNAME}

@@ -56,12 +56,6 @@ accessRequests:
     blockClicks: 5
     blockWithinHours: 24
 
-# The bot's picture and banner (setup guide 5.13). These test bots had theirs uploaded by hand before Requestarr managed
-# them, so Requestarr's always win here. REQUESTARR_BOT_PROFILE=false starts a stack with it off (live check).
-botProfile:
-  keepUpToDate: ${REQUESTARR_BOT_PROFILE:-true}
-  takeOver: true
-
 # Any number of instances per type; names must be unique.
 backends:
   sonarr:
