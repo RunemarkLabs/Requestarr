@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using NLog;
+using NzbDrone.Common.Extensions;
 using Requestarr.Http.Extensions;
 using Requestarr.Http.Frontend.Mappers;
 
@@ -76,7 +77,7 @@ namespace Requestarr.Http.Frontend
                 return NotFound();
             }
 
-            _logger.Warn("Couldn't find handler for {0}", path);
+            _logger.Warn("Couldn't find handler for {0}", path.ForLog());
 
             return NotFound();
         }

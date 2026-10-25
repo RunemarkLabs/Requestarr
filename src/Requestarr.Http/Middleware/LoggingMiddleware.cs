@@ -44,7 +44,7 @@ namespace Requestarr.Http.Middleware
 
             var reqPath = GetRequestPathAndQuery(context.Request);
 
-            _loggerHttp.Trace("Req: {0} [{1}] {2} (from {3})", id, context.Request.Method, reqPath, GetOrigin(context));
+            _loggerHttp.Trace("Req: {0} [{1}] {2} (from {3})", id, context.Request.Method.ForLog(), reqPath.ForLog(), GetOrigin(context).ForLog());
         }
 
         private void LogEnd(HttpContext context)
@@ -57,11 +57,11 @@ namespace Requestarr.Http.Middleware
 
             var reqPath = GetRequestPathAndQuery(context.Request);
 
-            _loggerHttp.Trace("Res: {0} [{1}] {2}: {3}.{4} ({5} ms)", id, context.Request.Method, reqPath, context.Response.StatusCode, (HttpStatusCode)context.Response.StatusCode, (int)duration.TotalMilliseconds);
+            _loggerHttp.Trace("Res: {0} [{1}] {2}: {3}.{4} ({5} ms)", id, context.Request.Method.ForLog(), reqPath.ForLog(), context.Response.StatusCode, (HttpStatusCode)context.Response.StatusCode, (int)duration.TotalMilliseconds);
 
             if (context.Request.IsApiRequest())
             {
-                _loggerApi.Debug("[{0}] {1}: {2}.{3} ({4} ms)", context.Request.Method, reqPath, context.Response.StatusCode, (HttpStatusCode)context.Response.StatusCode, (int)duration.TotalMilliseconds);
+                _loggerApi.Debug("[{0}] {1}: {2}.{3} ({4} ms)", context.Request.Method.ForLog(), reqPath.ForLog(), context.Response.StatusCode, (HttpStatusCode)context.Response.StatusCode, (int)duration.TotalMilliseconds);
             }
         }
 

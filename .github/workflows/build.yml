@@ -4,7 +4,13 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # Also started by the Dependency updates workflow on an update it has just versioned: commits that workflow pushes
+  # don't start workflows themselves. "base" is the branch the update goes into, for the Changelog job.
   workflow_dispatch:
+    inputs:
+      base:
+        description: For a dependency update, the branch it goes into (checks its version against that branch)
+        default: ""
 
 concurrency:
   group: build-${{ github.ref }}
@@ -149,7 +155,12 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          DISPATCH_BASE: ${{ inputs.base }}
         run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$DISPATCH_BASE" ]; then
+            ./release.sh check-changelog "origin/$DISPATCH_BASE" HEAD "$DISPATCH_BASE" HEAD "$GITHUB_REF_NAME"
+            exit 0
+          fi
           if [ "$EVENT" != "pull_request" ]; then
             python3 .github/changelog_check.py CHANGELOG.md
             exit 0

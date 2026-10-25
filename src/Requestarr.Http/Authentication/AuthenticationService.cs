@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using NLog;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using Requestarr.Http.Extensions;
@@ -62,7 +63,7 @@ namespace Requestarr.Http.Authentication
 
         public void LogUnauthorized(HttpRequest context)
         {
-            _authLogger.Info("Auth-Unauthorized ip {0} url '{1}'", context.GetRemoteIP(), context.Path);
+            _authLogger.Info("Auth-Unauthorized ip {0} url '{1}'", context.GetRemoteIP(), context.Path.Value.ForLog());
         }
 
         private void LogInvalidated(HttpRequest context)
@@ -72,12 +73,12 @@ namespace Requestarr.Http.Authentication
 
         private void LogFailure(HttpRequest context, string username)
         {
-            _authLogger.Warn("Auth-Failure ip {0} username '{1}'", context.GetRemoteIP(), username);
+            _authLogger.Warn("Auth-Failure ip {0} username '{1}'", context.GetRemoteIP(), username.ForLog());
         }
 
         private void LogSuccess(HttpRequest context, string username)
         {
-            _authLogger.Debug("Auth-Success ip {0} username '{1}'", context.GetRemoteIP(), username);
+            _authLogger.Debug("Auth-Success ip {0} username '{1}'", context.GetRemoteIP(), username.ForLog());
         }
 
         private void LogLogout(HttpRequest context, string username)

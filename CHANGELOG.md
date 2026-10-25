@@ -6,6 +6,12 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.3 (2026-10-25)
+
+### For admins
+- **Kept up to date:** the parts Requestarr is built from are now updated every week, and a version that fixes a security problem in something Requestarr ships says so here, so you know to update.
+- **Safer logs:** a web address or user name with a line break in it can no longer add fake lines to Requestarr's log.
+
 ## 0.4.2 (2026-10-25)
 
 ### For users

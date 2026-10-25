@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NLog;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Common.Messaging;
 using NzbDrone.Core.Configuration;
@@ -135,7 +136,7 @@ namespace Requestarr.Core.Availability
                 return WebhookOutcome.Ignored;
             }
 
-            _logger.Debug("Webhook {0} from {1}: checking {2} request(s)", eventType, instance.Name, tracked.Count);
+            _logger.Debug("Webhook {0} from {1}: checking {2} request(s)", eventType.ForLog(), instance.Name, tracked.Count);
 
             foreach (var request in tracked)
             {
