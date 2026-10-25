@@ -35,6 +35,8 @@ DEFAULT_SECURITY_GROUPS = {"npm_and_yarn", "nuget", "github_actions", "docker"}
 SECURITY_LINE = ("- **Security update:** parts Requestarr is built from were updated to fix known security problems, "
                  "so update when you can.")
 
+FAILED = ("failure", "timed_out", "startup_failure")
+
 COMMIT_MESSAGE = "Version {version} and its changelog section for this dependency update"
 
 
@@ -278,8 +280,10 @@ def update():
         print("#%d: version %d.%d.%d added" % ((number,) + version))
 
     sha = git("rev-parse", "HEAD")
-    runs = build_runs(repo, sha)
-    if any(r["status"] == "completed" and r["conclusion"] not in ("success", "cancelled", "skipped") for r in runs) \
+    # Only the build this workflow starts counts: its push can also queue pull request runs that wait for an approval
+    # nobody gives ("action_required"), and those aren't failures.
+    runs = [r for r in build_runs(repo, sha) if r["event"] == "workflow_dispatch"]
+    if any(r["status"] == "completed" and r["conclusion"] in FAILED for r in runs) \
             and not any(r["conclusion"] == "success" for r in runs):
         hold(repo, number, "build failed on it.")
         return
