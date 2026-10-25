@@ -4,6 +4,7 @@ import keyboardShortcuts, { shortcuts } from 'Components/keyboardShortcuts';
 import IconButton from 'Components/Link/IconButton';
 import Link from 'Components/Link/Link';
 import { icons } from 'Helpers/Props';
+import HeaderLogo from './HeaderLogo';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import PageHeaderActionsMenu from './PageHeaderActionsMenu';
 import styles from './PageHeader.css';
@@ -51,11 +52,7 @@ class PageHeader extends Component {
       <div className={styles.header}>
         <div className={styles.logoContainer}>
           <Link to={'/'}>
-            <img
-              className={styles.logo}
-              src={`${window.Requestarr.urlBase}/Content/Images/logo.png`}
-              alt="Requestarr Logo"
-            />
+            <HeaderLogo className={styles.logo} />
           </Link>
         </div>
 

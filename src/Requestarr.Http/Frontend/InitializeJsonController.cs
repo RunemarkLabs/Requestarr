@@ -5,6 +5,7 @@ using NzbDrone.Common;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Analytics;
 using NzbDrone.Core.Configuration;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Http.Frontend
 {
@@ -15,16 +16,19 @@ namespace Requestarr.Http.Frontend
     {
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IAnalyticsService _analyticsService;
+        private readonly IReleaseEnvironment _environment;
 
         private static string _apiKey;
         private static string _urlBase;
         private string _generatedContent;
 
         public InitializeJsonController(IConfigFileProvider configFileProvider,
-                                      IAnalyticsService analyticsService)
+                                      IAnalyticsService analyticsService,
+                                      IReleaseEnvironment environment)
         {
             _configFileProvider = configFileProvider;
             _analyticsService = analyticsService;
+            _environment = environment;
 
             _apiKey = configFileProvider.ApiKey;
             _urlBase = configFileProvider.UrlBase;
@@ -51,6 +55,7 @@ namespace Requestarr.Http.Frontend
             builder.AppendLine($"  \"version\": \"{BuildInfo.Version.ToString()}\",");
             builder.AppendLine($"  \"instanceName\": \"{_configFileProvider.InstanceName.ToString()}\",");
             builder.AppendLine($"  \"theme\": \"{_configFileProvider.Theme.ToString()}\",");
+            builder.AppendLine($"  \"iconSet\": \"{_environment.IconSet}\",");
             builder.AppendLine($"  \"branch\": \"{_configFileProvider.Branch.ToLower()}\",");
             builder.AppendLine($"  \"analytics\": {_analyticsService.IsEnabled.ToString().ToLowerInvariant()},");
             builder.AppendLine($"  \"userHash\": \"{HashUtil.AnonymousToken()}\",");

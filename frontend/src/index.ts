@@ -7,7 +7,8 @@ const initializeUrl = `${
 }/initialize.json?t=${Date.now()}`;
 const response = await fetch(initializeUrl);
 
-window.Requestarr = await response.json();
+// Keeps what the page itself set up (the icon theme switcher in index.ejs).
+window.Requestarr = { ...window.Requestarr, ...(await response.json()) };
 
 /* eslint-disable no-undef, @typescript-eslint/ban-ts-comment */
 // @ts-ignore 2304
