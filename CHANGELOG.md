@@ -6,6 +6,11 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.12 (2026-10-25)
+
+### For admins
+- **The bot keeps its own picture and banner:** Requestarr now gives its bot the Requestarr picture and your environment's banner, and updates them when a new release changes them, so you no longer upload them by hand in Discord. A picture you chose yourself is kept, and you can turn this off in the provisioning file.
+
 ## 0.4.11 (2026-10-25)
 
 ### For users

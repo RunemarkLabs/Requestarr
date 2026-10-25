@@ -26,6 +26,18 @@ namespace Requestarr.Core.Provisioning
 
         // Optional: access requests from the welcome channel. Stored as settings the admin portal can change.
         public AccessRequestsProvisioning AccessRequests { get; set; }
+
+        // Optional: the bot's own Discord picture and banner. Stored as settings the admin portal can change.
+        public BotProfileProvisioning BotProfile { get; set; }
+    }
+
+    public class BotProfileProvisioning
+    {
+        // Requestarr sets the bot's picture and banner and updates them when a release changes them (default true).
+        public bool? KeepUpToDate { get; set; }
+
+        // Replace a picture or banner someone else chose too, instead of leaving it (default false).
+        public bool? TakeOver { get; set; }
     }
 
     public class AccessRequestsProvisioning
