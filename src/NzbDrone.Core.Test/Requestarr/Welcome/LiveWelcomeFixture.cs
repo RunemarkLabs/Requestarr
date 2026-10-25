@@ -191,6 +191,21 @@ namespace Requestarr.Core.Test.Welcome
                 welcome.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2).Should().BeTrue("a card, at a message's text size");
                 CardsOf(welcome).Should().Contain("# Welcome to Requestarr");
 
+                // A server from before cards (QA, staging) has a plain welcome message saved: it becomes the one card.
+                var plain = await gateway.SendMessageAsync(welcomeChannel, new InteractionReply
+                {
+                    Content = "**Welcome to Requestarr**\nAn older welcome message.",
+                    Buttons = { new InteractionButton { CustomId = WelcomeRoutes.Request, Label = DiscordText.RequestAccessLabel, Style = Requestarr.Core.Discord.Interactions.ButtonStyle.Primary } }
+                });
+                var oldConfig = guildSetup.GetConfig();
+                oldConfig.WelcomeMessageId = plain.ToString();
+                Mocker.Resolve<IDiscordGuildConfigRepository>().SetFields(oldConfig, c => c.WelcomeMessageId);
+                await panels.EnsureAllAsync();
+                var upgraded = (await welcomeRest.GetMessagesAsync(20).FlattenAsync()).Where(m => m.Author.Id == host.Client.CurrentUser.Id && Buttons(m).Contains(DiscordText.RequestAccessLabel)).ToList();
+                Log($"[welcome] after an older plain welcome message: {upgraded.Count} welcome message(s): {string.Join(" / ", upgraded.Select(CardsOf))}");
+                upgraded.Should().ContainSingle().Which.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2).Should().BeTrue();
+                welcome = upgraded[0];
+
                 // 3. An access request, denied; refused within the cooldown.
                 Task<InteractionRun> Press(string customId = WelcomeRoutes.Request) =>
                     Send(dispatcher, FakeInteraction.Button(customId).By(member.Id, member.Username).InGuild(guild.Id).InChannel(welcomeChannel));
@@ -398,14 +413,14 @@ namespace Requestarr.Core.Test.Welcome
                 return channel == null ? -1 : (await channel.GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && what(m));
             }
 
-            bool Has(IMessage m, string route) => m.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Any(b => b.CustomId == route);
+            bool Has(IMessage m, string route) => All(m.Components).OfType<ButtonComponent>().Any(b => b.CustomId == route);
             var theirs = channels.Where(c => c.Name.EndsWith(ChannelLayout.UserChannelName(username))).ToList();
             var live = theirs.Where(c => c.Name == ChannelLayout.UserChannelName(username)).ToList();
             var requestarr = channels.Where(c => c.Name.StartsWith("requestarr-") || c.Name.Contains(ChannelLayout.UserChannelPrefix)).ToList();
 
             return $"admin panels {await Count(ChannelLayout.AdminChannelName, m => Has(m, PanelRoutes.AdminQueue))}, " +
                    $"welcome messages {await Count(ChannelLayout.WelcomeChannelName, m => Has(m, WelcomeRoutes.Request))}, " +
-                   $"blocked messages {await Count(ChannelLayout.BlockedChannelName, m => m.Content == DiscordText.BlockedMessage)}, " +
+                   $"blocked messages {await Count(ChannelLayout.BlockedChannelName, m => All(m.Components).OfType<TextDisplayComponent>().Any(t => t.Content == DiscordText.BlockedMessage))}, " +
                    $"{string.Join(", ", theirs.GroupBy(c => c.Name).Select(g => $"#{g.Key}={g.Count()} in {string.Join("/", g.Select(c => c.CategoryId.HasValue && groups.ContainsKey(c.CategoryId.Value) ? groups[c.CategoryId.Value] : "the top level"))}"))}, " +
                    $"their panels {(live.Count == 1 ? (await live[0].GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && Has(m, PanelRoutes.MyRequests)) : -1)}, " +
                    $"loose {requestarr.Count(c => c.CategoryId == null)}";
