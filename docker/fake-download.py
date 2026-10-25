@@ -28,8 +28,8 @@ from datetime import datetime, timezone
 STACKS = ("requestarr-qa", "requestarr-dev")
 PROJECT = os.environ.get("REQUESTARR_COMPOSE_PROJECT", "requestarr-qa")
 APPS = {
-    "movie": {"service": "radarr-test", "app": "Radarr", "port": "RADARR_TEST_PORT", "default_port": "17878", "key": "RADARR_TEST_API_KEY"},
-    "tv": {"service": "sonarr-test", "app": "Sonarr", "port": "SONARR_TEST_PORT", "default_port": "18989", "key": "SONARR_TEST_API_KEY"},
+    "movie": {"service": "radarr-test", "app": "Radarr", "port": "RADARR_TEST_PORT", "default_port": "27878", "key": "RADARR_TEST_API_KEY"},
+    "tv": {"service": "sonarr-test", "app": "Sonarr", "port": "SONARR_TEST_PORT", "default_port": "28989", "key": "SONARR_TEST_API_KEY"},
 }
 
 

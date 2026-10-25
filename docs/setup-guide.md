@@ -784,7 +784,7 @@ Open `.env` and fill in every value; the comments say what each is. In particula
 
 - **`BETA_TV_FOLDER`, `BETA_MOVIES_FOLDER`:** the two folders from B.3, full paths.
 - **`BETA_DOWNLOADS_FOLDER`, `BETA_DOWNLOADS_PATH`:** the same downloads folder, and the same path inside the container, as your production Sonarr's compose file mounts (look for its downloads line, for example `/srv/downloads:/downloads`). Only the downloads folder: if production mounts one folder that holds both downloads and media (a single `/data`), mount just its downloads subfolder here. Imports then copy instead of hardlinking, which uses extra space only while a download is still seeding.
-- **The three ports:** free ports, different from production's. `ss -ltn | grep :<port>` prints nothing for a free port.
+- **The three ports:** free ports, different from production's. Use beta's band, 19797, 18989 and 17878 (the standard ports with a 1 in front, so production keeps 9797, 8989 and 7878 and the first digit says which environment you're on). `ss -ltn | grep :<port>` prints nothing for a free port.
 - **`PUID`, `PGID`:** the same as your production Sonarr and Radarr, so Plex can read what beta downloads.
 - **`BETA_SONARR_API_KEY`, `BETA_RADARR_API_KEY`, `REQUESTARR_API_KEY`:** made up here, one each: `openssl rand -hex 16`.
 - **`BETA_DISCORD_BOT_TOKEN`, `BETA_DISCORD_APPLICATION_ID`, `BETA_DISCORD_GUILD_ID`:** the beta bot and the Requestarr Beta server (B.1). This file is the only place they're kept.

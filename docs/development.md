@@ -215,11 +215,13 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 If you can't change the policy, `.\docker\dev.cmd` takes the same commands and runs `dev.ps1` for that one run whatever the policy is.
 
+Ports come in one band per environment, so the first digit says which one you're on, counting down to the standard ports: dev 3xxxx, QA 2xxxx, beta 1xxxx (19797, 18989, 17878 on the owner's server), production the standard 9797, 8989 and 7878. Inside Docker every container keeps its standard port, so Sonarr and Radarr reach Requestarr's webhook as `http://requestarr:9797` whatever the band.
+
 | Service | QA stack (localhost only) | Dev stack (localhost only) | Notes |
 |---|---|---|---|
-| Requestarr | http://localhost:9797 | http://localhost:19797 | provisioned from `docker/provisioning.yml` |
-| Sonarr (test) | http://localhost:18989 | http://localhost:28989 | root folder `/data/tv`, no login (localhost-bound) |
-| Radarr (test) | http://localhost:17878 | http://localhost:27878 | root folder `/data/movies`, no login (localhost-bound) |
+| Requestarr | http://localhost:29797 | http://localhost:39797 | provisioned from `docker/provisioning.yml` |
+| Sonarr (test) | http://localhost:28989 | http://localhost:38989 | root folder `/data/tv`, no login (localhost-bound) |
+| Radarr (test) | http://localhost:27878 | http://localhost:37878 | root folder `/data/movies`, no login (localhost-bound) |
 
 Other commands:
 
