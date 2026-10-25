@@ -327,7 +327,8 @@ namespace Requestarr.Core.Test.Welcome
                 // 8. The version card sits right above the one admin panel.
                 await Task.Delay(TimeSpan.FromSeconds(4));
                 var latest = (await adminRest.GetMessagesAsync(3).FlattenAsync()).OrderByDescending(m => m.Id).ToList();
-                Log($"[cards] newest in #{ChannelLayout.AdminChannelName}: {(latest[0].Id.ToString() == guildSetup.GetConfig().AdminPanelMessageId ? "the panel" : "something else")}, then \"{latest[1].Embeds.FirstOrDefault()?.Title ?? latest[1].Content}\"");
+                string Describe(IMessage m) => m.Id.ToString() == guildSetup.GetConfig().AdminPanelMessageId ? "the panel" : $"{m.Type} by {(m.Author.Id == host.Client.CurrentUser.Id ? "the bot" : m.Author.Username)}: \"{(m.Embeds.FirstOrDefault()?.Title ?? m.Content).Split('\n')[0]}\"";
+                Log($"[cards] newest in #{ChannelLayout.AdminChannelName}, newest first: {string.Join(" / ", latest.Select(Describe))}");
                 latest[0].Id.ToString().Should().Be(guildSetup.GetConfig().AdminPanelMessageId);
 
                 // 9. A restart with a new database (a reset, or every live check): the bot finds its groups, channels, panels

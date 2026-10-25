@@ -39,7 +39,8 @@ namespace Requestarr.Core.Test.AdminRequests
     [ManualTest]
     public class LiveAdminRequestsFixture : DbTest
     {
-        private const int Matrix = 603;
+        // A film no other live check requests, so it's never already in the test Radarr when this check runs after them.
+        private const int Shawshank = 278;
         private const int Heat = 949;
 
         private static readonly TimeSpan ShortAlert = TimeSpan.FromSeconds(20);
@@ -189,7 +190,7 @@ namespace Requestarr.Core.Test.AdminRequests
                 panelOne.Content.Should().NotContain("Music");
 
                 // 2. Two pending requests from two members and one Plex link, walked through /admin requests.
-                await RequestInRealMessage(dispatcher, gateway, guild.Id, channelOne, one.Id, Matrix);
+                await RequestInRealMessage(dispatcher, gateway, guild.Id, channelOne, one.Id, Shawshank);
                 await RequestInRealMessage(dispatcher, gateway, guild.Id, channelTwo, two.Id, Heat);
                 await Send(dispatcher, FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "live_walk_plex").By(one.Id).InGuild(guild.Id).InChannel(channelOne));
 
