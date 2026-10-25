@@ -3,7 +3,8 @@
 # Monday: its patch and minor updates together, its major updates together, and its security fixes together (those
 # arrive as soon as GitHub publishes the advisory, not on the schedule). Patch and minor merge on their own once build
 # passes; major ones wait for review (.github/workflows/dependency-updates.yml). Group names ending in "-security" are
-# how that workflow tells a security fix from an ordinary update.
+# how that workflow tells a security fix from an ordinary update; when Dependabot's commit message carries no sizes
+# it can read, the workflow reads the "from A to B" lines itself.
 version: 2
 
 updates:
