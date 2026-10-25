@@ -2,19 +2,15 @@ name: Dependency updates
 
 # Dependabot's pull requests into dev (docs/development.md#dependency-updates; .github/dependency_updates.py does the
 # work). A new update is labelled: patch and minor "automatic update", major "needs review" (held, with a comment).
-# Automatic updates go one at a time: the next version and its changelog section are added and build is started on that
-# commit. When that build finishes this runs again and merges the update (or holds it if build failed), then starts the
-# next one. It also runs when dev moves and every hour, so a waiting update always carries a version above dev's, qa's
-# and staging's.
+# Automatic updates go one at a time: the next version and its changelog section are added, build is started on that
+# commit and waited for, then the update is merged (or held if build failed) and the next one starts. It also runs when
+# dev moves and every hour, so a waiting update always carries a version above dev's, qa's and staging's.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
     branches: [dev]
   push:
     branches: [dev]
-  workflow_run:
-    workflows: [Build]
-    types: [completed]
   schedule:
     - cron: "23 * * * *"
   workflow_dispatch:
@@ -54,10 +50,9 @@ jobs:
     needs: sort
     if: >
       always() && needs.sort.result != 'failure' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]') &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch')
+      (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:

@@ -11,12 +11,14 @@
 
 Needs git, the GitHub CLI (GH_TOKEN) and the repository checked out with full history.
 """
+import base64
 import datetime
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 
 AUTOMATIC = "automatic update"
 REVIEW = "needs review"
@@ -54,6 +56,51 @@ def gh(*args, check=True):
 
 def git(*args, check=True):
     return run("git", *args, check=check)
+
+
+def gh_api(method, path, payload):
+    # Payload on stdin: a blob of yarn.lock is far longer than one command-line argument may be.
+    result = subprocess.run(["gh", "api", "-X", method, path, "--input", "-"], input=json.dumps(payload), text=True,
+                            capture_output=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr or result.stdout or "")
+        return None
+    return json.loads(result.stdout)
+
+
+def publish(repo, branch):
+    """Makes the local HEAD commit again through GitHub's API and moves the branch to it; False if GitHub refused.
+
+    A commit this workflow pushes with git is unsigned, and the repository's rules want an extra approval for those.
+    One made through the API with the workflow's token is signed by GitHub, so the update can merge on its own."""
+    parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+    # Start from the parent closest to the result (dev, when dev was merged in), so only a few files are sent.
+    base = min(parents, key=lambda p: len(git("diff", "--name-only", "--no-renames", p, "HEAD").splitlines()))
+    entries = []
+    for line in git("diff", "--name-status", "--no-renames", base, "HEAD").splitlines():
+        status, path = line.split("\t", 1)
+        if status == "D":
+            entries.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
+            continue
+        mode = git("ls-tree", "HEAD", "--", path).split()[0]
+        content = base64.b64encode(subprocess.run(["git", "show", "HEAD:" + path], capture_output=True).stdout)
+        blob = gh_api("POST", "repos/%s/git/blobs" % repo, {"content": content.decode(), "encoding": "base64"})
+        if blob is None:
+            return False
+        entries.append({"path": path, "mode": mode, "type": "blob", "sha": blob["sha"]})
+    tree = gh_api("POST", "repos/%s/git/trees" % repo, {"base_tree": git("rev-parse", base + "^{tree}"),
+                                                         "tree": entries})
+    if tree is None or tree["sha"] != git("rev-parse", "HEAD^{tree}"):
+        sys.stderr.write("the tree GitHub built differs from the local one\n")
+        return False
+    commit = gh_api("POST", "repos/%s/git/commits" % repo, {"message": git("log", "-1", "--format=%B", "HEAD"),
+                                                            "tree": tree["sha"], "parents": parents})
+    if commit is None or gh_api("PATCH", "repos/%s/git/refs/heads/%s" % (repo, branch),
+                                {"sha": commit["sha"], "force": False}) is None:
+        return False
+    git("fetch", "--quiet", "origin", branch)
+    git("reset", "--quiet", "--hard", commit["sha"])
+    return True
 
 
 # ---- deciding ---------------------------------------------------------------------------------------------------
@@ -220,9 +267,21 @@ def sort():
     print("#%s: %s %s, group %s, %s -> %s" % (number, ecosystem, update_type, group or "none", ", ".join(names), labels))
 
 
-def build_runs(repo, sha):
-    return json.loads(gh("run", "list", "--repo", repo, "--workflow", "build.yml", "--commit", sha,
+def dispatched_builds(repo, sha):
+    # Only the build this workflow starts counts: its commit can also queue pull request runs that wait for an
+    # approval nobody gives ("action_required"), and those aren't failures.
+    runs = json.loads(gh("run", "list", "--repo", repo, "--workflow", "build.yml", "--commit", sha,
                          "--json", "status,conclusion,event,databaseId"))
+    return [r for r in runs if r["event"] == "workflow_dispatch"]
+
+
+def wait_for_build(repo, sha, minutes=45):
+    deadline = time.time() + minutes * 60
+    while True:
+        runs = dispatched_builds(repo, sha)
+        if (runs and all(r["status"] == "completed" for r in runs)) or time.time() > deadline:
+            return runs
+        time.sleep(30)
 
 
 def update():
@@ -279,32 +338,26 @@ def update_next(repo):
         merging = subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True).returncode == 0
         if merging or subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0:
             git("commit", "--quiet", "--no-verify", "-m", COMMIT_MESSAGE.format(version="%d.%d.%d" % version))
-        pushed = subprocess.run(["git", "push", "--quiet", "origin", "HEAD:refs/heads/" + branch], text=True,
-                                capture_output=True)
-        if pushed.returncode != 0:
-            sys.stderr.write(pushed.stderr)
-            hold(repo, number, "its version and changelog section could not be added (the push was refused).")
+        if not publish(repo, branch):
+            hold(repo, number, "its version and changelog section could not be added (GitHub refused the commit).")
             return True
         print("#%d: version %d.%d.%d added" % ((number,) + version))
 
     sha = git("rev-parse", "HEAD")
-    # Only the build this workflow starts counts: its push can also queue pull request runs that wait for an approval
-    # nobody gives ("action_required"), and those aren't failures.
-    runs = [r for r in build_runs(repo, sha) if r["event"] == "workflow_dispatch"]
-    if any(r["status"] == "completed" and r["conclusion"] in FAILED for r in runs) \
-            and not any(r["conclusion"] == "success" for r in runs):
+    if not dispatched_builds(repo, sha):
+        # Commits made by this workflow don't start workflows, so build is started here on this commit.
+        gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
+        print("#%d: build started on %s" % (number, sha[:7]))
+    # Wait for it here: GitHub starts no workflow when a build this workflow started finishes, nor when auto-merge
+    # that it turned on merges, and the hourly run can come late or not at all.
+    runs = wait_for_build(repo, sha)
+    if any(r["conclusion"] in FAILED for r in runs) and not any(r["conclusion"] == "success" for r in runs):
         hold(repo, number, "build failed on it.")
         return True
     if any(r["conclusion"] == "success" for r in runs):
-        # Build passed on this commit (this run was started when it finished): merge now rather than wait for
-        # auto-merge, whose merge into dev wouldn't start this workflow again for the next update.
         if subprocess.run(["gh", "pr", "merge", str(number), "--repo", repo, "--merge"]).returncode == 0:
             print("#%d: build passed, merged into dev" % number)
             return True
-    elif not any(r["status"] != "completed" for r in runs):
-        # Commits pushed by this workflow don't start workflows, so build is started here on this commit.
-        gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
-        print("#%d: build started on %s" % (number, sha[:7]))
     gh("pr", "merge", str(number), "--repo", repo, "--auto", "--merge")
     print("#%d: merges on its own once build passes" % number)
     return False
