@@ -113,7 +113,19 @@ check_changelog() {
     file=$(mktemp)
     git show "$head:CHANGELOG.md" >"$file"
     python "$here/.github/changelog_check.py" "$file" || { rm -f "$file"; return 1; }
-    rm -f "$file"
+
+    # What to test: QA-CHECKLIST.md has this version's items, or just its heading when nothing can be tested by hand
+    # (.github/checklist_check.py says what it checks).
+    if ! git diff --name-only "$base" "$head" | grep -qx 'QA-CHECKLIST.md'; then
+        echo "::error::Add this version's test items (or just its heading, when nothing can be tested by hand) at the top of QA-CHECKLIST.md (see docs/development.md#qa-checklist)."
+        rm -f "$file"
+        return 1
+    fi
+    local checklist
+    checklist=$(mktemp)
+    git show "$head:QA-CHECKLIST.md" >"$checklist"
+    python "$here/.github/checklist_check.py" "$checklist" "$file" || { rm -f "$file" "$checklist"; return 1; }
+    rm -f "$file" "$checklist"
 
     local new old
     new=$(top_version "$head")
