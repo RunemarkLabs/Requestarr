@@ -130,8 +130,6 @@ namespace Requestarr.Core.Test.Welcome
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
             var handlers = new IInteractionHandler[] { Mocker.Resolve<WelcomeHandler>(), Mocker.Resolve<AccessRequestHandler>(), Mocker.Resolve<AdminConsoleHandler>(), Mocker.Resolve<AdminRequestsHandler>(), Mocker.Resolve<VersionCardHandler>() };
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
-            var now = DateTime.UtcNow;
-            access.Clock = () => now;
 
             try
             {
@@ -227,8 +225,11 @@ namespace Requestarr.Core.Test.Welcome
                 refused.LastReply.Content.Should().StartWith("Your last request was declined: Live test denial").And.Contain("You can ask again");
                 refused.LastReply.SelectMenu.Should().BeNull();
 
-                // 4. After the cooldown: asked again and approved; their channel appears.
-                now = now.AddDays(AccessSettings.DefaultDenialCooldownDays).AddMinutes(1);
+                // 4. After the cooldown (the denial is dated back past it; the clock isn't moved, so cards say "asked
+                // just now"): asked again and approved; their channel appears, and the approval names the live channel.
+                request = Mocker.Resolve<IAccessRequestRepository>().Get(request.Id);
+                request.Decided = DateTime.UtcNow.AddDays(-AccessSettings.DefaultDenialCooldownDays - 1);
+                Mocker.Resolve<IAccessRequestRepository>().Update(request);
                 await Ask("Live test: second try");
                 var second = Mocker.Resolve<IAccessRequestRepository>().All().OrderBy(r => r.Id).Last();
                 var chooser = (await Send(dispatcher, AsOwner(FakeInteraction.Button($"{AccessRoutes.Approve}:{second.Id}")))).LastReply;
@@ -237,8 +238,12 @@ namespace Requestarr.Core.Test.Welcome
                 Log($"[approve] {approved.LastReply.Content}");
                 var user = users.FindByDiscordId(member.Id);
                 var theirChannel = (ITextChannel)await host.Client.Rest.GetChannelAsync(ulong.Parse(user.PrivateChannelId));
-                Log($"[approve] #{theirChannel.Name} exists, in {(theirChannel.CategoryId == usersGroup.Id ? usersGroup.Name : "another group")}");
+                Log($"[approve] #{theirChannel.Name} exists, in {(theirChannel.CategoryId == usersGroup.Id ? usersGroup.Name : "another group")}; the approval names <#{theirChannel.Id}>: {approved.LastReply.Content.Contains($"<#{theirChannel.Id}>")}");
                 theirChannel.CategoryId.Should().Be(usersGroup.Id);
+                theirChannel.Name.Should().Be(ChannelLayout.UserChannelName(member.Username), "the live channel, not an archived one");
+                approved.LastReply.Content.Should().Contain($"<#{theirChannel.Id}>");
+                var secondCard = (await adminRest.GetMessagesAsync(20).FlattenAsync()).First(m => m.Content.StartsWith("🙋") && m.Content.Contains("second try"));
+                Log($"[approve] second card: \"{secondCard.Content.Replace("\n", " | ")}\"");
                 (await Press()).LastReply.Content.Should().Be(DiscordText.WelcomeAlreadyIn(user.PrivateChannelId));
 
                 // 5. Repeated clicks: the long wait, then blocked; read back from Discord; Unblock restores.
@@ -278,8 +283,11 @@ namespace Requestarr.Core.Test.Welcome
                 Sees(welcomeChannel).Should().BeTrue();
                 Sees(blockedChannel).Should().BeFalse();
 
-                // Blocked again, then the role removed by hand in Discord: that unblocks too.
+                // Blocked again: one notice for them, not two (the earlier one makes way); then the role removed by hand.
                 await ClickUntilBlocked();
+                var notices = (await adminRest.GetMessagesAsync(50).FlattenAsync()).Count(m => m.Content.StartsWith("🚫") && m.Content.Contains($"<@{member.Id}>"));
+                Log($"[block] blocked a second time: block notices about {member.Username} in #{ChannelLayout.AdminChannelName}: {notices}");
+                notices.Should().Be(1);
                 await host.Client.Rest.RemoveRoleAsync(guild.Id, member.Id, blockedRole);
                 await Task.Delay(TimeSpan.FromSeconds(4));
                 Log($"[unblock] role removed by hand: Requestarr counts them unblocked: {!access.IsBlocked(member.Id)}");
@@ -316,9 +324,41 @@ namespace Requestarr.Core.Test.Welcome
                 Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): \"{read.LastReply.Embeds.FirstOrDefault()?.Title}\", {read.LastReply.Embeds.Count} section(s)");
                 read.LastReply.Ephemeral.Should().BeTrue();
 
-                // Leave the test member as they were: removed again.
-                await users.RemoveAsync(member.Id, Actor.System);
-                Log($"[cleanup] {member.Username} removed again");
+                // 8. The version card sits right above the one admin panel.
+                await Task.Delay(TimeSpan.FromSeconds(4));
+                var latest = (await adminRest.GetMessagesAsync(3).FlattenAsync()).OrderByDescending(m => m.Id).ToList();
+                Log($"[cards] newest in #{ChannelLayout.AdminChannelName}: {(latest[0].Id.ToString() == guildSetup.GetConfig().AdminPanelMessageId ? "the panel" : "something else")}, then \"{latest[1].Embeds.FirstOrDefault()?.Title ?? latest[1].Content}\"");
+                latest[0].Id.ToString().Should().Be(guildSetup.GetConfig().AdminPanelMessageId);
+
+                // 9. A restart with a new database (a reset, or every live check): the bot finds its groups, channels, panels
+                // and the member's channel again instead of making new ones.
+                var before = await Snapshot(host, guild.Id, member.Username);
+                Mocker.Resolve<IDiscordGuildConfigRepository>().Purge();
+                Mocker.Resolve<IRequestarrUserRepository>().Purge();
+                Mocker.Resolve<IUserIdentityRepository>().Purge();
+                Mocker.Resolve<IUserMediaAccessRepository>().Purge();
+                await guildSetup.EnsureAsync();
+                await panels.EnsureAllAsync();
+                await users.AddAsync(member.Id, new Dictionary<ContentType, AccessState>(), Actor.System);
+                await Task.Delay(TimeSpan.FromSeconds(4));
+                var after = await Snapshot(host, guild.Id, member.Username);
+                Log($"[restart] before: {before}");
+                Log($"[restart] after a new database: {after}");
+                after.Should().Be(before, "nothing duplicated, nothing lost");
+                after.Should().Contain("admin panels 1").And.Contain("welcome messages 1").And.Contain("blocked messages 1").And.Contain($"#{ChannelLayout.UserChannelName(member.Username)}=1 in {ChannelLayout.UsersCategoryName}").And.Contain("their panels 1");
+
+                // 10. A deleted users group: it comes back, and every channel Discord left loose goes back in.
+                await ((IGuildChannel)await host.Client.Rest.GetChannelAsync(ulong.Parse(guildSetup.GetConfig().RequestCategoryIds[0]))).DeleteAsync();
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                var loose = (await (await host.Client.Rest.GetGuildAsync(guild.Id)).GetTextChannelsAsync()).Where(c => c.CategoryId == null).Select(c => "#" + c.Name).ToList();
+                Log($"[groups] users group deleted; loose at the top: {string.Join(", ", loose)}");
+                Mocker.Resolve<IDiscordGuildConfigRepository>().Purge();
+                await guildSetup.EnsureAsync();
+                var restored = await Snapshot(host, guild.Id, member.Username);
+                Log($"[groups] after the next start: {restored}");
+                restored.Should().Contain("loose 0").And.Contain($"#{ChannelLayout.UserChannelName(member.Username)}=1 in {ChannelLayout.UsersCategoryName}");
+
+                // The test member stays added, with their one channel; reset-dev cleans the server afterwards.
             }
             finally
             {
@@ -330,6 +370,34 @@ namespace Requestarr.Core.Test.Welcome
                 await host.StopAsync();
                 Log("[cleanup] bot disconnected (run docker/dev.sh reset-dev to restore the dev stack)");
             }
+        }
+
+        // What a server holds, read back from Discord: panels per channel, the member's channels and where they are, and
+        // Requestarr channels left loose at the top.
+        private static async Task<string> Snapshot(DiscordClientHost host, ulong guildId, string username)
+        {
+            var guild = await host.Client.Rest.GetGuildAsync(guildId);
+            var channels = await guild.GetTextChannelsAsync();
+            var groups = (await guild.GetCategoryChannelsAsync()).ToDictionary(c => c.Id, c => c.Name);
+            var bot = host.Client.CurrentUser.Id;
+
+            async Task<int> Count(string name, Func<IMessage, bool> what)
+            {
+                var channel = channels.FirstOrDefault(c => c.Name == name);
+                return channel == null ? -1 : (await channel.GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && what(m));
+            }
+
+            bool Has(IMessage m, string route) => m.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Any(b => b.CustomId == route);
+            var theirs = channels.Where(c => c.Name.EndsWith(ChannelLayout.UserChannelName(username))).ToList();
+            var live = theirs.Where(c => c.Name == ChannelLayout.UserChannelName(username)).ToList();
+            var requestarr = channels.Where(c => c.Name.StartsWith("requestarr-") || c.Name.Contains(ChannelLayout.UserChannelPrefix)).ToList();
+
+            return $"admin panels {await Count(ChannelLayout.AdminChannelName, m => Has(m, PanelRoutes.AdminQueue))}, " +
+                   $"welcome messages {await Count(ChannelLayout.WelcomeChannelName, m => Has(m, WelcomeRoutes.Request))}, " +
+                   $"blocked messages {await Count(ChannelLayout.BlockedChannelName, m => m.Content == DiscordText.BlockedMessage)}, " +
+                   $"{string.Join(", ", theirs.GroupBy(c => c.Name).Select(g => $"#{g.Key}={g.Count()} in {string.Join("/", g.Select(c => c.CategoryId.HasValue && groups.ContainsKey(c.CategoryId.Value) ? groups[c.CategoryId.Value] : "the top level"))}"))}, " +
+                   $"their panels {(live.Count == 1 ? (await live[0].GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && Has(m, PanelRoutes.MyRequests)) : -1)}, " +
+                   $"loose {requestarr.Count(c => c.CategoryId == null)}";
         }
 
         private static List<string> Buttons(IMessage message) =>

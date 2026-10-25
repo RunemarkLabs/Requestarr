@@ -1121,7 +1121,7 @@ namespace Requestarr.Core.Discord
         {
             var lines = new List<string>
             {
-                $"🙋 **Access request** from **{request.DisplayName}** (<@{request.DiscordUserId}>), <t:{Unix(request.Requested)}:R>",
+                $"🙋 **Access request** from **{request.DisplayName}** (<@{request.DiscordUserId}>), asked <t:{Unix(request.Requested)}:R>",
                 request.ContentTypes.Any() ? $"Would like: {string.Join(", ", request.ContentTypes.Select(Label))}" : "Would like: access (no type picked)"
             };
 
@@ -1165,6 +1165,8 @@ namespace Requestarr.Core.Discord
         public static string BlockedLine(DateTime since) => $"🚫 Blocked from asking for access since <t:{Unix(since)}:R> (repeated clicks on the welcome buttons).";
 
         public static string Unblocked(ulong discordId) => $"<@{discordId}> is unblocked: they see the welcome channel again and can ask for access.";
+
+        public static string UnblockedByHand(ulong discordId) => $"<@{discordId}> is unblocked: their {ChannelLayout.BlockedRoleName} role was removed in Discord.";
 
         // /admin requests: one thing waiting on the admin at a time, oldest first.
         public const string WalkDone = "Nothing left waiting on you. 🎉";

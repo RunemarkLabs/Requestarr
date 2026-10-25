@@ -126,21 +126,45 @@ namespace Requestarr.Core.Users
 
             ulong? roleId = null;
             ulong? channelId = null;
+            var createdRole = false;
+            var createdChannel = false;
 
             try
             {
-                roleId = await _gateway.CreateRoleAsync(ChannelLayout.UserRoleName(member.Username));
+                // Someone who was here before gets their role and their one channel back (kept, with its messages, when
+                // they were removed), found by ID or else by name, so nothing is ever duplicated (a restart with a new
+                // database, a reset).
+                var roleName = ChannelLayout.UserRoleName(member.Username);
+                roleId = ulong.TryParse(user?.DiscordRoleId, out var storedRole) && await _gateway.RoleExistsAsync(storedRole) ? storedRole : await _gateway.FindRoleAsync(roleName);
+
+                if (roleId == null)
+                {
+                    roleId = await _gateway.CreateRoleAsync(roleName);
+                    createdRole = true;
+                }
+
                 await _gateway.AddRoleToMemberAsync(member.Id, roleId.Value);
                 await SetMembership(member.Id, true);
 
-                var categoryId = await _guildSetup.GetCategoryWithRoomAsync();
+                var name = ChannelLayout.UserChannelName(member.Username);
                 var overwrites = ChannelLayout.UserChannel(_gateway.GuildId, _gateway.BotUserId, _guildSetup.AdminRoleId, roleId.Value, locked: false);
-                channelId = await _gateway.CreateTextChannelAsync(ChannelLayout.UserChannelName(member.Username), categoryId, $"Requestarr requests for {member.DisplayName}", overwrites);
+                channelId = ulong.TryParse(user?.PrivateChannelId, out var storedChannel) && await _gateway.ChannelExistsAsync(storedChannel) ? storedChannel
+                    : await _gateway.FindTextChannelAsync(name) ?? await _gateway.FindTextChannelAsync(ChannelLayout.ArchivedName(name));
+
+                if (channelId == null)
+                {
+                    channelId = await _gateway.CreateTextChannelAsync(name, await _guildSetup.GetCategoryWithRoomAsync(), $"Requestarr requests for {member.DisplayName}", overwrites);
+                    createdChannel = true;
+                }
+                else
+                {
+                    await ReopenChannelAsync(channelId.Value, name, overwrites);
+                }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Adding Discord member {0} failed, rolling back", discordUserId);
-                await RollBack(roleId, channelId);
+                await RollBack(createdRole ? roleId : null, createdChannel ? channelId : null);
 
                 return ServiceResult.Fail(DiscordText.AddFailed);
             }
@@ -602,6 +626,25 @@ namespace Requestarr.Core.Users
         {
             return _access.GetForUser(userId).FirstOrDefault(a => a.ContentType == type) ??
                    new UserMediaAccess { UserId = userId, ContentType = type, State = DefaultAccess[type] };
+        }
+
+        // A member's existing channel, back in use: its live name, in a Requestarr Users group, open to them again.
+        private async Task ReopenChannelAsync(ulong channelId, string name, IReadOnlyList<PermissionOverwrite> overwrites)
+        {
+            if (await _gateway.FindTextChannelAsync(name) != channelId)
+            {
+                await _gateway.RenameChannelAsync(channelId, name);
+            }
+
+            var groups = _guildSetup.GetConfig()?.RequestCategoryIds ?? new List<string>();
+
+            if (!groups.Contains((await _gateway.GetChannelCategoryAsync(channelId))?.ToString()))
+            {
+                await _gateway.MoveChannelAsync(channelId, await _guildSetup.GetCategoryWithRoomAsync());
+            }
+
+            await _gateway.SetChannelOverwritesAsync(channelId, overwrites);
+            _logger.Info("Reopened the existing channel {0} as #{1}", channelId, name);
         }
 
         private async Task RollBack(ulong? roleId, ulong? channelId)

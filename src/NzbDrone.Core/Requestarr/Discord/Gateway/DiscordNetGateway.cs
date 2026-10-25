@@ -62,6 +62,12 @@ namespace Requestarr.Core.Discord.Gateway
             return channels.OfType<INestedChannel>().Count(c => c.CategoryId == categoryId);
         }
 
+        public async Task<IReadOnlyList<GuildTextChannel>> GetTextChannelsAsync()
+        {
+            var guild = await Client.Rest.GetGuildAsync(GuildId);
+            return (await guild.GetTextChannelsAsync()).Select(c => new GuildTextChannel(c.Id, c.Name, c.CategoryId)).ToList();
+        }
+
         public async Task<ulong?> GetChannelCategoryAsync(ulong channelId)
         {
             return await Client.Rest.GetChannelAsync(channelId) is INestedChannel channel ? channel.CategoryId : null;
@@ -253,9 +259,13 @@ namespace Requestarr.Core.Discord.Gateway
 
             return messages.Where(m => m.Author.Id == BotUserId && m.Type != MessageType.ChannelPinnedMessage)
                 .OrderBy(m => m.Id)
-                .Select(m => new ChannelMessage(m.Id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description))
+                .Select(m => new ChannelMessage(m.Id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m)))
                 .ToList();
         }
+
+        // The custom IDs of a message's buttons and menus.
+        private static List<string> CustomIds(IMessage message) =>
+            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<IInteractableComponent>().Select(c => c.CustomId).Where(id => id != null).ToList();
 
         public async Task PinMessageAsync(ulong channelId, ulong messageId)
         {

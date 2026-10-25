@@ -79,6 +79,9 @@ namespace Requestarr.Core.Discord
     public class PanelService : IPanelService, NzbDrone.Core.Messaging.Events.IHandleAsync<Backends.AdminQueueChangedEvent>
     {
         // How long the panel waits after the bot's last post before moving below it.
+        // How many of the bot's newest messages in a channel are read to find its panel again.
+        public const int PanelScan = 100;
+
         public static readonly TimeSpan MoveDelay = TimeSpan.FromSeconds(2);
 
         private readonly IDiscordGuildGateway _gateway;
@@ -122,45 +125,38 @@ namespace Requestarr.Core.Discord
 
         public async Task EnsureAllAsync()
         {
-            await EnsureAdminPanelAsync();
-            await EnsureWelcomeAsync();
+            var channels = new List<ulong>();
+            var config = _guildSetup.GetConfig();
 
-            foreach (var user in _users.All().Where(u => u.Status != UserStatus.Removed && u.PrivateChannelId != null))
+            foreach (var id in new[] { config?.AdminChannelId, config?.WelcomeChannelId, config?.BlockedChannelId }
+                         .Concat(_users.All().Where(u => u.Status != UserStatus.Removed).Select(u => u.PrivateChannelId)))
             {
-                await RefreshUserPanelAsync(user);
+                if (ulong.TryParse(id, out var channel))
+                {
+                    channels.Add(channel);
+                }
             }
 
-            // Panels pinned by older versions are unpinned, and every panel ends up last in its channel.
-            foreach (var (channel, panel) in Panels().ToList())
+            // Each panel is found again (by its saved ID, or by what it is), copies are removed, panels pinned by older
+            // versions are unpinned, and every panel ends up last in its channel.
+            foreach (var channel in channels)
             {
-                await UnpinAsync(channel, panel);
-
                 try
                 {
-                    await KeepLastAsync(channel);
+                    await EnsurePanelAsync(channel, moveLast: true, unpin: true);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn(ex, "Could not move the panel to the bottom of channel {0}", channel);
+                    _logger.Warn(ex, "Could not keep the panel in channel {0}", channel);
                 }
             }
         }
 
         public async Task EnsureAdminPanelAsync()
         {
-            var config = _guildSetup.GetConfig();
-
-            if (config?.AdminChannelId == null)
+            if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var channel))
             {
-                return;
-            }
-
-            var id = await Upsert(ulong.Parse(config.AdminChannelId), config.AdminPanelMessageId, AdminPanel(_queue.Items().Count));
-
-            if (id.HasValue && config.AdminPanelMessageId != id.ToString())
-            {
-                config.AdminPanelMessageId = id.ToString();
-                _configs.Update(config);
+                await TryEnsureAsync(channel);
             }
         }
 
@@ -168,37 +164,20 @@ namespace Requestarr.Core.Discord
         {
             var config = _guildSetup.GetConfig();
 
-            if (config == null)
+            foreach (var id in new[] { config?.WelcomeChannelId, config?.BlockedChannelId })
             {
-                return;
+                if (ulong.TryParse(id, out var channel))
+                {
+                    await TryEnsureAsync(channel);
+                }
             }
-
-            if (ulong.TryParse(config.WelcomeChannelId, out var welcome))
-            {
-                config.WelcomeMessageId = (await Upsert(welcome, config.WelcomeMessageId, WelcomePanel()))?.ToString() ?? config.WelcomeMessageId;
-            }
-
-            if (ulong.TryParse(config.BlockedChannelId, out var blocked))
-            {
-                config.BlockedMessageId = (await Upsert(blocked, config.BlockedMessageId, BlockedPanel()))?.ToString() ?? config.BlockedMessageId;
-            }
-
-            _configs.Update(config);
         }
 
         public async Task RefreshUserPanelAsync(RequestarrUser user)
         {
-            if (user?.PrivateChannelId == null || user.Status == UserStatus.Removed)
+            if (user?.PrivateChannelId != null && user.Status != UserStatus.Removed && ulong.TryParse(user.PrivateChannelId, out var channel))
             {
-                return;
-            }
-
-            var id = await Upsert(ulong.Parse(user.PrivateChannelId), user.PanelMessageId, UserPanel(user));
-
-            if (id.HasValue && user.PanelMessageId != id.ToString())
-            {
-                user.PanelMessageId = id.ToString();
-                _users.Update(user);
+                await TryEnsureAsync(channel);
             }
         }
 
@@ -244,22 +223,31 @@ namespace Requestarr.Core.Discord
         // Something waiting on the admin changed: the panel's count follows.
         public void HandleAsync(Backends.AdminQueueChangedEvent message) => RefreshAdminPanelAsync().GetAwaiter().GetResult();
 
+        // Only the count changes: an edit in place, taking turns with the panel being moved to the bottom.
         public async Task RefreshAdminPanelAsync()
         {
-            var config = _guildSetup.GetConfig();
-
-            if (!ulong.TryParse(config?.AdminChannelId, out var channel) || !ulong.TryParse(config.AdminPanelMessageId, out var panel))
+            if (!ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var channel))
             {
                 return;
             }
 
+            var gate = Gate(channel);
+            await gate.WaitAsync();
+
             try
             {
-                await _gateway.EditMessageAsync(channel, panel, AdminPanel(_queue.Items().Count));
+                if (ulong.TryParse(_guildSetup.GetConfig()?.AdminPanelMessageId, out var panel))
+                {
+                    await _gateway.EditMessageAsync(channel, panel, AdminPanel(_queue.Items().Count));
+                }
             }
             catch (Exception ex)
             {
                 _logger.Debug(ex, "Could not refresh the admin panel");
+            }
+            finally
+            {
+                gate.Release();
             }
         }
 
@@ -296,24 +284,61 @@ namespace Requestarr.Core.Discord
             });
         }
 
-        public async Task KeepLastAsync(ulong channelId)
+        public Task KeepLastAsync(ulong channelId) => EnsurePanelAsync(channelId, moveLast: true, unpin: false);
+
+        // The one place a panel is posted, edited, moved or removed, one channel at a time. The panel is found by its
+        // saved ID, or else by what it is among the bot's newest messages (after a restart with a new database, or
+        // a reset); it's edited in place, or posted if there's none; with moveLast it's posted again at the bottom if
+        // something else is newer (quietly); and any other copy of it in the channel is removed, so there's exactly one.
+        private async Task EnsurePanelAsync(ulong channelId, bool moveLast, bool unpin)
         {
-            var gate = _channelLocks.GetOrAdd(channelId, _ => new SemaphoreSlim(1, 1));
+            var gate = Gate(channelId);
             await gate.WaitAsync();
 
             try
             {
-                if (PanelIn(channelId) is not { } panel || !ulong.TryParse(panel.Id, out var current) ||
-                    await _gateway.GetLatestMessageIdAsync(channelId) == current)
+                if (PanelIn(channelId) is not { } panel || !await _gateway.ChannelExistsAsync(channelId))
                 {
                     return;
                 }
 
-                // The new one first, so the channel is never without its panel; it doesn't ping or notify anyone.
+                // The saved one counts even if it no longer looks like a panel (an older version's), and is rewritten.
+                var own = await _gateway.GetOwnMessagesAsync(channelId, PanelScan);
+                var copies = own.Where(panel.Is).Select(m => m.Id).ToList();
+                var keep = ulong.TryParse(panel.Id, out var stored) && own.Any(m => m.Id == stored) ? stored : copies.Count > 0 ? copies[^1] : (ulong?)null;
                 var reply = panel.Build();
-                var moved = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Quiet = true });
-                panel.Save(moved.ToString());
-                await _gateway.DeleteMessageAsync(channelId, current);
+
+                if (keep.HasValue && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
+                {
+                    keep = null;
+                }
+
+                if (!keep.HasValue)
+                {
+                    keep = await _gateway.SendMessageAsync(channelId, reply);
+                }
+                else if (moveLast && await _gateway.GetLatestMessageIdAsync(channelId) != keep)
+                {
+                    // The new one first, so the channel is never without its panel; it doesn't ping or notify anyone.
+                    var old = keep.Value;
+                    keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Quiet = true });
+                    copies.Add(old);
+                }
+
+                if (panel.Id != keep.ToString())
+                {
+                    panel.Save(keep.ToString());
+                }
+
+                foreach (var copy in copies.Where(c => c != keep).Distinct())
+                {
+                    await _gateway.DeleteMessageAsync(channelId, copy);
+                }
+
+                if (unpin)
+                {
+                    await UnpinAsync(channelId, keep.Value);
+                }
             }
             finally
             {
@@ -321,8 +346,23 @@ namespace Requestarr.Core.Discord
             }
         }
 
-        // The panel that lives in a channel: where its ID is kept, and how to build it.
-        private record Panel(string Id, Func<InteractionReply> Build, Action<string> Save);
+        private async Task TryEnsureAsync(ulong channelId)
+        {
+            try
+            {
+                await EnsurePanelAsync(channelId, moveLast: false, unpin: false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not update the panel in channel {0}", channelId);
+            }
+        }
+
+        private SemaphoreSlim Gate(ulong channelId) => _channelLocks.GetOrAdd(channelId, _ => new SemaphoreSlim(1, 1));
+
+        // The panel that lives in a channel: where its ID is kept, how to build it, and how to tell it apart from the
+        // channel's other messages.
+        private record Panel(string Id, Func<InteractionReply> Build, Func<ChannelMessage, bool> Is, Action<string> Save);
 
         private Panel PanelIn(ulong channelId)
         {
@@ -336,76 +376,36 @@ namespace Requestarr.Core.Discord
 
             if (config.AdminChannelId == id)
             {
-                return new Panel(config.AdminPanelMessageId, () => AdminPanel(_queue.Items().Count), saved => Save(c => c.AdminPanelMessageId = saved));
+                return new Panel(config.AdminPanelMessageId, () => AdminPanel(_queue.Items().Count), m => m.Has(PanelRoutes.AdminQueue), saved => Save(c => c.AdminPanelMessageId = saved, c => c.AdminPanelMessageId));
             }
 
             if (config.WelcomeChannelId == id)
             {
-                return new Panel(config.WelcomeMessageId, WelcomePanel, saved => Save(c => c.WelcomeMessageId = saved));
+                return new Panel(config.WelcomeMessageId, WelcomePanel, m => m.Has(WelcomeRoutes.Request), saved => Save(c => c.WelcomeMessageId = saved, c => c.WelcomeMessageId));
             }
 
             if (config.BlockedChannelId == id)
             {
-                return new Panel(config.BlockedMessageId, BlockedPanel, saved => Save(c => c.BlockedMessageId = saved));
+                return new Panel(config.BlockedMessageId, BlockedPanel, m => m.Content == DiscordText.BlockedMessage, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
             }
 
             var user = _users.FindByChannel(id);
 
             return user == null || user.Status == UserStatus.Removed
                 ? null
-                : new Panel(user.PanelMessageId, () => UserPanel(user), saved =>
+                : new Panel(user.PanelMessageId, () => UserPanel(_users.Get(user.Id)), m => m.Has(PanelRoutes.MyRequests), saved =>
                 {
+                    // Only the panel's ID: the rest of the record may have changed meanwhile (a suspension, say).
                     user.PanelMessageId = saved;
-                    _users.Update(user);
+                    _users.SetFields(user, u => u.PanelMessageId);
                 });
         }
 
-        private void Save(Action<DiscordGuildConfig> change)
+        private void Save(Action<DiscordGuildConfig> change, System.Linq.Expressions.Expression<Func<DiscordGuildConfig, object>> field)
         {
             var config = _guildSetup.GetConfig();
             change(config);
-            _configs.Update(config);
-        }
-
-        private IEnumerable<(ulong Channel, ulong Panel)> Panels()
-        {
-            var config = _guildSetup.GetConfig();
-            var pairs = new List<(string, string)>
-            {
-                (config?.AdminChannelId, config?.AdminPanelMessageId),
-                (config?.WelcomeChannelId, config?.WelcomeMessageId),
-                (config?.BlockedChannelId, config?.BlockedMessageId)
-            };
-
-            pairs.AddRange(_users.All().Where(u => u.Status != UserStatus.Removed).Select(u => (u.PrivateChannelId, u.PanelMessageId)));
-
-            foreach (var (channel, panel) in pairs)
-            {
-                if (ulong.TryParse(channel, out var c) && ulong.TryParse(panel, out var p))
-                {
-                    yield return (c, p);
-                }
-            }
-        }
-
-        private async Task<ulong?> Upsert(ulong channelId, string storedId, InteractionReply panel)
-        {
-            try
-            {
-                if (!await _gateway.ChannelExistsAsync(channelId))
-                {
-                    return null;
-                }
-
-                return ulong.TryParse(storedId, out var existing) && await _gateway.EditMessageAsync(channelId, existing, panel)
-                    ? existing
-                    : await _gateway.SendMessageAsync(channelId, panel);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn(ex, "Could not update the panel in channel {0}", channelId);
-                return null;
-            }
+            _configs.SetFields(config, field);
         }
 
         private async Task UnpinAsync(ulong channelId, ulong messageId)

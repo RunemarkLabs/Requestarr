@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Requestarr.Core.Discord.Interactions;
 
@@ -26,10 +27,17 @@ namespace Requestarr.Core.Discord.Gateway
         Member
     }
 
+    // A text channel in the server: its name and the group it's in (null at the top level).
+    public record GuildTextChannel(ulong Id, string Name, ulong? CategoryId);
+
     public record PermissionOverwrite(ulong TargetId, OverwriteTarget TargetType, ChannelPermissions Allow, ChannelPermissions Deny);
 
-    // A message as Requestarr reads it back: its text, and its first embed's title and description (version cards).
-    public record ChannelMessage(ulong Id, string Content, string EmbedTitle = null, string EmbedDescription = null);
+    // A message as Requestarr reads it back: its text, its first embed's title and description (version cards), and
+    // its buttons' and menus' custom IDs (which panel it is).
+    public record ChannelMessage(ulong Id, string Content, string EmbedTitle = null, string EmbedDescription = null, IReadOnlyList<string> CustomIds = null)
+    {
+        public bool Has(string route) => CustomIds != null && CustomIds.Any(id => id == route || id.StartsWith(route + ":"));
+    }
 
     // Operations Requestarr performs in its one Discord server. Implemented over Discord.Net
     // for the live bot and in memory for tests, so all rules are testable without Discord.
@@ -50,6 +58,9 @@ namespace Requestarr.Core.Discord.Gateway
         Task<ulong?> FindCategoryAsync(string name);
         Task<ulong?> FindTextChannelAsync(string name);
         Task<int> GetChannelCountInCategoryAsync(ulong categoryId);
+
+        // Every text channel in the server, from Discord (not the cache).
+        Task<IReadOnlyList<GuildTextChannel>> GetTextChannelsAsync();
 
         // The group (category) a channel sits in; null when it's in none or is gone.
         Task<ulong?> GetChannelCategoryAsync(ulong channelId);

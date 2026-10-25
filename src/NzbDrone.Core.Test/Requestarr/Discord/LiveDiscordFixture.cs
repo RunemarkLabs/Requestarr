@@ -152,7 +152,11 @@ namespace Requestarr.Core.Test.Discord
                     created.Add($"channel:{adminChannel}");
                 }
 
-                if (audit.Contains("discord.category.create"))
+                // Only the users group itself, if this run made it: since task 4e the run may also have made the admin group,
+                // and deleting a group this run didn't make would leave its channels loose at the top level.
+                var madeHere = Mocker.Resolve<IAuditRepository>().All().Where(a => a.Action == "discord.category.create").Select(a => a.TargetId).ToHashSet();
+
+                if (madeHere.Contains(category.ToString()))
                 {
                     created.Add($"channel:{category}");
                 }

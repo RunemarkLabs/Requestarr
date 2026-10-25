@@ -26,6 +26,9 @@ namespace Requestarr.Core.Access
         // Set while the person is blocked; a block lasts until the admin lifts it.
         public DateTime? Blocked { get; set; }
 
+        // The admins' notice about this person's block, in the admin channel: there's only ever one per person.
+        public string NoticeMessageId { get; set; }
+
         public List<DateTime> Clicks() =>
             (RecentClicks ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(t => long.TryParse(t, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks) ? new DateTime(ticks, DateTimeKind.Utc) : (DateTime?)null)

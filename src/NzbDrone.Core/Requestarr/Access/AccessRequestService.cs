@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Core.Messaging.Events;
@@ -90,6 +92,9 @@ namespace Requestarr.Core.Access
         private readonly IEventAggregator _events;
         private readonly Logger _logger;
 
+        // One person's clicks are counted one at a time, so quick clicks can't block them twice.
+        private readonly ConcurrentDictionary<ulong, SemaphoreSlim> _memberLocks = new();
+
         public AccessRequestService(IAccessRequestRepository requests,
                                     IWelcomeGuardRepository guards,
                                     IAccessSettings settings,
@@ -130,6 +135,21 @@ namespace Requestarr.Core.Access
         public bool IsBlocked(ulong discordUserId) => _guards.Find(discordUserId.ToString())?.Blocked != null;
 
         public async Task<WelcomeAnswer> ClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media = null)
+        {
+            var gate = _memberLocks.GetOrAdd(discordUserId, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+
+            try
+            {
+                return await CountClickAsync(discordUserId, isAdmin, media);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        private async Task<WelcomeAnswer> CountClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media)
         {
             var now = Clock();
             var guard = _guards.Find(discordUserId.ToString());
@@ -333,6 +353,7 @@ namespace Requestarr.Core.Access
             }
 
             Clear(guard);
+            await CloseNoticeAsync(guard, DiscordText.Unblocked(discordUserId));
 
             if (_guildSetup.BlockedRoleId is { } role)
             {
@@ -351,18 +372,17 @@ namespace Requestarr.Core.Access
             return ServiceResult.Ok(DiscordText.Unblocked(discordUserId));
         }
 
-        public Task MemberRolesChangedAsync(ulong discordUserId, IReadOnlyList<ulong> roleIds)
+        public async Task MemberRolesChangedAsync(ulong discordUserId, IReadOnlyList<ulong> roleIds)
         {
             var guard = _guards.Find(discordUserId.ToString());
 
             if (guard?.Blocked != null && _guildSetup.BlockedRoleId is { } role && !roleIds.Contains(role))
             {
                 Clear(guard);
+                await CloseNoticeAsync(guard, DiscordText.UnblockedByHand(discordUserId));
                 _audit.Record(Actor.System, "access.unblock", "member", discordUserId.ToString(), "the blocked role was removed in Discord");
                 _logger.Info("Member {0} is unblocked: their blocked role was removed in Discord", discordUserId);
             }
-
-            return Task.CompletedTask;
         }
 
         public async Task ReconcileBlocksAsync()
@@ -442,7 +462,7 @@ namespace Requestarr.Core.Access
             switch (outcome)
             {
                 case GuardOutcome.Blocked:
-                    await BlockAsync(discordUserId);
+                    await BlockAsync(discordUserId, guard);
                     return WelcomeAnswer.Say(DiscordText.WelcomeBlockedNow);
 
                 case GuardOutcome.ShortCooldown:
@@ -456,7 +476,7 @@ namespace Requestarr.Core.Access
             }
         }
 
-        private async Task BlockAsync(ulong discordUserId)
+        private async Task BlockAsync(ulong discordUserId, WelcomeGuard guard)
         {
             _logger.Info("Member {0} is blocked from the welcome buttons after repeated clicks", discordUserId);
             _audit.Record(Actor.System, "access.block", "member", discordUserId.ToString(), "repeated clicks on the welcome buttons");
@@ -470,17 +490,42 @@ namespace Requestarr.Core.Access
 
                 if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
                 {
+                    // One notice per person: an earlier block's notice makes way for this one.
+                    if (ulong.TryParse(guard.NoticeMessageId, out var earlier))
+                    {
+                        await _gateway.DeleteMessageAsync(adminChannel, earlier);
+                    }
+
                     var member = await _gateway.GetMemberAsync(discordUserId);
-                    await _gateway.SendMessageAsync(adminChannel, new InteractionReply
+                    var notice = await _gateway.SendMessageAsync(adminChannel, new InteractionReply
                     {
                         Content = DiscordText.BlockedAdminNotice(discordUserId, member?.DisplayName),
                         Buttons = new List<InteractionButton> { new() { CustomId = $"{AccessRoutes.Unblock}:{discordUserId}", Label = DiscordText.UnblockLabel, Style = ButtonStyle.Secondary } }
                     });
+
+                    guard.NoticeMessageId = notice.ToString();
+                    _guards.SetFields(guard, g => g.NoticeMessageId);
                 }
             }
             catch (Exception ex)
             {
                 _logger.Warn(ex, "Could not finish blocking {0} in Discord", discordUserId);
+            }
+        }
+
+        // The block notice says it's lifted and loses its button.
+        private async Task CloseNoticeAsync(WelcomeGuard guard, string outcome)
+        {
+            if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel) && ulong.TryParse(guard.NoticeMessageId, out var notice))
+            {
+                try
+                {
+                    await _gateway.EditMessageAsync(adminChannel, notice, new InteractionReply { Content = outcome });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Could not update the block notice for {0}", guard.DiscordUserId);
+                }
             }
         }
 

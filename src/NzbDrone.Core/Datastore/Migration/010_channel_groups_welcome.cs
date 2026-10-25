@@ -40,7 +40,8 @@ namespace NzbDrone.Core.Datastore.Migration
                 .WithColumn("CooldownUntil").AsDateTimeOffset().Nullable()
                 .WithColumn("LongCooldownStarted").AsDateTimeOffset().Nullable()
                 .WithColumn("ClicksSinceLong").AsInt32().NotNullable().WithDefaultValue(0)
-                .WithColumn("Blocked").AsDateTimeOffset().Nullable();
+                .WithColumn("Blocked").AsDateTimeOffset().Nullable()
+                .WithColumn("NoticeMessageId").AsString().Nullable();
 
             Create.TableForModel("Outages")
                 .WithColumn("BackendId").AsInt32().NotNullable().Indexed()

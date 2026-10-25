@@ -140,15 +140,24 @@ namespace Requestarr.Core.Discord
             config.RequestCategoryIds = GetConfig()?.RequestCategoryIds ?? config.RequestCategoryIds;
             _repository.Upsert(config);
 
-            // Members' private channels that ended up outside the users groups (a group was deleted) go back in.
-            foreach (var user in _users.All().Where(u => u.Status != Users.UserStatus.Removed && u.PrivateChannelId != null))
+            // Members' channels left outside the users groups (a group was deleted, so Discord put them at the top level)
+            // go back in: the ones Requestarr knows, and any loose one with a request channel's name, live or archived,
+            // even when the database doesn't know it (a reset, a new install with the channels kept).
+            var known = _users.All().Where(u => u.PrivateChannelId != null).Select(u => u.PrivateChannelId).ToHashSet();
+            var textChannels = await _gateway.GetTextChannelsAsync();
+
+            foreach (var channel in textChannels)
             {
-                if (ulong.TryParse(user.PrivateChannelId, out var channel) && await _gateway.ChannelExistsAsync(channel) &&
-                    !config.RequestCategoryIds.Contains((await _gateway.GetChannelCategoryAsync(channel))?.ToString()))
+                var memberChannel = known.Contains(channel.Id.ToString()) ||
+                                    channel.Name.StartsWith(ChannelLayout.UserChannelPrefix) ||
+                                    channel.Name.StartsWith(ChannelLayout.ArchivedPrefix + ChannelLayout.UserChannelPrefix);
+                var loose = channel.CategoryId == null || !await _gateway.ChannelExistsAsync(channel.CategoryId.Value);
+
+                if (memberChannel && (loose || (known.Contains(channel.Id.ToString()) && !config.RequestCategoryIds.Contains(channel.CategoryId?.ToString()))))
                 {
-                    await _gateway.MoveChannelAsync(channel, await GetCategoryWithRoomAsync());
+                    await _gateway.MoveChannelAsync(channel.Id, await GetCategoryWithRoomAsync());
                     config = GetConfig();
-                    _logger.Info("Moved {0}'s channel back into the {1} group", user.DisplayName, ChannelLayout.UsersCategoryName);
+                    _logger.Info("Moved #{0} back into the {1} group", channel.Name, ChannelLayout.UsersCategoryName);
                 }
             }
 

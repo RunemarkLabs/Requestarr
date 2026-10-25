@@ -196,14 +196,18 @@ namespace Requestarr.Core.Test.Announcements
                 async Task<List<IMessage>> Recent(IMessageChannel c) => (await c.GetMessagesAsync(30).FlattenAsync()).OrderBy(m => m.Id).ToList();
                 var current = Changelog.Release(announcements.CurrentVersion());
                 await announcements.PostVersionNotesAsync();
-                var adminNotes = (await Recent(adminRest)).Where(m => m.Content.StartsWith("📋")).ToList();
-                var userNotes = (await Recent(channel)).Where(m => m.Content.StartsWith("✨")).ToList();
-                Log($"[upgrade] start on {current}: {adminNotes.Count} admin post(s), {userNotes.Count} user post(s)");
-                adminNotes.ForEach(m => Log($"[upgrade]   admin, read back: \"{m.Content.Replace("\n", " | ")}\""));
-                userNotes.ForEach(m => Log($"[upgrade]   users, read back: \"{m.Content.Replace("\n", " | ")}\""));
+
+                // Since task 4e each version is a one-line card, found by its title.
+                async Task<List<string>> Cards(IMessageChannel c, VersionAudience audience) =>
+                    (await Recent(c)).Select(m => m.Embeds.FirstOrDefault()?.Title).Where(t => VersionCards.Parse(t, audience) != null).ToList();
+                var adminNotes = await Cards(adminRest, VersionAudience.Admins);
+                var userNotes = await Cards(channel, VersionAudience.Users);
+                Log($"[upgrade] start on {current}: {adminNotes.Count} admin card(s), {userNotes.Count} user card(s)");
+                adminNotes.ForEach(t => Log($"[upgrade]   admin, read back: \"{t}\""));
+                userNotes.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
                 var running = Changelog.Parse(announcements.ChangelogText()).SingleOrDefault(v => v.Version == current);
                 adminNotes.Should().HaveCount(running?.HasNews == true ? 1 : 0, "only the version running now, and a version with nothing for anyone posts nothing");
-                adminNotes.Select(m => m.Content.Split('\n')[0]).Should().BeSubsetOf(new[] { $"📋 **Requestarr {current}: what's new**" });
+                adminNotes.Should().OnlyContain(t => t.StartsWith($"Requestarr {current} · "));
                 var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
@@ -213,15 +217,14 @@ namespace Requestarr.Core.Test.Announcements
                 announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
-                var adminAfter = (await Recent(adminRest)).Where(m => m.Content.StartsWith("📋")).ToList();
-                var usersAfter = (await Recent(channel)).Where(m => m.Content.StartsWith("✨")).ToList();
-                Log($"[upgrade] simulated upgrade to {next}, started twice: admin posts {adminAfter.Count}, user posts {usersAfter.Count}; stored version {guildSetup.GetConfig().AnnouncedVersion}");
-                Log($"[upgrade]   admin, read back: \"{adminAfter.Last().Content.Replace("\n", " | ")}\"");
-                Log($"[upgrade]   users, read back: \"{usersAfter.Last().Content.Replace("\n", " | ")}\"");
-                adminAfter.Should().ContainSingle("the new version replaces the old post, once, even across restarts")
-                    .Which.Content.Should().Be($"📋 **Requestarr {next}: what's new**\n**For users** (posted in #{ChannelLayout.AnnouncementsChannelName})\n" +
-                        "• Live check: this is how something new is announced to you.\n**For admins**\n• Live check: admins get the full list.");
-                usersAfter.Should().ContainSingle().Which.Content.Should().Be($"✨ **What's new in Requestarr {next}**\n• Live check: this is how something new is announced to you.");
+                var adminAfter = await Cards(adminRest, VersionAudience.Admins);
+                var usersAfter = await Cards(channel, VersionAudience.Users);
+                Log($"[upgrade] simulated upgrade to {next}, started twice: admin cards {adminAfter.Count}, user cards {usersAfter.Count}; stored version {guildSetup.GetConfig().AnnouncedVersion}");
+                adminAfter.ForEach(t => Log($"[upgrade]   admin, read back: \"{t}\""));
+                usersAfter.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
+                adminAfter.Should().ContainSingle("the new version replaces the old card, once, even across restarts")
+                    .Which.Should().Be($"Requestarr {next} · 1 change for admins, 1 for users");
+                usersAfter.Should().ContainSingle().Which.Should().Be($"Requestarr {next} · 1 new thing for you");
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
                 Docker("stop");
@@ -237,7 +240,8 @@ namespace Requestarr.Core.Test.Announcements
 
                 sonarr = Mocker.Resolve<IBackendRepository>().Get(sonarr.Id);
                 var alert = await adminRest.GetMessageAsync(ulong.Parse(sonarr.DownAlertMessageId));
-                Log($"[outage] down alert, read back: \"{alert.Content.Replace("\n", " | ")}\" buttons=[{string.Join("] [", Buttons(alert))}]");
+                Log($"[outage] down alert, read back: \"{alert.Content.Replace("\n", " | ")}\" buttons=[{string.Join("] [", Buttons(alert))}] pinned: {alert.IsPinned}");
+                alert.IsPinned.Should().BeTrue("pinned while the outage lasts");
                 Buttons(alert).Should().Equal(DiscordText.AnnounceLabel);
                 var customId = alert.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Single().CustomId;
 
@@ -249,7 +253,10 @@ namespace Requestarr.Core.Test.Announcements
                 alert = await adminRest.GetMessageAsync(alert.Id);
                 Log($"[outage] alert now: \"{alert.Content.Replace("\n", " | ")}\" buttons=[{string.Join("] [", Buttons(alert))}]");
                 notice.Content.Should().Be(DiscordText.OutageNotice(ContentType.Tv, false));
+                notice.IsPinned.Should().BeTrue();
                 Buttons(alert).Should().BeEmpty();
+                var noticeId = notice.Id;
+                var alertId = alert.Id;
 
                 // 5. Start it again: the recovery is announced because the outage was.
                 Docker("start");
@@ -265,6 +272,12 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[outage] recovery, read back: \"{posts.Last().Content.Replace("\n", " | ")}\"");
                 Log($"[outage] admin channel: \"{(await Recent(adminRest)).Last().Content}\"");
                 posts.Last().Content.Should().StartWith("✅ **TV requests work again**");
+                var noticeGone = await channel.GetMessageAsync(noticeId) == null;
+                var alertGone = await adminRest.GetMessageAsync(alertId) == null;
+                var outage = Mocker.Resolve<IOutageRepository>().History().First();
+                Log($"[outage] after recovery: notice removed {noticeGone}, alert removed {alertGone}, \"back\" pinned {posts.Last().IsPinned}; outage record: {outage.InstanceName} {outage.Started:HH:mm:ss}Z to {outage.Ended:HH:mm:ss}Z, {outage.Duration?.TotalSeconds:0}s, announced by {outage.AnnouncedBy}");
+                (noticeGone, alertGone, posts.Last().IsPinned).Should().Be((true, true, false));
+                (outage.Ended != null, outage.AnnouncedBy).Should().Be((true, "owner"));
                 Log($"[channel] #{channel.Name} now holds {posts.Count} message(s): {string.Join(" / ", posts.Select(p => p.Content.Split('\n')[0]))}");
             }
             finally

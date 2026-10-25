@@ -101,6 +101,9 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<int> GetChannelCountInCategoryAsync(ulong categoryId) => Task.FromResult(ChannelsIn(categoryId).Count());
 
+        public Task<IReadOnlyList<GuildTextChannel>> GetTextChannelsAsync() =>
+            Task.FromResult<IReadOnlyList<GuildTextChannel>>(Channels.Values.Where(c => !c.IsCategory).Select(c => new GuildTextChannel(c.Id, c.Name, c.CategoryId)).ToList());
+
         public Task<ulong?> GetChannelCategoryAsync(ulong channelId) =>
             Task.FromResult(Channels.TryGetValue(channelId, out var channel) ? channel.CategoryId : null);
 
@@ -285,10 +288,13 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
         {
             IReadOnlyList<ChannelMessage> messages = Channels.TryGetValue(channelId, out var channel)
-                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description)).TakeLast(limit).ToList()
+                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m))).TakeLast(limit).ToList()
                 : new List<ChannelMessage>();
             return Task.FromResult(messages);
         }
+
+        private static List<string> CustomIds(InteractionReply message) =>
+            message.Buttons.Select(b => b.CustomId).Concat(new[] { message.SelectMenu }.Concat(message.MoreMenus).Where(x => x != null).Select(x => x.CustomId)).ToList();
 
         public void DeleteMessage(ulong channelId, ulong messageId)
         {
