@@ -18,6 +18,7 @@ version heading carries the day it was made, which its card in Discord shows.
 
 ### For admins
 - **Two channel groups:** Requestarr keeps its channels in Requestarr Admin (the admin channel and the feed, admins only) and Requestarr Users (welcome, announcements and every member's channel); existing channels move over on the next start with their messages kept.
+- **No second copies after setting up again:** Requestarr finds its own groups, channels and panels, and each member's channel, even when its saved data is gone, so a reinstall or a reset never doubles them, and a member who comes back gets their one channel back.
 - **Welcome channel and access requests:** everyone in the server sees a welcome message explaining Requestarr with a Request access button; requests arrive as cards in the admin channel and the pending queue, where you approve with the access you choose or deny with a reason, and the person hears back privately.
 - **Spam protection:** repeated clicks on the welcome buttons make people wait, and if they keep going a role blocks them and hides the welcome channel; you get one notice and can unblock from it or from the member card.
 - **Panels stay at the bottom and aren't pinned:** every panel moves below anything new Requestarr posts in its channel, with no pings and no "pinned a message" notices.
