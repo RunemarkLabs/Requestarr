@@ -1083,7 +1083,11 @@ namespace Requestarr.Core.Discord
         public static string WelcomePending(DateTime since) => $"Your request from <t:{Unix(since)}:R> is waiting for the admin. You'll get a private message with the answer.";
 
         public static string WelcomeDeniedWait(string reason, DateTime from) =>
-            $"Your last request was declined{(string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}")} You can ask again <t:{Unix(from)}:R>.";
+            $"Your last request was declined{ReasonSentence(reason)} You can ask again <t:{Unix(from)}:R>.";
+
+        // ": the reason." (with a full stop unless it has its own), or just "." without one.
+        private static string ReasonSentence(string reason) =>
+            string.IsNullOrWhiteSpace(reason) ? "." : $": {reason.Trim()}{(".!?".Contains(reason.Trim()[^1]) ? string.Empty : ".")}";
 
         public static string WelcomeMediaLinked(MediaServerProvider provider) => $"Your {provider} account is already linked.";
 
@@ -1141,13 +1145,13 @@ namespace Requestarr.Core.Discord
             $"✅ Approved by {admin}{(channelId != null ? $": their channel is <#{channelId}>." : ".")}";
 
         public static string AccessRequestDeniedCard(Access.AccessRequest request, string admin) =>
-            $"❌ Declined by {admin}{(string.IsNullOrWhiteSpace(request.Reason) ? "." : $": {request.Reason}")}";
+            $"❌ Declined by {admin}{ReasonSentence(request.Reason)}";
 
         public static string AccessRequestApprovedMember(string channelId) =>
             $"✅ **You're in!** Your Requestarr access was approved{(channelId != null ? $"; your request channel is <#{channelId}>" : string.Empty)}. Have a look at the panel there to get started.";
 
         public static string AccessRequestDeniedMember(string reason, DateTime? askAgain) =>
-            $"Your Requestarr access request was declined{(string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}")}" +
+            $"Your Requestarr access request was declined{ReasonSentence(reason)}" +
             (askAgain.HasValue ? $" You can ask again <t:{Unix(askAgain.Value)}:R>." : string.Empty);
 
         // Blocks: one notice to the admins, an Unblock button on the notice and the member card.

@@ -103,6 +103,19 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
+        public async Task the_long_wait_starting_during_the_short_one_is_said_once()
+        {
+            await OpenRequest();
+
+            for (var i = 1; i <= 9; i++)
+            {
+                await Click();
+            }
+
+            (await Click()).Should().Be(DiscordText.WelcomeSlowDown(TimeSpan.FromHours(24)), "the tenth click lands inside the minute's wait");
+        }
+
+        [Test]
         public async Task unblock_on_the_member_card_lifts_the_block()
         {
             await BlockCarol();

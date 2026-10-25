@@ -147,12 +147,12 @@ namespace Requestarr.Core.Access
             // A spam cooldown: every click is answered with the time left and does nothing else.
             if (SpamRules.CooldownLeft(guard, now) is { } left)
             {
-                return await CountAsync(discordUserId, guard, now, DiscordText.WelcomeSlowDown(left));
+                return await CountAsync(discordUserId, guard, now, null, DiscordText.WelcomeSlowDown(left));
             }
 
             var status = Status(discordUserId, media, now);
 
-            return status == null ? WelcomeAnswer.Form() : await CountAsync(discordUserId, guard, now, status);
+            return status == null ? WelcomeAnswer.Form() : await CountAsync(discordUserId, guard, now, status, status);
         }
 
         public async Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername)
@@ -431,8 +431,9 @@ namespace Requestarr.Core.Access
             _settings.DenialCooldownDays > 0 && denied.Decided.HasValue ? denied.Decided.Value.AddDays(_settings.DenialCooldownDays) : null;
 
         // A click that couldn't do anything: one row per person, rewritten, never a message to the admin, except the
-        // one notice when it blocks them.
-        private async Task<WelcomeAnswer> CountAsync(ulong discordUserId, WelcomeGuard guard, DateTime now, string status)
+        // one notice when it blocks them. The answer: their status (null during a cooldown), and how long to wait if
+        // this click started a cooldown; otherwise `answer`.
+        private async Task<WelcomeAnswer> CountAsync(ulong discordUserId, WelcomeGuard guard, DateTime now, string status, string answer)
         {
             guard ??= new WelcomeGuard { DiscordUserId = discordUserId.ToString() };
             var outcome = SpamRules.Count(guard, now, _settings);
@@ -447,10 +448,11 @@ namespace Requestarr.Core.Access
                 case GuardOutcome.ShortCooldown:
                 case GuardOutcome.LongCooldown:
                     _logger.Info("Welcome buttons: member {0} is waiting {1} after repeated clicks", discordUserId, guard.CooldownUntil - now);
-                    return WelcomeAnswer.Say(status + "\n" + DiscordText.WelcomeSlowDown(guard.CooldownUntil.Value - now));
+                    var wait = DiscordText.WelcomeSlowDown(guard.CooldownUntil.Value - now);
+                    return WelcomeAnswer.Say(status == null ? wait : status + "\n" + wait);
 
                 default:
-                    return WelcomeAnswer.Say(status);
+                    return WelcomeAnswer.Say(answer);
             }
         }
 

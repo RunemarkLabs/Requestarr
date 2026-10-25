@@ -122,6 +122,7 @@ namespace Requestarr.Core.Test.Welcome
             Now = Now.AddDays(3);
             var early = await Press(Carol);
             early.LastReply.Content.Should().Be(DiscordText.WelcomeDeniedWait("Family only, sorry", askAgain));
+            early.LastReply.Content.Should().StartWith("Your last request was declined: Family only, sorry. You can ask again");
             Mocker.Resolve<IAccessRequestRepository>().All().Should().ContainSingle();
 
             Now = Now.AddDays(5);

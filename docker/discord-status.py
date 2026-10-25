@@ -3,8 +3,8 @@
     discord-status.py <compose project>
 
 Prints whether the stack's bot came online (from its Requestarr container's log), the server it's in, the
-slash commands registered there, and the latest "what's new" post in #requestarr-admin and
-#requestarr-announcements. Uses only that stack's own bot (STACK_DISCORD_BOT_TOKEN and STACK_DISCORD_GUILD_ID,
+slash commands registered there, Requestarr's channel groups, and the latest "what's new" card in #requestarr-admin
+and #requestarr-announcements. Uses only that stack's own bot (STACK_DISCORD_BOT_TOKEN and STACK_DISCORD_GUILD_ID,
 which the scripts set from docker/secrets.env for the chosen stack) and only reads: it never creates, edits or
 deletes anything. Never prints the token. Exits 1 if the bot isn't online or has no commands registered.
 """
@@ -38,18 +38,24 @@ def call(path):
         return {"error": str(error)}
 
 
-def latest(channels, name, prefix):
+def card_title(message):
+    embeds = message.get("embeds") or []
+    title = embeds[0].get("title", "") if embeds else ""
+    return title if title.startswith("Requestarr ") else None
+
+
+def latest(channels, name):
     channel = next((c for c in channels if c.get("type") == 0 and c.get("name") == name), None)
     if channel is None:
         return f"#{name} doesn't exist yet"
     messages = call(f"/channels/{channel['id']}/messages?limit=30")
     if not isinstance(messages, list):
         return f"#{name}: {messages.get('error')}"
-    post = next((m for m in messages if m.get("content", "").startswith(prefix)), None)
+    post = next((m for m in messages if card_title(m)), None)
     if post is None:
         return f"#{name}: none yet"
-    # ASCII only: Windows PowerShell shows an emoji from Python as "?".
-    title = post["content"].splitlines()[0].encode("ascii", "ignore").decode().strip()
+    # ASCII only: Windows PowerShell shows an emoji or a middle dot from Python as "?".
+    title = card_title(post).replace("\u00b7", "-").encode("ascii", "ignore").decode().strip()
     return f"#{name} {post['timestamp'][11:19]}Z \"{title}\""
 
 
@@ -91,8 +97,10 @@ def main():
 
     channels = call(f"/guilds/{guild}/channels")
     channels = channels if isinstance(channels, list) else []
-    line("what's new (admins)", latest(channels, "requestarr-admin", "\U0001F4CB"))
-    line("what's new (users)", latest(channels, "requestarr-announcements", "✨"))
+    groups = sorted(c["name"] for c in channels if c.get("type") == 4 and c.get("name", "").startswith("Requestarr "))
+    line("channel groups", ", ".join(groups) or "none yet")
+    line("what's new (admins)", latest(channels, "requestarr-admin"))
+    line("what's new (users)", latest(channels, "requestarr-announcements"))
     return 0 if ok else 1
 
 
