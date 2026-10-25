@@ -715,6 +715,23 @@ botProfile:
   takeOver: false      # true: replace one chosen by hand too (Requestarr's always wins)
 ```
 
+### 5.14 Bug reports
+
+`#requestarr-bug-reports`, in the Requestarr Users group, lets members and admins tell the people who build Requestarr about a problem. Nobody types in it: **Report a problem** opens a menu of Requestarr's parts, then a short form (what happened, what they expected). Requestarr adds your server's environment, its version, the time and the reporter's Discord name, nothing else from your server, and posts the report as a card in the channel, so you see every report.
+
+**Filing on GitHub is off by default.** Turned on, each report also becomes an issue on Requestarr's public GitHub repository, which anyone can read; the form says so before anything is sent. It needs an access key of your own that can only read and write issues on that repository (GitHub: Settings, Developer settings, Fine-grained tokens, Issues "Read and write", nothing else). Leave it off unless you want your members' reports to be public. Requestarr's own test servers have it on.
+
+```yaml
+bugReports:
+  fileIssues: false                    # true: each report becomes a public GitHub issue
+  githubToken: ${GITHUB_ISSUES_TOKEN}  # in secrets.env, never here
+  repository: RunemarkLabs/Requestarr
+  reportsPerDay: 5                     # per person
+  minutesBetween: 2                    # per person, between two reports
+```
+
+The limits stop the button flooding anything: someone who reaches them is told how long to wait, and nothing is posted.
+
 ## 6. Connect Plex (optional)
 
 _Coming in Phase 3:_ Plex token and library-to-content-type mapping.

@@ -27,6 +27,8 @@
   <ItemGroup>
     <!-- What's new on upgrade (Requestarr.Core.Announcements.Changelog). -->
     <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Requestarr.CHANGELOG.md" />
+    <!-- What QA tests before staging (Requestarr.Core.Qa.QaChecklist). -->
+    <EmbeddedResource Include="..\..\QA-CHECKLIST.md" LogicalName="Requestarr.QA-CHECKLIST.md" />
     <!-- Images that travel with Discord messages as attachments (Requestarr.Core.Discord.DiscordAssets). -->
     <EmbeddedResource Include="Requestarr\Discord\Assets\*.png" LogicalName="Requestarr.Assets.%(Filename)%(Extension)" />
   </ItemGroup>

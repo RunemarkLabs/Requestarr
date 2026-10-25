@@ -19,6 +19,7 @@
 #   .\docker\dev.ps1 fake-download movie "<title>"   make a title in the test Radarr look downloaded, like a real import
 #   .\docker\dev.ps1 fake-download tv "<title>" <season>   the same for a season in the test Sonarr
 #   .\docker\dev.ps1 fast-votes on|off|status        test timings for removal votes (vote 5 min, answer 5, reminder at 3)
+#   .\docker\dev.ps1 qa-gate [--json]                 is the QA checklist complete with no bug report from QA open? (exit 0: clear)
 #
 # Needs Docker Desktop and Git, and Python 3 for check, the resets and fake-download. Secret values are
 # read from docker\secrets.env and never printed. If PowerShell says running scripts is disabled, run once:
@@ -464,8 +465,14 @@ switch ($Command) {
         if ($code -ne 0) { exit $code }
     }
     'fast-votes' { Require-Docker; $script:Info = Get-StackInfo $Stack; Fast-Votes (First-Rest) }
+    'qa-gate' {
+        $script:Info = Get-StackInfo $Stack
+        $vars = @{ QA_GATE_URL = "http://localhost:$($script:Info.Env.STACK_REQUESTARR_PORT)"; REQUESTARR_API_KEY = $script:Info.Secrets['REQUESTARR_API_KEY'] }
+        $code = With-Env $vars { Invoke-Python (@((Join-Path $Dir 'qa-gate.py')) + $Rest) }
+        exit $code
+    }
     default {
-        Get-Content $PSCommandPath | Select-Object -Skip 1 -First 25 | ForEach-Object { $_ -replace '^# ?', '' }
+        Get-Content $PSCommandPath | Select-Object -Skip 1 -First 26 | ForEach-Object { $_ -replace '^# ?', '' }
         exit 1
     }
 }

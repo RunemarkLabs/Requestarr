@@ -94,6 +94,7 @@ namespace Requestarr.Core.Discord
         private readonly IMediaServerConnections _mediaServers;
         private readonly Backends.IBackendService _backends;
         private readonly Admin.IAdminQueue _queue;
+        private readonly Qa.IBugReportSettings _bugReports;
         private readonly Logger _logger;
         private readonly ConcurrentDictionary<ulong, CancellationTokenSource> _pendingMoves = new();
         private readonly ConcurrentDictionary<ulong, SemaphoreSlim> _channelLocks = new();
@@ -108,8 +109,10 @@ namespace Requestarr.Core.Discord
                             IMediaServerConnections mediaServers,
                             Backends.IBackendService backends,
                             Admin.IAdminQueue queue,
+                            Qa.IBugReportSettings bugReports,
                             Logger logger)
         {
+            _bugReports = bugReports;
             _gateway = gateway;
             _guildSetup = guildSetup;
             _configs = configs;
@@ -128,7 +131,7 @@ namespace Requestarr.Core.Discord
             var channels = new List<ulong>();
             var config = _guildSetup.GetConfig();
 
-            foreach (var id in new[] { config?.AdminChannelId, config?.WelcomeChannelId, config?.BlockedChannelId }
+            foreach (var id in new[] { config?.AdminChannelId, config?.WelcomeChannelId, config?.BlockedChannelId, config?.BugReportsChannelId }
                          .Concat(_users.All().Where(u => u.Status != UserStatus.Removed).Select(u => u.PrivateChannelId)))
             {
                 if (ulong.TryParse(id, out var channel))
@@ -208,6 +211,20 @@ namespace Requestarr.Core.Discord
 
             return new InteractionReply { Cards = { new InteractionCard { Color = DiscordText.WelcomeColor, Text = DiscordText.WelcomeMessage(types, media), Buttons = buttons } } };
         }
+
+        // Report a problem, always the newest message, below the reports; it says reports are public when they're filed.
+        public InteractionReply BugReportsPanel() => new()
+        {
+            Cards =
+            {
+                new InteractionCard
+                {
+                    Color = Qa.QaText.ReportColor,
+                    Text = Qa.QaText.BugReportsPanel(_bugReports.FileIssues),
+                    Buttons = new List<InteractionButton> { new() { CustomId = Qa.QaRoutes.Report, Label = Qa.QaText.ReportLabel, Style = ButtonStyle.Primary } }
+                }
+            }
+        };
 
         public static InteractionReply BlockedPanel() => new() { Cards = { new InteractionCard { Color = DiscordText.BlockedColor, Text = DiscordText.BlockedMessage } } };
 
@@ -389,6 +406,11 @@ namespace Requestarr.Core.Discord
             if (config.BlockedChannelId == id)
             {
                 return new Panel(config.BlockedMessageId, BlockedPanel, m => m.Content?.Contains(DiscordText.BlockedTitle) == true, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
+            }
+
+            if (config.BugReportsChannelId == id)
+            {
+                return new Panel(config.BugReportsMessageId, BugReportsPanel, m => m.Has(Qa.QaRoutes.Report), saved => Save(c => c.BugReportsMessageId = saved, c => c.BugReportsMessageId));
             }
 
             var user = _users.FindByChannel(id);

@@ -39,6 +39,14 @@ namespace Requestarr.Core.Discord
         public string MembersRoleId { get; set; }
         public string AnnouncementsChannelId { get; set; }
         public string AnnouncedVersion { get; set; }
+
+        // QA and dev only: the admin-only QA checklist channel and its summary card (the items keep their own).
+        public string QaChecklistChannelId { get; set; }
+        public string QaChecklistSummaryMessageId { get; set; }
+
+        // The bug reports channel members and admins read, and its one message with Report a problem.
+        public string BugReportsChannelId { get; set; }
+        public string BugReportsMessageId { get; set; }
     }
 
     public interface IDiscordGuildConfigRepository : IBasicRepository<DiscordGuildConfig>
