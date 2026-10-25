@@ -204,3 +204,6 @@ docker/secrets.env
 deploy/staging/.env
 deploy/staging/backups/
 deploy/staging/.previous-version
+
+# Python bytecode from the helper scripts
+__pycache__/
