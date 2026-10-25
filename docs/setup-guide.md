@@ -28,12 +28,12 @@ Every Requestarr install uses its own bot. Discord's official reference is https
 5. **OAuth2 → URL Generator:**
    - Scopes: tick `bot` and `applications.commands`.
    - Permissions: tick Manage Roles, Manage Channels, View Channels, Send Messages, Embed Links, Read Message History, and Pin Messages.
-     Pin Messages lets Requestarr pin the panels in each channel (section 5).
+     Pin Messages lets Requestarr pin an outage notice while the outage lasts (5.7).
    - Integration Type: **Guild Install**.
 
    The generated link ends with `permissions=2251800082205712&integration_type=0&scope=bot+applications.commands`.
 
-   **Already added the bot without Pin Messages?** You don't need to re-invite it. Open **Server Settings → Roles**, pick the bot's role, turn on **Pin Messages**, and save. Then restart Requestarr, and it pins the panels on start.
+   **Already added the bot without Pin Messages?** You don't need to re-invite it. Open **Server Settings → Roles**, pick the bot's role, turn on **Pin Messages**, and save. Outage notices are pinned from then on.
 6. Open the generated link, pick your server, and authorize. The bot shows as offline until Requestarr runs.
 7. **Bot → Reset Token**, then paste the token straight into Requestarr's secrets file (section 3). Never paste it into chat, issues, or screenshots. If you lose it, reset it again.
 8. In your server, open **Server Settings → Roles** and keep the bot's role above any roles it should manage.
@@ -458,7 +458,7 @@ Requestarr registers exactly three commands:
 - **`/help`** is visible to everyone. It opens user help, which only the asker can see, filtered to what they can use.
 - **`/admin`** has three parts: `/admin user` opens a member's card, `/admin requests` goes through everything waiting on you one item at a time, and `/admin help` opens admin help. It is registered so that only members with **Manage Server** see it, which means ordinary users never do.
 
-Everything else is a button, menu or short form: for users on their pinned panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.10).
+Everything else is a button, menu or short form: for users on their panel (5.5) and request cards; for admins on the admin panel, member and request cards, approval cards and the feed (5.4 to 5.10).
 
 User help and admin help are separate. Admin help has its own topics, plus a **What users see** branch so you can walk someone through their help. User help never shows admin topics, even to an admin. Both are built from the same definitions as the commands and buttons, so they can't describe something that no longer exists.
 
@@ -473,14 +473,19 @@ This is display only. Requestarr still refuses `/admin` from non-admins and outs
 
 ### 5.4 The admin channel and request channels
 
-On first start, Requestarr creates these, or reuses them if they already exist:
+On first start, Requestarr creates these, or reuses them if they already exist. They live in two channel groups that Requestarr keeps (and recreates if they're deleted):
 
-- **`#requestarr-admin`:** run `/admin` here, and use the pinned admin panel. Approval cards for requests and media server access also appear here, and so do account events: new users, access changes, suspensions (including a member leaving the server) and Plex link requests. Only the Requestarr Admin role, the owner, and the bot can see it. Admins can also make their own requests here; those go straight through.
+- **Requestarr Admin:** `#requestarr-admin` and `#requestarr-feed`. Only the Requestarr Admin role, the owner and the bot see the group, and both channels follow the group's permissions.
+- **Requestarr Users:** `#requestarr-welcome` (5.12), `#requestarr-announcements` (5.8), `#requestarr-access-blocked` (5.12) and every member's private request channel. When the group reaches Discord's limit of 50 channels, new private channels go into "Requestarr Users 2", "3" and so on, with the same group permissions. The private channels keep their own permissions on top.
+
+A server set up before this version is moved over on the next start: the "Requestarr Requests" group becomes "Requestarr Users" (renamed in place, so the private channels don't move), the admin channel, feed and announcements move into their groups, and nothing loses its messages.
+
+- **`#requestarr-admin`:** run `/admin` here, and use the admin panel. Approval cards for requests, access requests (5.12) and media server access also appear here, and so do account events: new users, access changes, suspensions (including a member leaving the server), blocks and Plex link requests. Only the Requestarr Admin role, the owner, and the bot can see it. Admins can also make their own requests here; those go straight through.
 - **`#requestarr-feed`:** the admin feed, next to the admin channel and just as private. It has one small card per request: thumbnail, title, type, who asked, the instance, the state and, for TV, the seasons and who follows it. Every change deletes the card and posts a fresh one at the bottom, so the newest activity is always last. If you delete the channel, Requestarr recreates it on the next start. The first time a feed channel exists, it's filled with cards for requests that are still waiting or in progress, not finished ones.
 - **`#requestarr-announcements`** and the **Requestarr Members** role: news for every member, read-only for them (5.8).
-- **A "Requestarr Requests" category:** each user's private request channel goes here. When a category reaches Discord's limit of 50 channels, Requestarr starts "Requestarr Requests 2", and so on.
+You can rename the channels. Requestarr tracks them by ID, and puts a channel back in its group on the next start if it was moved out.
 
-You can rename or move the channels and category. Requestarr tracks them by ID.
+**Panels stay at the bottom.** Every panel (the admin panel, each member's panel, the welcome message and the blocked channel's message) is always the newest message in its channel, where people look: whenever Requestarr posts something else there, the panel moves below it a moment later, without pinging anyone. Panels aren't pinned, because they're always last anyway and every re-pin would add a "pinned a message" notice.
 
 The feed card's buttons are only those valid now, and every click is checked again on the server:
 
@@ -492,7 +497,7 @@ The feed card's buttons are only those valid now, and every click is checked aga
 | **Delete** | once something is downloaded, and no removal is open | starts a removal (5.9) |
 | **Force removal**, **Drop removal** | while a removal is open or waiting on you | Force deletes now (it asks first); Drop leaves the title |
 
-The admin channel has a pinned panel with five buttons. Everything they open is visible only to you:
+The admin channel's panel has five buttons. Everything they open is visible only to you:
 
 - **Pending queue (n):** the same as `/admin requests`, below. The number is how many items are waiting on you, and it updates by itself.
 - **Users:** everyone with their status, channel and access, and a menu that opens their member card.
@@ -508,6 +513,7 @@ Requestarr posts the panel on first start and re-posts it if it is deleted.
 |---|---|---|
 | A request waiting for approval | the full request card, how long it has waited, and for the requester and anyone following: their access for that type, how much of their limit they've used, and how many requests they have waiting | **Approve**, **Deny** (asks for a reason), **Already available**, **Cancel** (asks for an optional reason) |
 | An approved request that failed or is stuck | the same, plus what went wrong in plain words and what you can do | **Try adding again** if it couldn't be added to Sonarr or Radarr, otherwise **Search again**; then **Already available** and **Cancel** |
+| An access request from the welcome channel (5.12) | who asked, what they'd like, and their note | **Approve…** (choose their access), **Deny** (asks for an optional reason) |
 | A Plex link someone asked for | who asked, their Plex username, and their access | **Approve Plex link**, **Deny Plex link** |
 | A Sonarr or Radarr that can't be reached (5.7) | since when, and that requests for it are paused | **Check now** |
 
@@ -526,10 +532,10 @@ Requestarr then:
 1. Creates the Requestarr user from the member's Discord account.
 2. Creates a role just for them (`requestarr-{name}`) and gives it to them.
 3. Creates their private channel (`#requests-{name}`). Only that role, the admin role (and the owner), and the bot can see it.
-4. Posts and pins one message: the user's **panel**, which is also their welcome. It greets them and lists what they may request, always matching their real access. It holds no how-to text, because instructions live in Help and pinned text goes stale. Its buttons are:
+4. Posts one message: the user's **panel**, which is also their welcome, and always the newest message in their channel. It greets them and lists what they may request, always matching their real access. It holds no how-to text, because instructions live in Help and kept text goes stale. Its buttons are:
    - **My requests:** their requests and the ones they follow.
    - **My limits:** their quota usage.
-   - **Link Plex:** a short form for their Plex username, which sends you an access request. This button disappears once an account is linked.
+   - **Link Plex:** a short form for their Plex username, which sends you an access request. It shows only while a Plex server is connected to Requestarr, and disappears once their account is linked. Connecting a Plex server comes with Plex sharing in a later release, so for now this button isn't there.
    - **Help:** user help (the same as `/help`).
 
    The panel updates itself when you change their access or link their account. Existing channels get the new panel in place on the next start.
@@ -541,7 +547,7 @@ By default, a new user gets:
 
 The card then shows their access, ready to change (5.6).
 
-Discord allows 250 roles per server, and every user needs one. Requestarr also uses two shared roles: Requestarr Admin and Requestarr Members (one role for all members, not one each). Adding stops a few roles short of that limit and says so.
+Discord allows 250 roles per server, and every user needs one. Requestarr also uses three shared roles: Requestarr Admin, Requestarr Members and Requestarr Blocked (one role each, not one per person). Adding stops a few roles short of that limit and says so.
 
 ### 5.6 The member card: access, limits and more
 
@@ -577,7 +583,9 @@ Requestarr checks every Sonarr and Radarr once a minute. Each has one of three s
 | **Connected** | The type, if they have access. |
 | **Lost** (it connected before, and stops answering) | The type as before. New requests for it say requests are paused right now. Nobody's access changes. |
 
-When an instance has been unreachable for 3 minutes, one alert is posted in `#requestarr-admin`, and the instance is an item in `/admin requests` until it answers again. When it's back, one more message says so and for how long it was down. A blip shorter than 3 minutes posts nothing.
+When an instance has been unreachable for 3 minutes, one alert is posted in `#requestarr-admin` and pinned, and the instance is an item in `/admin requests` until it answers again. When it's back, the alert is unpinned and removed, and one more message (not pinned) says it's back and for how long it was down. Several outages at once each have their own pinned alert. A blip shorter than 3 minutes posts nothing.
+
+Discord is only the working view: every outage is also kept in Requestarr's own record (which instance, when it started and ended, how long, and whether and by whom it was announced to users), for the admin web portal's outage history.
 
 If it's still down after 30 minutes, the alert gets an **Announce to users** button. Users are told only if you press it (5.8).
 
@@ -593,11 +601,13 @@ What Requestarr posts there:
 
 | When | In `#requestarr-announcements` | In `#requestarr-admin` |
 |---|---|---|
-| A Sonarr or Radarr is still down after 30 minutes and you press **Announce to users** on its alert | A plain notice, for example "TV requests are paused" and that the admin knows. The button then goes away. | The alert says who announced it. |
-| That outage ends | "TV requests work again", automatically, only if it was announced. An outage you never announced is never mentioned to users. | The usual "is back" message. |
-| Requestarr starts on a new version | The changes for users, in plain words. Nothing if a version has none. | The changes for users and for admins; a section with nothing in it isn't shown, and a version with nothing for either isn't posted. |
+| A Sonarr or Radarr is still down after 30 minutes and you press **Announce to users** on its alert | A plain notice, for example "TV requests are paused" and that the admin knows, pinned while the outage lasts. The button then goes away. | The alert says who announced it. |
+| That outage ends | The notice is unpinned and removed, and "TV requests work again" is posted, automatically, only if it was announced. An outage you never announced is never mentioned to users. | The usual "is back" message. |
+| Requestarr starts on a new version | A one-line card, for example "Requestarr 0.4.0 · 4 new things for you", with the main change in a few words. Nothing if a version has nothing for users. | A one-line card, for example "Requestarr 0.4.0 · 6 changes for admins, 4 for users". A version with nothing for either isn't posted. |
 
-The "what's new" posts are a lasting record: each version is posted once, oldest first, even across restarts, and stays. The first time a server starts, it posts the full history from 0.1.0 on. The changes come from the project's changelog, written with every change in plain words (see [development](development.md#changelog)). Test servers keep them differently ([version posts](development.md#version-posts)).
+Every version card has **Read changes**: it shows the full card only to whoever pressed it, with the version and the day it was made as the title, then **For users** and **For admins** (only those with something in them), one line per change. Members see only their section. A long version is split into several cards between lines, never in the middle of one.
+
+The "what's new" cards are a lasting record: each version is posted once, oldest first, even across restarts, and stays. The first time a server starts, it posts the full history from 0.1.0 on. A server that still has the older text posts gets them replaced by cards once, the history kept. The changes come from the project's changelog, written with every change in plain words (see [development](development.md#changelog)). Test servers keep them differently ([version posts](development.md#version-posts)).
 
 ### 5.9 Removing titles
 
@@ -634,13 +644,58 @@ removal:
 
 For every command and button, see the [command reference](commands.md).
 
-Users can also ask for media server access themselves with the **Link Plex** button on their panel. An Approve / Deny card then appears in the admin channel, and their member card shows the same choice. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
+Users can also ask for media server access themselves with the **Link Plex** button on their panel (only while a Plex server is connected; see 5.5). An Approve / Deny card then appears in the admin channel, and their member card shows the same choice. Approving links the account and removes the Link Plex button from their panel. Plex invites are sent automatically in a later release.
 
 ### 5.11 When someone leaves the server
 
 If a user leaves or is removed from the Discord server, Requestarr suspends them automatically and locks their channel. Nothing is deleted. If they rejoin, press **Unsuspend** on their card (`/admin user`): Requestarr gives their role back and unlocks the channel. The admin channel gets a note when someone leaves.
 
 Every action in this section, whether an admin or Requestarr did it, is recorded in Requestarr's audit log.
+
+### 5.12 The welcome channel and access requests
+
+`#requestarr-welcome` is open to everyone in the server, and only Requestarr posts there (nobody can post or start threads). Its one message, kept current, says what Requestarr is and how it works, with a **Request access** button. It's named with the `requestarr-` prefix so it can't clash with your server's own welcome channel.
+
+**Request access** opens a short private form: what they'd like (only the types with a Sonarr or Radarr that has connected) and, after **Continue**, an optional note. Sending it:
+
+- posts a card in `#requestarr-admin` with who asked, what they'd like and their note, and adds it to `/admin requests` (the panel's count goes up);
+- **Approve…** on the card lets you choose their real access, one menu per type (starting from what they asked for), then **Add with this access** adds them exactly as **Add to Requestarr** does (5.5): role, private channel, panel. Nobody is added just by asking;
+- **Deny** asks for an optional reason.
+
+They get the outcome as a private message from the bot: on approval, where their new channel is; on a denial, your reason and when they can ask again. (If their Discord settings refuse private messages from the server, they see it the next time they press the button.)
+
+Rules for the button:
+
+- One open request per person. Pressing it again while one is open answers privately with its status and creates nothing.
+- After a denial, they can ask again only after a cooldown (7 days by default, `accessRequests.denialCooldownDays`).
+- Members who are already in are told where their channel is.
+
+**Media server buttons.** Next to **Request access** there's one button per media server you've connected (Plex, Jellyfin), and only those: with none connected, there are none. Someone can ask for media server access on its own, or tick it together with Requestarr access in the form; either way it reaches you exactly like a Link Plex request. Connecting a media server comes with Plex sharing in a later release, so for now there are no media server buttons.
+
+**Spam protection.** Only clicks that can't do anything count (while a request is open, during a cooldown, or after being told their status), within the last hour; the click that opens the form never counts. Discord can't hide a shared button from one person, so Requestarr answers those clicks privately and does nothing else:
+
+| Counted clicks | What happens |
+|---|---|
+| 5 within the hour | they wait 1 minute; every click meanwhile only says how long is left |
+| 10 within the hour | they wait 24 hours |
+| 5 more within 24 hours of the 10th | they're blocked |
+
+Blocking gives them the **Requestarr Blocked** role. It hides `#requestarr-welcome` from them and shows `#requestarr-access-blocked`, a read-only channel whose one message tells them they can no longer request access through the bot and to message the server admin directly if they think it's wrong. You get one notice in `#requestarr-admin`. A block lasts until you lift it: **Unblock** on that notice or on their member card, or remove the role from them in Discord. Rapid clicking costs nothing: no messages to you, and one small record per person.
+
+All of these are settings, with these defaults, under `accessRequests:` in `provisioning.yml` (each optional), stored so the admin web portal can change them later:
+
+```yaml
+accessRequests:
+  denialCooldownDays: 7       # wait after a denial before asking again
+  spam:
+    windowMinutes: 60         # only clicks in the last hour count
+    shortCooldownClicks: 5    # this many: wait shortCooldownMinutes
+    shortCooldownMinutes: 1
+    longCooldownClicks: 10    # this many: wait longCooldownHours
+    longCooldownHours: 24
+    blockClicks: 5            # this many more within blockWithinHours: blocked
+    blockWithinHours: 24
+```
 
 ## 6. Connect Plex (optional)
 
@@ -760,7 +815,7 @@ Open the beta web portal at `http://<server>:<BETA_REQUESTARR_PORT>` and sign in
 **Check:**
 
 - **System → Status** has no Discord, provisioning, Sonarr, Radarr or webhook warnings.
-- In the Requestarr Beta server: the bot is online, and `#requestarr-admin` has the pinned admin panel.
+- In the Requestarr Beta server: the bot is online, `#requestarr-admin` (in the Requestarr Admin group) has the admin panel at the bottom, and `#requestarr-welcome` (in the Requestarr Users group) shows the welcome message with **Request access**.
 - `#requestarr-admin` shows "what's new" for every version from 0.1.0 on, oldest first, and `#requestarr-announcements` the members' part. On beta these posts stay for good: each new version is added once.
 
 ### B.9 A first real request
@@ -812,7 +867,7 @@ Beta only knows what the beta Sonarr and Radarr have. A title that's already in 
 - **"Admin commands only work in the Requestarr admin channel":** run `/admin` and use the admin panel in `#requestarr-admin`, not in a user's channel.
 - **"Backend check failed" under System → Status:** the message names the instance and the cause: wrong URL or API key, an unsupported version (Radarr 5+ and Sonarr 4+ only), or a quality profile or root folder that doesn't exist in that instance. Fix `provisioning.yml` and restart.
 - **Users don't see /admin:** that's intended; it only shows to members with Manage Server (see 5.3).
-- **The panels are posted but not pinned, and System → Status warns about Pin Messages:** the bot's role lacks **Pin Messages**. Everything else keeps working. Turn it on in Server Settings → Roles (see section 2, step 5) and restart Requestarr.
+- **System → Status warns about Pin Messages:** the bot's role lacks **Pin Messages**, so outage notices are posted but not pinned while an outage lasts. Everything else keeps working. Turn it on in Server Settings → Roles (see section 2, step 5).
 - **The /request type list is empty, or a type is missing:** that user has the type set to off (change it on their card, `/admin user`), or no instance for it has connected yet (5.7).
 - **Old admin commands such as `/admin user add` or `/admin approve` still show:** Discord caches commands; press Ctrl+R in the Discord app. They were replaced by `/admin user`, `/admin requests` and the panel.
 - **Discord still shows old commands after an update:** press Ctrl+R in the Discord app, or fully quit it from the system tray and reopen it.

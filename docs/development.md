@@ -56,10 +56,10 @@ Not run in CI:
 `CHANGELOG.md` at the repo root records what changed for the people who use Requestarr, and Requestarr posts it in Discord: when a server starts on a new version, the whole entry goes to the admin channel and the **For users** lines go to the announcements channel, word for word (which versions each server shows: [Version posts](#version-posts)). So every pull request does this:
 
 1. **Bump the version** in `src/Directory.Build.props` (`<AssemblyVersion>x.y.z.*</AssemblyVersion>`): the patch number for fixes and internal work, the minor number for new things people can do. Only `x.y.z` counts; the last part is the build number.
-2. **Add a `## x.y.z` section at the top of `CHANGELOG.md`**, following the changelog rule:
+2. **Add a `## x.y.z (YYYY-MM-DD)` section at the top of `CHANGELOG.md`**, with the day the version was made (the version cards in Discord show it), following the changelog rule:
 
    ```markdown
-   ## 0.1.1
+   ## 0.1.1 (2026-10-25)
 
    ### For users
    - **Cancel later:** you can now cancel a request after it was approved, until it starts downloading.
@@ -70,13 +70,13 @@ Not run in CI:
 
 **The changelog rule** (the same rule as the Claude Code workspace's "Changelog: hard rule"):
 
-- **Two audiences only.** Exactly two sections, **For users** and **For admins**. There is no "Internal" section: work that changes nothing a user or an admin sees or does (tests, build and CI, refactoring, the dev and QA tools) is left out and lives in the pull request. A section with nothing in it is left out, heading included; a version with nothing for either has only its `## x.y.z` heading and posts nothing anywhere.
+- **Two audiences only.** Exactly two sections, **For users** and **For admins**. There is no "Internal" section: work that changes nothing a user or an admin sees or does (tests, build and CI, refactoring, the dev and QA tools) is left out and lives in the pull request. A section with nothing in it is left out, heading included; a version with nothing for either has only its `## x.y.z (YYYY-MM-DD)` heading and posts nothing anywhere.
 - **What changed and why it matters, in plain English.** Lead each line with the thing that changed in bold, then one sentence on what it means for the reader: "**Long TV shows:** you can now pick any season, not just the 24 most recent."
 - **No code-style text** in either section: no backticks, file names, paths, commands or flags, settings keys, environment variable names, branch names or internal jargon. Name things the way the reader sees them in Discord ("the request message", "the admin panel"). Discord commands such as /request are fine: that's what people type.
 - **Summary words only with substance.** "Minor fixes" or "various improvements" may lead a line only if the same line says what changes for the reader. No placeholders ("nothing this time", "n/a").
 - **Group related changes**, three to seven lines per section is normal; fixes say what was wrong in the reader's terms ("Fixed: approving a request sometimes left the old Cancel button working.").
 
-**The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also be higher than the other two branches', unless the pull request already contains that branch, so a fix made in QA or staging never shares a number with `dev`. A merge-back keeps every version from both branches instead of adding one. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+**The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; a version heading without its day; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also be higher than the other two branches', unless the pull request already contains that branch, so a fix made in QA or staging never shares a number with `dev`. A merge-back keeps every version from both branches instead of adding one. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
 
 ## Release flow
 
@@ -142,7 +142,7 @@ The web UI and backend are built on the runner's own platform and the backend is
 
 ### Version posts
 
-The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-announcements` (For users) are a record that stays, kept in step with each environment. Requestarr reads `REQUESTARR_ENVIRONMENT` (`dev`, `qa`, `staging`; unset means production):
+The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-announcements` (For users) are one-line cards with **Read changes**, which shows the full card privately (task 4e). They're a record that stays, kept in step with each environment. Requestarr reads `REQUESTARR_ENVIRONMENT` (`dev`, `qa`, `staging`; unset means production):
 
 | Environment | Shows | How it knows |
 |---|---|---|
@@ -150,7 +150,7 @@ The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-a
 | QA | every version in QA that staging doesn't have yet; versions drop off when they're promoted, and a reset rebuilds the list instead of wiping it | Staging has what was last published for it. When the QA stack is built, `docker/staged-versions.py` asks GitHub (its public record, no login) which commit the newest successful Image workflow run on `staging` published, reads the versions in that commit's changelog, and the scripts pass them as `REQUESTARR_STAGED_VERSIONS`. Before anything is published for staging that's nothing, so QA shows every version; offline, it falls back to the `staging` branch. After a promotion to staging, once its image is published, `dev.ps1 up` refreshes them. |
 | dev | only the version running now; a new version replaces the previous post | |
 
-On every start QA and dev make the channels match: posts for versions that no longer apply are deleted, a post whose words changed is edited in place, and from the first post out of order onward everything is posted again, so the list always reads oldest to newest. Requestarr finds its own posts by their first line (`📋 **Requestarr x.y.z: what's new**`, `✨ **What's new in Requestarr x.y.z**`, and "(continued)" on a long post's later messages), among the newest 1,000 messages of each channel. Everything else in the channels is left alone.
+On every start QA and dev make the channels match: cards for versions that no longer apply are deleted, a card whose words changed is edited in place, and from the first card out of order onward everything is posted again, so the list always reads oldest to newest. Requestarr finds its own cards by their title (`Requestarr x.y.z · 6 changes for admins, 4 for users`, `Requestarr x.y.z · 4 new things for you`) among the newest 1,000 messages of each channel. Text posts from before cards (`📋 **Requestarr x.y.z: what's new**`, `✨ **What's new in Requestarr x.y.z**`) are found too and replaced by cards: on QA and dev on every start, on production and staging once, keeping the whole history. Everything else in the channels is left alone.
 
 ## Docker stack
 

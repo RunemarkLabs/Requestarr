@@ -6,6 +6,26 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.0 (2026-10-24)
+
+### For users
+- **Asking for access:** friends who aren't members yet can now ask for access themselves from the new welcome channel, and they hear back privately.
+- **Panels stay at the bottom:** your panel is always the newest message in your channel, so it's right where you look after a request message arrives.
+- **What's new, short and tidy:** each update is now one line in the announcements channel with how many new things it brings and the main one; Read changes shows you the full list, just for you.
+- **Outage notices:** while requests are paused, the notice stays pinned at the top of the announcements channel, and it goes away once things work again.
+- **Where your channel lives:** your request channel and the announcements channel now sit together in the Requestarr Users group.
+- **Link Plex is hidden for now:** the button comes back once the admin connects a Plex server.
+
+### For admins
+- **Two channel groups:** Requestarr keeps its channels in Requestarr Admin (the admin channel and the feed, admins only) and Requestarr Users (welcome, announcements and every member's channel); existing channels move over on the next start with their messages kept.
+- **Welcome channel and access requests:** everyone in the server sees a welcome message explaining Requestarr with a Request access button; requests arrive as cards in the admin channel and the pending queue, where you approve with the access you choose or deny with a reason, and the person hears back privately.
+- **Spam protection:** repeated clicks on the welcome buttons make people wait, and if they keep going a role blocks them and hides the welcome channel; you get one notice and can unblock from it or from the member card.
+- **Panels stay at the bottom and aren't pinned:** every panel moves below anything new Requestarr posts in its channel, with no pings and no "pinned a message" notices.
+- **Version cards:** each update is a one-line card counting the changes for admins and users, Read changes shows the full list privately, and the history so far is redone as cards once.
+- **Outages:** the down alert (and the notice to users, if you announced it) is pinned while the outage lasts and removed when it's over, and every outage is kept in Requestarr's own history.
+- **Media server buttons only when connected:** Link Plex and the welcome channel's media server buttons show only for a media server you've connected; none can be connected yet, so they're hidden for now.
+- **Web app icons:** the web app shows Requestarr's logo instead of the old purple square, marked DEV, QA or BETA on the test servers, in light or dark to match the theme.
+
 ## 0.3.4 (2026-10-24)
 
 ## 0.3.3 (2026-10-24)
