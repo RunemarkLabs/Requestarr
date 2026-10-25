@@ -456,7 +456,7 @@ namespace Requestarr.Core.Access
 
         private async Task BlockAsync(ulong discordUserId)
         {
-            _logger.Warn("Member {0} is blocked from the welcome buttons after repeated clicks", discordUserId);
+            _logger.Info("Member {0} is blocked from the welcome buttons after repeated clicks", discordUserId);
             _audit.Record(Actor.System, "access.block", "member", discordUserId.ToString(), "repeated clicks on the welcome buttons");
 
             try

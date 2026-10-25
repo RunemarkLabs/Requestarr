@@ -13,8 +13,11 @@ namespace Requestarr.Core.Test.Polish
     [TestFixture]
     public class Item7HelpFixture : PolishScenario
     {
-        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "plex", "removals", "news" };
-        private static readonly string[] AllAdminTopics = { "onboarding", "approvals", "feed", "removing", "announcements", "downloads", "limits", "mediaserver", "anime", "visibility" };
+        // What a user with every type sees; Linking Plex only while a Plex server is connected (task 4e), which the
+        // admin's view of user help always shows.
+        private static readonly string[] AllUserTopics = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "removals", "news" };
+        private static readonly string[] EveryUserTopic = { "request", "seasons", "anime", "follow", "downloads", "mine", "limits", "plex", "removals", "news" };
+        private static readonly string[] AllAdminTopics = { "onboarding", "access", "approvals", "feed", "removing", "announcements", "downloads", "limits", "mediaserver", "anime", "channels", "visibility" };
 
         private static string[] Topics(InteractionRun run) => run.LastReply.SelectMenu.Options.Select(o => o.Value).ToArray();
 
@@ -43,7 +46,7 @@ namespace Requestarr.Core.Test.Polish
         public async Task topics_a_user_cannot_use_are_not_shown()
         {
             await SetAccess(Alice, "tv", "off");
-            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "downloads", "mine", "limits", "plex", "removals", "news");
+            Topics(await UserHelp(Alice)).Should().Equal("request", "follow", "downloads", "mine", "limits", "removals", "news");
 
             await Harness.SendAsync(AdminCommand("user mediaserver", Alice).WithOption("service", "plex").WithOption("username", "alice_plex"));
             Topics(await UserHelp(Alice)).Should().NotContain("plex");
@@ -81,7 +84,7 @@ namespace Requestarr.Core.Test.Polish
         {
             var run = await Harness.SendAsync(FakeInteraction.SlashCommand("help").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
-            Topics(run).Should().Equal(AllUserTopics);
+            Topics(run).Should().Equal(EveryUserTopic);
             Topics(run).Should().NotContain(AllAdminTopics.Except(new[] { "limits", "anime", "downloads" }));
             run.LastReply.SelectMenu.Options.Select(o => o.Label).Should().NotContain(HelpCatalog.AdminTopics.Where(t => t.Key != "limits").Select(t => t.Title));
             run.LastReply.SelectMenu.CustomId.Should().Be("help:user");
@@ -113,7 +116,7 @@ namespace Requestarr.Core.Test.Polish
             var branch = await Harness.SendAsync(FakeInteraction.SelectMenu("help:admin", HelpCatalog.UsersBranchKey).By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
             branch.LastReply.SelectMenu.CustomId.Should().Be("help:adminuser");
-            Topics(branch).Should().Equal(AllUserTopics);
+            Topics(branch).Should().Equal(EveryUserTopic);
             branch.LastReply.Buttons.Single().CustomId.Should().Be("help-home:admin");
 
             var topic = await Harness.SendAsync(FakeInteraction.SelectMenu("help:adminuser", "plex").By(FakeDiscordGuild.Owner, "owner").InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
