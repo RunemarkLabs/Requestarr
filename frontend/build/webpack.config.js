@@ -120,10 +120,18 @@ module.exports = (env) => {
                 destination: path.join(distFolder, 'Content/Fonts')
               },
 
-              // Icon Images
+              // Icon Images: Icons/{light|dark}/{production|dev|qa|beta}/ per theme and environment
               {
                 source: 'frontend/src/Content/Images/Icons/*.*',
                 destination: path.join(distFolder, 'Content/Images/Icons')
+              },
+              {
+                source: 'frontend/src/Content/Images/Icons/light',
+                destination: path.join(distFolder, 'Content/Images/Icons/light')
+              },
+              {
+                source: 'frontend/src/Content/Images/Icons/dark',
+                destination: path.join(distFolder, 'Content/Images/Icons/dark')
               },
 
               // Images
@@ -138,7 +146,7 @@ module.exports = (env) => {
                 destination: path.join(distFolder, 'Content/robots.txt')
               },
 
-              // manifest.json and browserconfig.xml
+              // manifest-{light|dark}.json and browserconfig-{light|dark}.xml
               {
                 source: 'frontend/src/Content/*.(json|xml)',
                 destination: path.join(distFolder, 'Content')

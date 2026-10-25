@@ -15,6 +15,10 @@ namespace Requestarr.Core.Test.AdminConsole
     [TestFixture]
     public class Item1OldCommandsFixture : GapScenario
     {
+        // These cover Link Plex, which shows only while a Plex server is connected (task 4e).
+        [SetUp]
+        public void ConnectPlex() => ConnectedMediaServers.Servers.Add(Requestarr.Core.MediaServers.MediaServerProvider.Plex);
+
         private const ulong Carol = 900000000000001004;
 
         [SetUp]

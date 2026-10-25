@@ -18,9 +18,11 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IMediaServerAccountRepository _accounts;
         private readonly IMetadataService _metadata;
         private readonly Backends.IBackendService _backends;
+        private readonly IMediaServerConnections _mediaServers;
 
-        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts, IMetadataService metadata, Backends.IBackendService backends)
+        public HelpHandler(ICallerResolver callers, IUserMediaAccessRepository access, IMediaServerAccountRepository accounts, IMetadataService metadata, Backends.IBackendService backends, IMediaServerConnections mediaServers)
         {
+            _mediaServers = mediaServers;
             _callers = callers;
             _access = access;
             _accounts = accounts;
@@ -94,7 +96,7 @@ namespace Requestarr.Core.Discord.Handlers
                 var access = _access.GetForUser(user.Id);
                 var types = ContentTypes.Offered.Where(t => _backends.EverConnected(t) && (access.FirstOrDefault(a => a.ContentType == t)?.State ?? UserManagementService.DefaultAccess[t]) != AccessState.Off).ToList();
 
-                return new HelpViewer(types, _accounts.GetForUser(user.Id).Any());
+                return new HelpViewer(types, _accounts.GetForUser(user.Id).Any(), PlexServer: _mediaServers.IsConnected(MediaServers.MediaServerProvider.Plex));
             }
 
             return caller.IsAdmin ? HelpViewer.Everything : null;

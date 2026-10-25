@@ -16,7 +16,7 @@ namespace Requestarr.Core.Test.Discord
         public void first_connect_should_create_admin_channel_and_category()
         {
             var admin = Discord.ChannelNamed(ChannelLayout.AdminChannelName);
-            var category = Discord.ChannelNamed(ChannelLayout.RequestCategoryName);
+            var category = Discord.ChannelNamed(ChannelLayout.UsersCategoryName);
 
             admin.Should().NotBeNull();
             category.Should().NotBeNull();

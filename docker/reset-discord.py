@@ -1,7 +1,10 @@
 """Remove everything Requestarr created in one local stack's Discord server, for a clean start.
 
-Deletes: #requestarr-admin, #requestarr-feed, #requestarr-announcements, the "Requestarr Requests" categories and
-every channel in them (including archived ones), the per-user "requestarr-*" roles and the shared "Requestarr Members" role.
+Deletes: Requestarr's channel groups ("Requestarr Admin", "Requestarr Users" and its numbered ones, and the older
+"Requestarr Requests") and every channel in them (including archived ones), #requestarr-admin, #requestarr-feed,
+#requestarr-announcements, #requestarr-welcome, #requestarr-access-blocked and members' request channels wherever they
+are, the per-user
+"requestarr-*" roles and the shared "Requestarr Members" and "Requestarr Blocked" roles.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
 The "what's new" posts go with their channels and are rebuilt when Requestarr starts again, as that stack keeps them
 (docs/development.md#version-posts): QA posts every version staging doesn't have yet, dev the version it runs.
@@ -18,10 +21,10 @@ import urllib.error
 import urllib.request
 
 API = "https://discord.com/api/v10"
-ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-announcements")
-CATEGORY = "Requestarr Requests"
+ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-announcements", "requestarr-welcome", "requestarr-access-blocked")
+CATEGORIES = ("Requestarr Admin", "Requestarr Users", "Requestarr Requests")
 USER_ROLE_PREFIX = "requestarr-"
-MEMBERS_ROLE = "Requestarr Members"
+SHARED_ROLES = ("Requestarr Members", "Requestarr Blocked")
 
 
 def call(method, path):
@@ -49,8 +52,10 @@ def main():
     print(f"cleaning the Discord server '{server['name']}'")
 
     channels = call("GET", f"/guilds/{guild}/channels")
-    categories = {c["id"] for c in channels if c["type"] == 4 and c["name"].startswith(CATEGORY)}
-    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] in ADMIN_CHANNELS)]
+    categories = {c["id"] for c in channels if c["type"] == 4 and c["name"].startswith(CATEGORIES)}
+    # Members' request channels too, wherever they are: one left loose at the top level after a group was deleted.
+    member = lambda c: c["type"] == 0 and c["name"].startswith(("requests-", "archived-requests-"))
+    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] in ADMIN_CHANNELS) or member(c)]
     doomed += [c for c in channels if c["id"] in categories]
 
     for channel in doomed:
@@ -58,12 +63,12 @@ def main():
         print(f"deleted channel {'category ' if channel['type'] == 4 else '#'}{channel['name']}")
 
     for role in call("GET", f"/guilds/{guild}/roles"):
-        if (role["name"].startswith(USER_ROLE_PREFIX) or role["name"] == MEMBERS_ROLE) and not role.get("managed"):
+        if (role["name"].startswith(USER_ROLE_PREFIX) or role["name"] in SHARED_ROLES) and not role.get("managed"):
             call("DELETE", f"/guilds/{guild}/roles/{role['id']}")
             print(f"deleted role {role['name']}")
 
     left = call("GET", f"/guilds/{guild}/channels")
-    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] in ADMIN_CHANNELS]
+    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] in ADMIN_CHANNELS or member(c)]
     print(f"Requestarr channels left in the server: {len(remaining)}")
     sys.exit(1 if remaining else 0)
 

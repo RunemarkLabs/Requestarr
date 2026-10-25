@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Requestarr.Core.Access;
 using Requestarr.Core.Admin;
 using Requestarr.Core.Audit;
 using Requestarr.Core.Backends;
@@ -38,6 +39,7 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IBackendService _backends;
         private readonly IConnectionMonitor _monitor;
         private readonly IRemovalService _removals;
+        private readonly IAccessRequestRepository _welcomeRequests;
 
         public AdminRequestsHandler(ICallerResolver callers,
                                     IAdminQueue queue,
@@ -49,9 +51,11 @@ namespace Requestarr.Core.Discord.Handlers
                                     IRequestarrUserRepository userStore,
                                     IBackendService backends,
                                     IConnectionMonitor monitor,
-                                    IRemovalService removals)
+                                    IRemovalService removals,
+                                    IAccessRequestRepository welcomeRequests)
         {
             _removals = removals;
+            _welcomeRequests = welcomeRequests;
             _callers = callers;
             _queue = queue;
             _requests = requests;
@@ -344,6 +348,16 @@ namespace Requestarr.Core.Discord.Handlers
                     reply.Embeds.Add(new InteractionEmbed { Title = proposal.Label, ThumbnailUrl = proposal.PosterUrl, Color = RequestCards.PendingColor, Footer = DiscordText.RemovalFeedFooter(proposal) });
                     reply.Buttons.Add(Button("rm-force", DiscordText.ForceRemovalLabel, ButtonStyle.Danger));
                     reply.Buttons.Add(Button("rm-drop", DiscordText.DropRemovalLabel, ButtonStyle.Secondary));
+                    break;
+                }
+
+                // Approve… and Deny are the card's own buttons (AccessRequestHandler): the chooser opens privately.
+                case 'a':
+                {
+                    var request = _welcomeRequests.Find(item.Id);
+                    lines.Add(DiscordText.AccessRequestAdminCard(request));
+                    reply.Buttons.Add(new InteractionButton { CustomId = $"{AccessRoutes.Approve}:{request.Id}", Label = DiscordText.ApproveAccessLabel, Style = ButtonStyle.Success });
+                    reply.Buttons.Add(new InteractionButton { CustomId = $"{AccessRoutes.Deny}:{request.Id}", Label = DiscordText.DenyLabel, Style = ButtonStyle.Danger });
                     break;
                 }
 

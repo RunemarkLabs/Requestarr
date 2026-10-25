@@ -6,6 +6,8 @@ interface Window {
     instanceName: string;
     theme: string;
     urlBase: string;
+    iconSet: string;
+    applyIconTheme?: (theme: string) => string;
     version: string;
   };
 }

@@ -14,7 +14,8 @@ using Requestarr.Core.Users;
 namespace Requestarr.Core.Test.Announcements
 {
     // Task 3d item 2: the admin decides. Still down after 30 minutes, the down alert offers "Announce to
-    // users"; an announced outage has its recovery announced; one never announced is never announced.
+    // users"; an announced outage has its recovery announced; one never announced is never announced. Task 4e: the alert
+    // and the notice are pinned while the outage lasts and removed when it's over (Item8OutagesFixture).
     [TestFixture]
     public class Item2OutageFixture : GapScenario
     {
@@ -27,7 +28,9 @@ namespace Requestarr.Core.Test.Announcements
 
         private List<InteractionReply> Announcements => Discord.Channels[ulong.Parse(Config.AnnouncementsChannelId)].Messages;
 
-        private InteractionReply DownAlert => Discord.Channels[AdminChannel].Messages.Single(m => m.Content.StartsWith("⚠️ **Sonarr can't be reached**"));
+        private InteractionReply DownAlert => Discord.Channels[AdminChannel].Messages.Single(m => m.Content != null && m.Content.StartsWith("⚠️ **Sonarr can't be reached**"));
+
+        private bool AlertShown => Discord.Channels[AdminChannel].Messages.Any(m => m.Content != null && m.Content.StartsWith("⚠️ **Sonarr can't be reached**"));
 
         [SetUp]
         public void Clock()
@@ -92,8 +95,9 @@ namespace Requestarr.Core.Test.Announcements
 
             await Back();
 
-            Announcements.Should().HaveCount(2);
+            Announcements.Should().ContainSingle("the outage notice goes once it's over");
             Announcements.Last().Content.Should().Be(DiscordText.OutageOverNotice(ContentType.Tv, TimeSpan.FromMinutes(32)));
+            AlertShown.Should().BeFalse("the alert goes too");
             Announcements.Last().Content.Should().StartWith("✅ **TV requests work again**");
             Discord.Channels[AdminChannel].Messages.Last().Content.Should().StartWith("✅ **Sonarr is back**");
             Sonarr1.DownAnnounceMessageId.Should().BeNull();
@@ -110,8 +114,7 @@ namespace Requestarr.Core.Test.Announcements
             await Back();
 
             Announcements.Should().BeEmpty();
-            DownAlert.Buttons.Should().BeNullOrEmpty("the offer goes away once it's back");
-            DownAlert.Content.Should().Contain(DiscordText.AlertNowBack(TimeSpan.FromMinutes(46), false));
+            AlertShown.Should().BeFalse("the alert (and its offer) goes once it's back");
             Discord.Channels[AdminChannel].Messages.Last().Content.Should().StartWith("✅ **Sonarr is back**");
             NzbDrone.Test.Common.ExceptionVerification.IgnoreWarns();
         }
@@ -127,7 +130,7 @@ namespace Requestarr.Core.Test.Announcements
 
             Discord.Channels[AdminChannel].Messages.Last().Content.Should().StartWith("⚠️ **Sonarr can't be reached**");
             Discord.Channels[AdminChannel].Messages.Last().Buttons.Should().BeNullOrEmpty();
-            Announcements.Should().HaveCount(2, "no new announcement until an admin presses it again");
+            Announcements.Should().ContainSingle("the earlier \"back\" notice; no new announcement until an admin presses it again");
             NzbDrone.Test.Common.ExceptionVerification.IgnoreWarns();
         }
 

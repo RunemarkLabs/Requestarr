@@ -96,12 +96,20 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             IUserManagementService users = null;
             IPanelService panels = null;
             IRequestFeed feed = null;
+
+            // Task 4e: no media server is connected (as on a real server today); the outage record and the access
+            // request stores are real.
+            Mocker.SetConstant<Requestarr.Core.MediaServers.IMediaServerConnections>(new Requestarr.Core.MediaServers.MediaServerConnections());
+            Mocker.SetConstant<Requestarr.Core.Backends.IOutageRepository>(Mocker.Resolve<Requestarr.Core.Backends.OutageRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestRepository>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IWelcomeGuardRepository>(Mocker.Resolve<Requestarr.Core.Access.WelcomeGuardRepository>());
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 

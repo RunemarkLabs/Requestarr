@@ -8,7 +8,7 @@ using Requestarr.Core.Test.Requests;
 
 namespace Requestarr.Core.Test.CommandSurface
 {
-    // Item 5: #requestarr-admin has a pinned panel with Pending queue and Users.
+    // Item 5: #requestarr-admin has a panel with Pending queue and Users (the newest message, unpinned since task 4e).
     [TestFixture]
     public class Item5AdminPanelFixture : RequestScenario
     {
@@ -21,16 +21,17 @@ namespace Requestarr.Core.Test.CommandSurface
         private FakeDiscordGuild.FakeChannel AdminRoom => Discord.Channels[AdminChannel];
 
         [Test]
-        public void admin_channel_has_one_pinned_panel_with_queue_and_users()
+        public void admin_channel_has_one_panel_with_queue_and_users()
         {
-            AdminRoom.Pinned.Should().ContainSingle();
-            AdminRoom.PinnedMessage.Buttons.Select(b => (b.Label, b.CustomId)).Should().Equal(
+            AdminRoom.Pinned.Should().BeEmpty();
+            PanelsIn(AdminRoom, PanelRoutes.AdminQueue).Should().Be(1);
+            PanelIn(AdminRoom).Buttons.Select(b => (b.Label, b.CustomId)).Should().Equal(
                 (DiscordText.PanelPendingQueue, PanelRoutes.AdminQueue),
                 (DiscordText.PanelUsers, PanelRoutes.AdminUsers),
                 (DiscordText.PanelMembers, "adm-pick"),
                 (DiscordText.RemoveTitleLabel, "rm-search"),
                 (DiscordText.PanelHelp, PanelRoutes.AdminHelp));
-            Config.AdminPanelMessageId.Should().Be(AdminRoom.Pinned.Single().ToString());
+            Config.AdminPanelMessageId.Should().Be(AdminRoom.MessageIds.Last().ToString());
         }
 
         [Test]
@@ -38,8 +39,7 @@ namespace Requestarr.Core.Test.CommandSurface
         {
             await Mocker.Resolve<IPanelService>().EnsureAllAsync();
 
-            AdminRoom.Pinned.Should().ContainSingle();
-            AdminRoom.Messages.Count(m => m.Buttons.Any(b => b.CustomId == PanelRoutes.AdminQueue)).Should().Be(1);
+            PanelsIn(AdminRoom, PanelRoutes.AdminQueue).Should().Be(1);
         }
 
         [Test]

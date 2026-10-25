@@ -19,7 +19,8 @@ namespace Requestarr.Core.Test.Discord
         {
             var first = ulong.Parse(Config.RequestCategoryIds.Single());
 
-            for (var i = 0; i < 49; i++)
+            // The first users group already holds the welcome, announcements and blocked channels.
+            for (var i = Discord.ChannelsIn(first).Count(); i < 49; i++)
             {
                 await Discord.CreateTextChannelAsync($"filler-{i}", first, null, System.Array.Empty<PermissionOverwrite>());
             }
@@ -32,7 +33,7 @@ namespace Requestarr.Core.Test.Discord
             var second = ChannelFor(Bob).CategoryId.Value;
 
             second.Should().NotBe(first);
-            Discord.Channels[second].Name.Should().Be("Requestarr Requests 2");
+            Discord.Channels[second].Name.Should().Be("Requestarr Users 2");
             Config.RequestCategoryIds.Should().Equal(first.ToString(), second.ToString());
         }
 
@@ -50,8 +51,8 @@ namespace Requestarr.Core.Test.Discord
         [Test]
         public async Task add_should_still_work_just_below_the_role_limit()
         {
-            // The scenario already has the admin role and the shared members role (one role for everyone).
-            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 4);
+            // The scenario already has the admin role, the shared members role and the blocked role (one each for everyone).
+            Discord.AddExistingRoles(DiscordLimits.RolesPerServer - DiscordLimits.RoleHeadroom - 5);
 
             (await AddUser(Alice)).LastReply.Content.Should().StartWith("Added alice.");
         }

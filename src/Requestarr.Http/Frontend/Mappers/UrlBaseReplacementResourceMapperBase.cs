@@ -1,22 +1,27 @@
+using System.Collections.Concurrent;
 using System.IO;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Http.Frontend.Mappers
 {
     public abstract class UrlBaseReplacementResourceMapperBase : StaticResourceMapperBase
     {
         private readonly IDiskProvider _diskProvider;
+        private readonly IConfigFileProvider _configFileProvider;
+        private readonly IReleaseEnvironment _environment;
         private readonly string _urlBase;
+        private readonly ConcurrentDictionary<string, string> _generatedContent = new();
 
-        private string _generatedContent;
-
-        public UrlBaseReplacementResourceMapperBase(IDiskProvider diskProvider, IConfigFileProvider configFileProvider, Logger logger)
+        public UrlBaseReplacementResourceMapperBase(IDiskProvider diskProvider, IConfigFileProvider configFileProvider, IReleaseEnvironment environment, Logger logger)
             : base(diskProvider, logger)
         {
             _diskProvider = diskProvider;
+            _configFileProvider = configFileProvider;
+            _environment = environment;
             _urlBase = configFileProvider.UrlBase;
         }
 
@@ -29,7 +34,7 @@ namespace Requestarr.Http.Frontend.Mappers
 
         protected override Stream GetContentStream(string filePath)
         {
-            var text = GetFileText();
+            var text = GetFileText(filePath);
 
             var stream = new MemoryStream();
             var writer = new StreamWriter(stream);
@@ -39,20 +44,21 @@ namespace Requestarr.Http.Frontend.Mappers
             return stream;
         }
 
-        protected virtual string GetFileText()
+        // Each file (one per theme) is read once in production, with the URL base and the icon set filled in.
+        protected virtual string GetFileText(string filePath)
         {
-            if (RuntimeInfo.IsProduction && _generatedContent != null)
+            if (RuntimeInfo.IsProduction && _generatedContent.TryGetValue(filePath, out var cached))
             {
-                return _generatedContent;
+                return cached;
             }
 
-            var text = _diskProvider.ReadAllText(FilePath);
+            var text = _diskProvider.ReadAllText(filePath);
 
-            text = text.Replace("__URL_BASE__", _urlBase);
+            text = WebIcons.Apply(text.Replace("__URL_BASE__", _urlBase), _environment, _configFileProvider, WebIcons.ThemeOf(Path.GetFileName(filePath)));
 
-            _generatedContent = text;
+            _generatedContent[filePath] = text;
 
-            return _generatedContent;
+            return text;
         }
     }
 }

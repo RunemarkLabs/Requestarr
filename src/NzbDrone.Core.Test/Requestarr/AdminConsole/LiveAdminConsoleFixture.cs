@@ -90,12 +90,20 @@ namespace Requestarr.Core.Test.AdminConsole
             IUserManagementService users = null;
             IPanelService panels = null;
             IRequestFeed feed = null;
+
+            // Task 4e: no media server is connected (as on a real server today); the outage record and the access
+            // request stores are real.
+            Mocker.SetConstant<Requestarr.Core.MediaServers.IMediaServerConnections>(new FakeMediaServers { Servers = { MediaServerProvider.Plex } }); // the Plex link part needs Link Plex
+            Mocker.SetConstant<Requestarr.Core.Backends.IOutageRepository>(Mocker.Resolve<Requestarr.Core.Backends.OutageRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestRepository>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IWelcomeGuardRepository>(Mocker.Resolve<Requestarr.Core.Access.WelcomeGuardRepository>());
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 
@@ -144,11 +152,11 @@ namespace Requestarr.Core.Test.AdminConsole
                 registered.Select(c => c.Name).Should().BeEquivalentTo("admin", "help", "request");
                 registered.Single(c => c.Name == "admin").Options.Select(o => o.Name).Should().Equal("user", "requests", "help");
 
-                // 2. The admin panel's buttons, read back from the pinned panel.
+                // 2. The admin panel's buttons, read back from the panel (the newest message, unpinned since task 4e).
                 var adminRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
-                var panel = (await adminRest.GetPinnedMessagesAsync()).Single();
+                var panel = await adminRest.GetMessageAsync(ulong.Parse(guildSetup.GetConfig().AdminPanelMessageId));
                 var panelButtons = panel.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
-                Log($"[panel] pinned admin panel buttons: [{string.Join("] [", panelButtons)}]");
+                Log($"[panel] admin panel buttons: [{string.Join("] [", panelButtons)}]");
                 panelButtons.Should().Contain(DiscordText.PanelMembers);
 
                 // 3. Onboard a member through the member picker.
@@ -164,7 +172,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 var user = users.FindByDiscordId(target.Id);
                 var channel = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(ulong.Parse(user.PrivateChannelId));
                 var role = guild.GetRole(ulong.Parse(user.DiscordRoleId));
-                Log($"[discord] channel #{channel.Name}, role {role?.Name}, pinned panel: \"{(await channel.GetPinnedMessagesAsync()).Single().Content.Replace("\n", " | ")}\"");
+                Log($"[discord] channel #{channel.Name}, role {role?.Name}, panel: \"{(await channel.GetMessageAsync(ulong.Parse(Mocker.Resolve<IRequestarrUserRepository>().Get(user.Id).PanelMessageId))).Content.Replace("\n", " | ")}\"");
 
                 // 4. Access and a limit from the member card.
                 var access = await Send(dispatcher, AsOwner(FakeInteraction.SelectMenu($"{AdminRoutes.Access}:{target.Id}:movie", "approval")));
@@ -175,7 +183,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 var refreshed = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", target.Id)));
                 Log($"[card] after: \"{refreshed.LastReply.Content.Replace("\n", " | ")}\"");
                 refreshed.LastReply.Content.Should().Contain("Movies: needs approval (quota 5 per 7 days)");
-                var userPanel = (await channel.GetPinnedMessagesAsync()).Single().Content;
+                var userPanel = (await channel.GetMessageAsync(ulong.Parse(Mocker.Resolve<IRequestarrUserRepository>().Get(user.Id).PanelMessageId))).Content;
                 Log($"[discord] their panel now: \"{userPanel.Replace("\n", " | ")}\"");
 
                 // 5. They request a movie; it's approved from /admin requests.
@@ -245,7 +253,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 (await feedRest.GetMessageAsync(ulong.Parse(requests.Get(inception.Id).FeedMessageId))).Embeds.First().Description.Should().StartWith(DiscordText.FinalCancelled);
 
                 // 8. A Plex link the member asked for (old /admin mediaserver approve): the access-request card's Approve.
-                var userPanel2 = (await channel.GetPinnedMessagesAsync()).Single();
+                var userPanel2 = await channel.GetMessageAsync(ulong.Parse(Mocker.Resolve<IRequestarrUserRepository>().Get(user.Id).PanelMessageId));
                 Log($"[plex] their panel buttons before: [{string.Join("] [", Buttons(userPanel2))}]");
                 await Send(dispatcher, FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "live_test_plex").By(target.Id).InGuild(guild.Id).InChannel(channel.Id));
                 var accessRequest = Mocker.Resolve<IMediaServerAccessRequestRepository>().All().Single();
@@ -255,7 +263,7 @@ namespace Requestarr.Core.Test.AdminConsole
                 Log($"[plex] member card while waiting: buttons=[{string.Join("] [", linkCard.LastReply.Buttons.Select(b => b.Label))}]");
                 var approved = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{MediaServerRoutes.Approve}:{accessRequest.Id}")).OnMessage(accessCard.Id));
                 Log($"[plex] Approve on the access-request card: {approved.LastReply.Content.Replace("\n", " | ")}");
-                var panelAfter = (await channel.GetPinnedMessagesAsync()).Single();
+                var panelAfter = await channel.GetMessageAsync(ulong.Parse(Mocker.Resolve<IRequestarrUserRepository>().Get(user.Id).PanelMessageId));
                 Log($"[plex] their panel buttons after: [{string.Join("] [", Buttons(panelAfter))}]; linked account: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(user.Id).Single().Username}");
                 Buttons(panelAfter).Should().NotContain(DiscordText.PanelLinkPlex);
 

@@ -31,6 +31,7 @@ namespace Requestarr.Core.Provisioning
         private readonly ITmdbSettingsStore _tmdb;
         private readonly Requestarr.Core.Availability.IAvailabilitySettingsStore _availability;
         private readonly Requestarr.Core.Removals.IRemovalSettings _removal;
+        private readonly Requestarr.Core.Access.IAccessSettings _access;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -42,6 +43,7 @@ namespace Requestarr.Core.Provisioning
                                    ITmdbSettingsStore tmdb,
                                    Requestarr.Core.Availability.IAvailabilitySettingsStore availability,
                                    Requestarr.Core.Removals.IRemovalSettings removal,
+                                   Requestarr.Core.Access.IAccessSettings access,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -53,6 +55,7 @@ namespace Requestarr.Core.Provisioning
             _tmdb = tmdb;
             _availability = availability;
             _removal = removal;
+            _access = access;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -192,6 +195,10 @@ namespace Requestarr.Core.Provisioning
 
             _removal.Apply(document.Removal);
             applied.Add($"removal votes ({(_removal.FastVotes ? "DEV FAST VOTES ON (minutes); settings: " : string.Empty)}{_removal.VoteDays} days; requester answers within {_removal.RequesterTimeoutDays} days{(_removal.ReminderDay > 0 ? $", reminded on day {_removal.ReminderDay}" : string.Empty)})");
+
+            _access.Apply(document.AccessRequests);
+            applied.Add($"access requests (ask again {_access.DenialCooldownDays} days after a denial; spam guard: {_access.ShortCooldownClicks} clicks in {_access.SpamWindowMinutes} min wait {_access.ShortCooldownMinutes} min, " +
+                        $"{_access.LongCooldownClicks} wait {_access.LongCooldownHours} h, {_access.BlockClicks} more within {_access.BlockWithinHours} h block)");
 
             _backends.SyncFromProvisioning(document.Backends);
 

@@ -67,6 +67,9 @@ namespace NzbDrone.Core.Datastore
             Mapper.Entity<RemovalProposal>("RemovalProposals").RegisterModel();
             Mapper.Entity<RemovalFlag>("RemovalFlags").RegisterModel();
             Mapper.Entity<RemovalPrompt>("RemovalPrompts").RegisterModel();
+            Mapper.Entity<Requestarr.Core.Access.AccessRequest>("AccessRequests").RegisterModel();
+            Mapper.Entity<Requestarr.Core.Access.WelcomeGuard>("WelcomeGuards").RegisterModel();
+            Mapper.Entity<Outage>("Outages").RegisterModel();
         }
 
         private static void RegisterMappers()
@@ -82,6 +85,7 @@ namespace NzbDrone.Core.Datastore
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<KeyValuePair<string, int>>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<KeyValuePair<string, int>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<string>>());
+            SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<Requestarr.Core.Users.ContentType>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<HashSet<int>>());
             SqlMapper.AddTypeHandler(new OsPathConverter());
             SqlMapper.RemoveTypeMap(typeof(Guid));

@@ -4,6 +4,7 @@ using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Http.Frontend.Mappers
 {
@@ -16,8 +17,9 @@ namespace Requestarr.Http.Frontend.Mappers
                                IDiskProvider diskProvider,
                                Lazy<ICacheBreakerProvider> cacheBreakProviderFactory,
                                IConfigFileProvider configFileProvider,
+                               IReleaseEnvironment environment,
                                Logger logger)
-            : base(diskProvider, configFileProvider, cacheBreakProviderFactory, logger)
+            : base(diskProvider, configFileProvider, environment, cacheBreakProviderFactory, logger)
         {
             _appFolderInfo = appFolderInfo;
             _configFileProvider = configFileProvider;

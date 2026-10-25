@@ -73,12 +73,20 @@ namespace Requestarr.Core.Test.Discord
             IUserManagementService users = null;
             IPanelService panels = null;
             Requestarr.Core.Requests.IRequestFeed feed = null;
+
+            // Task 4e: no media server is connected (as on a real server today); the outage record and the access
+            // request stores are real.
+            Mocker.SetConstant<Requestarr.Core.MediaServers.IMediaServerConnections>(new Requestarr.Core.MediaServers.MediaServerConnections());
+            Mocker.SetConstant<Requestarr.Core.Backends.IOutageRepository>(Mocker.Resolve<Requestarr.Core.Backends.OutageRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestRepository>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IWelcomeGuardRepository>(Mocker.Resolve<Requestarr.Core.Access.WelcomeGuardRepository>());
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<Requestarr.Core.Requests.IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 
@@ -144,7 +152,11 @@ namespace Requestarr.Core.Test.Discord
                     created.Add($"channel:{adminChannel}");
                 }
 
-                if (audit.Contains("discord.category.create"))
+                // Only the users group itself, if this run made it: since task 4e the run may also have made the admin group,
+                // and deleting a group this run didn't make would leave its channels loose at the top level.
+                var madeHere = Mocker.Resolve<IAuditRepository>().All().Where(a => a.Action == "discord.category.create").Select(a => a.TargetId).ToHashSet();
+
+                if (madeHere.Contains(category.ToString()))
                 {
                     created.Add($"channel:{category}");
                 }
@@ -254,7 +266,7 @@ namespace Requestarr.Core.Test.Discord
                 overwrites.Where(o => o.TargetId != guild.Id).Should().OnlyContain(o => o.Allow.HasFlag(ChannelPermissions.ViewChannel));
                 Log("[permissions] verified: @everyone denied; only the user's role, the Requestarr Admin role, and the bot allowed");
 
-                // Pinned panels read back from Discord.
+                // Panels read back from Discord: posted, the newest message, not pinned (task 4e).
                 foreach (var (label, channelId) in new[] { ("user channel", userChannel), ("admin channel", adminChannel) })
                 {
                     var channel = (global::Discord.IMessageChannel)await host.Client.Rest.GetChannelAsync(channelId);
@@ -271,7 +283,7 @@ namespace Requestarr.Core.Test.Discord
 
                     Log($"[panel] {label}: message {panelId} present: {panel != null}, pinned: {panel?.IsPinned}");
                     panel.Should().NotBeNull();
-                    panel.IsPinned.Should().BeTrue($"the bot needs Pin Messages to pin the panel in the {label}");
+                    panel.IsPinned.Should().BeFalse($"panels are always last in the {label}, so they aren't pinned");
 
                     var buttons = panel.Components.OfType<global::Discord.ActionRowComponent>().SelectMany(r => r.Components).OfType<global::Discord.ButtonComponent>().Select(b => $"[{b.Label}]");
                     var lines = panel.Content.Split('\n');

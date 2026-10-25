@@ -48,7 +48,7 @@ namespace Requestarr.Core.Test.Discord
             Log($"[commands] registered on the server: {string.Join(", ", commands.Select(c => "/" + c.Name))}; global: {global.Count}");
 
             var channels = await guild.GetTextChannelsAsync();
-            var categories = (await guild.GetCategoryChannelsAsync()).Where(c => c.Name.StartsWith(ChannelLayout.RequestCategoryName)).Select(c => c.Id).ToHashSet();
+            var categories = (await guild.GetCategoryChannelsAsync()).Where(c => c.Name.StartsWith(ChannelLayout.UsersCategoryName)).Select(c => c.Id).ToHashSet();
             var admin = channels.Single(c => c.Name == ChannelLayout.AdminChannelName);
             var userChannels = channels.Where(c => c.CategoryId.HasValue && categories.Contains(c.CategoryId.Value) && c.Name.StartsWith(ChannelLayout.UserChannelPrefix)).ToList();
 
@@ -65,9 +65,9 @@ namespace Requestarr.Core.Test.Discord
             var announcements = channels.Single(c => c.Name == ChannelLayout.AnnouncementsChannelName);
             var posts = (await announcements.GetMessagesAsync(20).FlattenAsync()).OrderBy(m => m.Id).ToList();
             Log($"[announcements] #{announcements.Name}: {posts.Count} post(s)");
-            posts.ForEach(m => Log($"[announcements]   \"{m.Content.Replace("\n", " | ")}\""));
-            var notes = (await admin.GetMessagesAsync(30).FlattenAsync()).Where(m => m.Content.StartsWith("📋")).ToList();
-            Log($"[announcements] what's new in #{admin.Name}: {string.Join(" / ", notes.Select(m => m.Content.Split('\n')[0]))}");
+            posts.ForEach(m => Log($"[announcements]   \"{(m.Embeds.FirstOrDefault()?.Title ?? m.Content).Replace("\n", " | ")}\""));
+            var notes = (await admin.GetMessagesAsync(30).FlattenAsync()).Where(m => m.Embeds.FirstOrDefault()?.Title?.StartsWith("Requestarr ") == true).OrderBy(m => m.Id).ToList();
+            Log($"[announcements] what's new cards in #{admin.Name}: {string.Join(" / ", notes.Select(m => m.Embeds.First().Title))}");
 
             // The newest messages in the admin channel (alerts, dev notices), oldest first.
             var latest = (await admin.GetMessagesAsync(8).FlattenAsync()).OrderBy(m => m.Id).ToList();
@@ -79,22 +79,26 @@ namespace Requestarr.Core.Test.Discord
             }
         }
 
+        // Since task 4e the panel is the channel's newest message and isn't pinned.
         private static async Task CheckPanel(RestTextChannel channel, string firstButton, ulong botId)
         {
-            var pinned = await channel.GetPinnedMessagesAsync();
-            var panels = pinned.Where(m => m.Author.Id == botId && Buttons(m).Any(b => b.CustomId == firstButton)).ToList();
-            var panel = panels.FirstOrDefault();
+            var recent = (await channel.GetMessagesAsync(50).FlattenAsync()).OrderByDescending(m => m.Id).ToList();
+            var panels = recent.Where(m => m.Author.Id == botId && Buttons(m).Any(b => b.CustomId == firstButton)).ToList();
+            var panel = recent.FirstOrDefault();
             var buttons = panel == null ? string.Empty : string.Join(" ", Buttons(panel).Select(b => $"[{b.Label}]"));
             var lines = panel?.Content.Split('\n') ?? Array.Empty<string>();
+            var pinned = await channel.GetPinnedMessagesAsync();
 
-            Log($"[panel] #{channel.Name}: {panels.Count} pinned panel(s); \"{lines.FirstOrDefault()}\" {buttons}");
+            Log($"[panel] #{channel.Name}: newest message is the panel: {panels.FirstOrDefault()?.Id == panel?.Id}; {panels.Count} panel(s) in the last 50; pinned panels {pinned.Count(m => Buttons(m).Any(b => b.CustomId == firstButton))}; \"{lines.FirstOrDefault()}\" {buttons}");
 
             if (lines.Length > 1)
             {
                 Log($"[panel]   {string.Join(" | ", lines.Skip(1))}");
             }
 
-            panels.Should().ContainSingle($"#{channel.Name} has exactly one pinned panel");
+            panels.Should().ContainSingle($"#{channel.Name} has exactly one panel");
+            panels[0].Id.Should().Be(panel.Id, $"the panel is the newest message in #{channel.Name}");
+            pinned.Should().NotContain(m => Buttons(m).Any(b => b.CustomId == firstButton), "panels aren't pinned");
         }
 
         private static ButtonComponent[] Buttons(IMessage message) =>

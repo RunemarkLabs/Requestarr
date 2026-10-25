@@ -5,12 +5,15 @@ using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Http.Frontend.Mappers
 {
     public abstract class HtmlMapperBase : StaticResourceMapperBase
     {
         private readonly IDiskProvider _diskProvider;
+        private readonly IConfigFileProvider _configFileProvider;
+        private readonly IReleaseEnvironment _environment;
         private readonly Lazy<ICacheBreakerProvider> _cacheBreakProviderFactory;
         private static readonly Regex ReplaceRegex = new Regex(@"(?:(?<attribute>href|src)=\"")(?<path>.*?(?<extension>css|js|png|ico|ics|svg|json))(?:\"")(?:\s(?<nohash>data-no-hash))?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -19,11 +22,14 @@ namespace Requestarr.Http.Frontend.Mappers
 
         protected HtmlMapperBase(IDiskProvider diskProvider,
                                  IConfigFileProvider configFileProvider,
+                                 IReleaseEnvironment environment,
                                  Lazy<ICacheBreakerProvider> cacheBreakProviderFactory,
                                  Logger logger)
             : base(diskProvider, logger)
         {
             _diskProvider = diskProvider;
+            _configFileProvider = configFileProvider;
+            _environment = environment;
             _cacheBreakProviderFactory = cacheBreakProviderFactory;
 
             _urlBase = configFileProvider.UrlBase;
@@ -50,7 +56,7 @@ namespace Requestarr.Http.Frontend.Mappers
                 return _generatedContent;
             }
 
-            var text = _diskProvider.ReadAllText(HtmlPath);
+            var text = WebIcons.Apply(_diskProvider.ReadAllText(HtmlPath), _environment, _configFileProvider);
             var cacheBreakProvider = _cacheBreakProviderFactory.Value;
 
             text = ReplaceRegex.Replace(text, match =>

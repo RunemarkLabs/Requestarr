@@ -11,8 +11,8 @@ using Requestarr.Core.Test.Requests;
 
 namespace Requestarr.Core.Test.CommandSurface
 {
-    // Item 6: without Pin Messages the panels are posted unpinned, a health warning names the permission,
-    // and no flow fails.
+    // Item 6: without Pin Messages a health warning names the permission and no flow fails. Since task 4e panels
+    // are never pinned (they're always the newest message); Pin Messages is for outage notices while they last.
     [TestFixture]
     public class Item6PinPermissionFixture : RequestScenario
     {
@@ -83,18 +83,18 @@ namespace Requestarr.Core.Test.CommandSurface
         }
 
         [Test]
-        public async Task panels_get_pinned_once_the_permission_is_granted()
+        public async Task panels_pinned_by_an_older_version_are_unpinned_on_start()
         {
-            LosePin();
+            await Mocker.Resolve<IPanelService>().EnsureAllAsync();
+            await Discord.PinMessageAsync(AliceRoom.Id, ulong.Parse(UserFor(Alice).PanelMessageId));
+            await Discord.PinMessageAsync(AdminRoom.Id, ulong.Parse(Config.AdminPanelMessageId));
+
             await Mocker.Resolve<IPanelService>().EnsureAllAsync();
 
-            Discord.CannotPin = false;
-            await Mocker.Resolve<IPanelService>().EnsureAllAsync();
-
-            AliceRoom.Pinned.Should().ContainSingle().Which.ToString().Should().Be(UserFor(Alice).PanelMessageId);
-            AdminRoom.Pinned.Should().ContainSingle();
+            AliceRoom.Pinned.Should().BeEmpty();
+            AdminRoom.Pinned.Should().BeEmpty();
+            PanelIn(AliceRoom).Should().NotBeNull();
             Health().Type.Should().Be(HealthCheckResult.Ok);
-            ExceptionVerification.IgnoreWarns();
         }
     }
 }

@@ -2,7 +2,7 @@
 """Checks CHANGELOG.md against the changelog rule (docs/development.md#changelog). CI's Changelog job runs it on every
 pull request; run it locally with `python3 .github/changelog_check.py CHANGELOG.md`.
 
-Every "## x.y.z" version (the text above the first version is free) is checked for:
+Every "## x.y.z (YYYY-MM-DD)" version (the text above the first version is free) is checked for:
   - sections: only "### For users" and "### For admins", each at most once; no "Internal" or any other section;
   - no empty section: a heading with no "- " line under it;
   - only headings and "- " lines: no loose text inside a version;
@@ -11,10 +11,11 @@ Every "## x.y.z" version (the text above the first version is free) is checked f
   - no placeholders: "nothing this time", "n/a", "TBD" and the like;
   - no summary without substance: a line with "minor fixes", "various improvements" or another summary phrase must say,
     on the same line, what that changes (at least five more words);
-  - versions: "## x.y.z", each once, newest first.
+  - versions: "## x.y.z (YYYY-MM-DD)", the day the version was made, each once, newest first.
 
 `--self-test` runs every rule against built-in samples and fails if one doesn't catch its sample.
 """
+import datetime
 import os
 import re
 import sys
@@ -91,12 +92,12 @@ def check(text):
             close_section()
             section = None
             seen_sections = set()
-            match = re.fullmatch(r"## (\d+)\.(\d+)\.(\d+)", line)
-            if not match:
-                problems.append((number, "a version heading is '## x.y.z' and nothing else"))
+            match = re.fullmatch(r"## (\d+)\.(\d+)\.(\d+) \((\d{4})-(\d{2})-(\d{2})\)", line)
+            if not match or not real_date(*match.groups()[3:]):
+                problems.append((number, "a version heading is '## x.y.z (YYYY-MM-DD)', the day it was made, and nothing else"))
                 version = None
                 continue
-            version = tuple(int(part) for part in match.groups())
+            version = tuple(int(part) for part in match.groups()[:3])
             if version in seen_versions:
                 problems.append((number, "version %s appears twice" % ".".join(map(str, version))))
             elif seen_versions and version > seen_versions[-1]:
@@ -127,7 +128,11 @@ def check(text):
 
 BAD = """# Changelog
 
-## 0.9.0
+## 0.9.3
+
+## 0.9.2 (2026-02-30)
+
+## 0.9.0 (2026-10-02)
 
 ### For users
 - **Requests:** run `/request` to ask.
@@ -147,16 +152,16 @@ BAD = """# Changelog
 
 Loose text.
 
-## 0.9.1
+## 0.9.1 (2026-10-01)
 
-## 0.9.1
+## 0.9.1 (2026-10-01)
 """
 
 GOOD = """# Changelog
 
 Text before the first version is free.
 
-## 0.9.0
+## 0.9.0 (2026-10-25)
 
 ### For users
 - **Minor fixes:** request messages no longer show a Cancel button after a request is approved.
@@ -166,22 +171,31 @@ Text before the first version is free.
 - **Removals:** Sonarr/Radarr titles nobody requested can be removed too, from /admin requests.
 - Fixed: approving a request sometimes left the old Cancel button working, and the queue count updates after a restart.
 
-## 0.8.0
+## 0.8.0 (2026-10-21)
 """
+
+
+def real_date(year, month, day):
+    try:
+        datetime.date(int(year), int(month), int(day))
+        return True
+    except ValueError:
+        return False
 
 
 def self_test():
     found = check(BAD)
     expected = ["backticks", "a file name", "a file path", "a command flag", "a settings key", "an environment variable name",
                 "placeholder", "summary without substance", "empty section", "section 'Internal'", "only headings",
-                "appears twice", "newest first"]
+                "appears twice", "newest first", "a version heading"]
     missing = [e for e in expected if not any(e in p for _, p in found)]
+    headings = sum("a version heading" in p for _, p in found)
     summaries = sum("summary without substance" in p for _, p in found)
     good = check(GOOD)
     for _, p in found:
         print("  caught: " + p)
-    if missing or summaries != 2 or good:
-        print("SELF-TEST FAILED: missed %s; summaries caught %d of 2; good sample problems %s" % (missing, summaries, good))
+    if missing or summaries != 2 or headings != 2 or good:
+        print("SELF-TEST FAILED: missed %s; summaries caught %d of 2; headings without a real date caught %d of 2; good sample problems %s" % (missing, summaries, headings, good))
         return 1
     print("Self-test passed: every rule caught its sample, and the good sample passed.")
     return 0

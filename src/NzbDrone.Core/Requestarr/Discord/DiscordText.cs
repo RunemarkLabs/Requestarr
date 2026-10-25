@@ -535,12 +535,12 @@ namespace Requestarr.Core.Discord
         public const string PanelHelp = "Help";
         public const string PanelPendingQueue = "Pending queue";
         public const string PanelUsers = "Users";
-        public const string AdminPanel = "**Requestarr admin**\nApproval cards for requests and media server access appear in this channel.";
+        public const string AdminPanel = "**Requestarr admin**\nApproval cards for requests, access requests from the welcome channel and media server access appear in this channel.";
         public const string LinkPlexTitle = "Link your Plex account";
         public const string LinkPlexLabel = "Your Plex username or email";
         public const string CancelLabel = "Cancel request";
         public const string NoUsers = "No Requestarr users yet. Add someone with Add or find a member.";
-        public const string MissingPinMessages = "The Discord bot is missing the Pin Messages permission, so panels are posted but not pinned. Turn on Pin Messages for the bot's role in Server Settings, Roles.";
+        public const string MissingPinMessages = "The Discord bot is missing the Pin Messages permission, so outage notices are posted but not pinned while an outage lasts. Turn on Pin Messages for the bot's role in Server Settings, Roles.";
         public const string NothingToRequest = "You can't request anything yet. Ask the admin for access.";
         public const string ChooseType = "Pick a type from the list (start typing in the type option).";
         public const string TmdbIsForMovies = "tmdb: IDs are for movies. Pick the Movies type, or use tvdb: for TV.";
@@ -703,6 +703,8 @@ namespace Requestarr.Core.Discord
         public const string FeedCardWidthUrl = DiscordAssets.Scheme + DiscordAssets.FeedCardWidth;
 
         public const string FeedChannelTopic = "Requestarr activity: one card per request, newest at the bottom. Admins only.";
+        public const string WelcomeChannelTopic = "What Requestarr is, and how to ask for access. Only Requestarr posts here.";
+        public const string BlockedChannelTopic = "Why you can't request access through Requestarr any more.";
         public const string AnnouncementsChannelTopic = "News from Requestarr for everyone: new things you can do, and outages that affect requests. Only admins post here.";
 
         public static string FeedState(Request request) => request.Status switch
@@ -1028,36 +1030,143 @@ namespace Requestarr.Core.Discord
         public static string OutageOverNotice(ContentType type, TimeSpan downFor) =>
             $"✅ **{Label(type)} requests work again**\nEverything is back to normal after {Duration(downFor)}. Thanks for your patience.";
 
-        // What's new on upgrade: the full list for admins; only the "For users" lines, as written, for members.
-        // What's new in one version. Only sections with something in them are shown; a version with nothing for
-        // users or admins isn't posted at all. Each post starts with its header, so a server can find its posts again.
-        public static string VersionNotesAdminHeader(Version version) => $"📋 **Requestarr {version}: what's new**";
-
-        public static string VersionNotesUsersHeader(Version version) => $"✨ **What's new in Requestarr {version}**";
-
+        // What's new, as cards: one line per version in the channels, the full card privately on Read changes.
+        public const string ReadChangesLabel = "Read changes";
         public const string VersionNotesContinued = " (continued)";
 
-        public static string VersionNotesForAdmins(Announcements.ChangelogVersion version, bool postedToUsers)
-        {
-            var lines = new List<string> { VersionNotesAdminHeader(version.Version) };
+        public static string VersionCardAdminTitle(Version version, int admins, int users) =>
+            $"Requestarr {version} · " + (admins > 0
+                ? $"{admins} change{(admins == 1 ? string.Empty : "s")} for admins{(users > 0 ? $", {users} for users" : string.Empty)}"
+                : $"{users} change{(users == 1 ? string.Empty : "s")} for users");
 
-            if (version.Users.Count > 0)
+        public static string VersionCardUsersTitle(Version version, int count) =>
+            $"Requestarr {version} · {count} new thing{(count == 1 ? string.Empty : "s")} for you";
+
+        public static string VersionCardFullTitle(Version version, DateTime? date) =>
+            $"Requestarr {version}{(date.HasValue ? $" · {date.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty)}";
+
+        public static string VersionNotFound(Version version) => $"Requestarr {version}'s changes aren't in this version of Requestarr.";
+
+        // The welcome channel: what Requestarr is, and buttons to ask for access. Everyone in the server reads it.
+        public const string RequestAccessLabel = "Request access";
+
+        public static string MediaAccessLabel(MediaServerProvider provider) => $"{provider} access";
+
+        public static string WelcomeMessage(IReadOnlyCollection<ContentType> types, IReadOnlyCollection<MediaServerProvider> mediaServers)
+        {
+            var what = types.Count == 0 ? "movies and TV shows" : string.Join(" and ", types.Select(t => t == ContentType.Movie ? "movies" : t == ContentType.Tv ? "TV shows" : Label(t).ToLowerInvariant()));
+            var media = mediaServers.Count == 0
+                ? string.Empty
+                : $"\nTo watch on {string.Join(" or ", mediaServers)}, press its button and give your username; you can ask for that on its own or with Requestarr access.";
+
+            return "**Welcome to Requestarr**\n" +
+                   $"Requestarr lets members of this server ask for {what}. You search for a title, request it, and once it's ready to watch you get a message here in Discord.\n" +
+                   "Each member has a private channel for their requests that only they and the admins can see.\n" +
+                   $"**New here?** Press **{RequestAccessLabel}** and the admin will take a look; the answer comes as a private message. " +
+                   $"**Already a member?** Your channel is in the **{ChannelLayout.UsersCategoryName}** group." + media;
+        }
+
+        // The blocked channel's one message; only someone holding the blocked role sees it.
+        public const string BlockedMessage =
+            "**You can't request access through Requestarr any more**\n" +
+            "The buttons in the welcome channel were pressed many times in a row, so Requestarr has stopped taking requests from you.\n" +
+            "If you think this is a mistake, message the server admin directly.";
+
+        // Answers to a welcome button click, privately.
+        public const string WelcomeBlocked = "Requestarr isn't taking access requests from you any more. If you think that's a mistake, message the server admin directly.";
+        public const string WelcomeBlockedNow = "That's a lot of clicks, so Requestarr has stopped taking access requests from you. If you think that's a mistake, message the server admin directly.";
+        public const string WelcomeAdmin = "You're an admin, so there's nothing to ask for. Add people from the admin panel in the admin channel.";
+        public const string WelcomeSuspended = "Your Requestarr access is paused right now. If you think that's a mistake, message the server admin.";
+
+        public static string WelcomeAlreadyIn(string channelId) => $"You're already in: your request channel is <#{channelId}>.";
+
+        public static string WelcomePending(DateTime since) => $"Your request from <t:{Unix(since)}:R> is waiting for the admin. You'll get a private message with the answer.";
+
+        public static string WelcomeDeniedWait(string reason, DateTime from) =>
+            $"Your last request was declined{ReasonSentence(reason)} You can ask again <t:{Unix(from)}:R>.";
+
+        // ": the reason." (with a full stop unless it has its own), or just "." without one.
+        private static string ReasonSentence(string reason) =>
+            string.IsNullOrWhiteSpace(reason) ? "." : $": {reason.Trim()}{(".!?".Contains(reason.Trim()[^1]) ? string.Empty : ".")}";
+
+        public static string WelcomeMediaLinked(MediaServerProvider provider) => $"Your {provider} account is already linked.";
+
+        public static string WelcomeSlowDown(TimeSpan left) => $"Please wait {Wait(left)} before trying again.";
+
+        private static string Wait(TimeSpan left) =>
+            left.TotalSeconds < 90 ? $"{Math.Max(1, (int)Math.Ceiling(left.TotalSeconds))} seconds" : Duration(left);
+
+        public static string MediaServerNotConnected(MediaServerProvider provider) => $"{provider} isn't connected to Requestarr, so there's nothing to ask for there yet.";
+
+        // The private form a Request access click opens.
+        public const string AccessFormIntro = "**Request access**\nPick what you'd like to request, then press **Continue** to add a note for the admin (optional).";
+        public const string AccessFormPlaceholder = "What would you like to request?";
+        public const string AccessFormTitle = "Request access to Requestarr";
+        public const string AccessNoteLabel = "A note for the admin (optional)";
+
+        public static string MediaAccessOption(MediaServerProvider provider) => $"{provider} access";
+
+        public static string MediaUsernameLabel(MediaServerProvider provider) => $"Your {provider} username or email";
+
+        public static string MediaFormTitle(MediaServerProvider provider) => $"Request {provider} access";
+
+        public const string AccessRequestSentToAdmin = "Thanks! Your request was sent to the admin. You'll get a private message with the answer.";
+
+        // The card in the admin channel and in /admin requests.
+        public const string ApproveAccessLabel = "Approve…";
+        public const string DenyAccessReasonLabel = "Reason they'll see (optional)";
+        public const string AddWithAccessLabel = "Add with this access";
+
+        public static string AccessRequestAdminCard(Access.AccessRequest request)
+        {
+            var lines = new List<string>
             {
-                lines.Add($"**{Announcements.Changelog.UsersHeading}**{(postedToUsers ? $" (posted in #{ChannelLayout.AnnouncementsChannelName})" : string.Empty)}");
-                lines.AddRange(version.Users.Select(l => $"• {l}"));
+                $"🙋 **Access request** from **{request.DisplayName}** (<@{request.DiscordUserId}>), asked <t:{Unix(request.Requested)}:R>",
+                request.ContentTypes.Any() ? $"Would like: {string.Join(", ", request.ContentTypes.Select(Label))}" : "Would like: access (no type picked)"
+            };
+
+            if (request.MediaProvider is { } provider)
+            {
+                lines.Add($"Also {provider}, as `{request.MediaUsername}`");
             }
 
-            if (version.Admins.Count > 0)
+            if (!string.IsNullOrWhiteSpace(request.Note))
             {
-                lines.Add($"**{Announcements.Changelog.AdminsHeading}**");
-                lines.AddRange(version.Admins.Select(l => $"• {l}"));
+                lines.Add($"Note: “{request.Note}”");
             }
 
             return string.Join("\n", lines);
         }
 
-        public static string VersionNotesForUsers(Announcements.ChangelogVersion version) =>
-            string.Join("\n", version.Users.Select(l => $"• {l}").Prepend(VersionNotesUsersHeader(version.Version)));
+        public static string AccessLevelsPrompt(string name) =>
+            $"**Approve {name}**\nChoose their access for each type, then **{AddWithAccessLabel}**. It adds them exactly as **{AddMemberLabel}** on the admin panel does.";
+
+        public static string AccessRequestApprovedCard(Access.AccessRequest request, string admin, string channelId) =>
+            $"✅ Approved by {admin}{(channelId != null ? $": their channel is <#{channelId}>." : ".")}";
+
+        public static string AccessRequestDeniedCard(Access.AccessRequest request, string admin) =>
+            $"❌ Declined by {admin}{ReasonSentence(request.Reason)}";
+
+        public static string AccessRequestApprovedMember(string channelId) =>
+            $"✅ **You're in!** Your Requestarr access was approved{(channelId != null ? $"; your request channel is <#{channelId}>" : string.Empty)}. Have a look at the panel there to get started.";
+
+        public static string AccessRequestDeniedMember(string reason, DateTime? askAgain) =>
+            $"Your Requestarr access request was declined{ReasonSentence(reason)}" +
+            (askAgain.HasValue ? $" You can ask again <t:{Unix(askAgain.Value)}:R>." : string.Empty);
+
+        // Blocks: one notice to the admins, an Unblock button on the notice and the member card.
+        public const string UnblockLabel = "Unblock";
+        public const string NotBlocked = "They aren't blocked.";
+
+        public static string BlockedAdminNotice(ulong discordId, string name) =>
+            $"🚫 **{name ?? "A member"}** (<@{discordId}>) pressed the welcome buttons too many times, so Requestarr blocked them from asking for access. " +
+            $"They now see only #{ChannelLayout.BlockedChannelName}. **{UnblockLabel}** lifts it, as does removing their **{ChannelLayout.BlockedRoleName}** role.";
+
+        public static string BlockedLine(DateTime since) => $"🚫 Blocked from asking for access since <t:{Unix(since)}:R> (repeated clicks on the welcome buttons).";
+
+        public static string Unblocked(ulong discordId) => $"<@{discordId}> is unblocked: they see the welcome channel again and can ask for access.";
+
+        public static string UnblockedByHand(ulong discordId) => $"<@{discordId}> is unblocked: their {ChannelLayout.BlockedRoleName} role was removed in Discord.";
 
         // /admin requests: one thing waiting on the admin at a time, oldest first.
         public const string WalkDone = "Nothing left waiting on you. 🎉";

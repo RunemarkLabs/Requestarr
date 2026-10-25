@@ -6,7 +6,7 @@ Requestarr registers exactly three Discord commands:
 - **`/help`** for everyone.
 - **`/admin`** for admins only: `/admin user`, `/admin requests` and `/admin help`. It's hidden from members without Manage Server.
 
-Everything else is a button, on a pinned panel or on a card.
+Everything else is a button, on a panel or on a card. Each panel is always the newest message in its channel; when Requestarr posts something there, the panel moves below it.
 
 - **Users** work in their own private request channel.
 - **Admins** work in `#requestarr-admin`. Admins are the server owner and anyone holding the Requestarr Admin role.
@@ -97,13 +97,13 @@ For TV, the status repeats which seasons were requested.
 
 ### Your panel
 
-One pinned message at the top of your channel. It welcomes you and shows what you can request, always matching your access.
+One message, always the newest in your channel. It welcomes you and shows what you can request, always matching your access.
 
 | Button | What it does |
 |---|---|
 | **My requests** | Lists your requests and the ones you follow (only you see the reply). |
 | **My limits** | Shows your access level and quota usage per type. |
-| **Link Plex** | Opens a form for your Plex username and sends an access request to the admin. It disappears once an account is linked. |
+| **Link Plex** | Opens a form for your Plex username and sends an access request to the admin. It's there only while the admin has a Plex server connected, and disappears once your account is linked. |
 | **Help** | Opens help, the same as `/help`. |
 
 ### `/help`
@@ -146,6 +146,7 @@ Goes through everything waiting on you, one private card at a time, oldest first
 |---|---|
 | Request waiting for approval | **Approve**, **Deny** (asks for a reason), **Already available**, **Cancel** (asks for an optional reason) |
 | Approved request that failed or is stuck | **Try adding again** (it couldn't be added) or **Search again** (it failed or stalled downloading), **Already available**, **Cancel** |
+| Access request from the welcome channel | **Approve…** (choose their access, then **Add with this access**), **Deny** (asks for an optional reason) |
 | Plex link request | **Approve Plex link**, **Deny Plex link** |
 | Sonarr or Radarr that can't be reached | **Check now** |
 
@@ -160,6 +161,7 @@ A member's own requests open as request cards from **Their requests** on their c
 Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 
 - members: adding and managing
+- access requests and the welcome channel: the form, approving and denying, the cooldown, spam protection and blocks
 - approvals and the queue
 - the admin feed
 - removing titles
@@ -168,6 +170,7 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 - limits
 - anime, sub/dub and priority: the Sonarr tags and release profiles, `anime.priority`, and separate sub and dub instances
 - media server requests
+- channel groups and panels
 - the admin role and command visibility
 - **What users see**: the full user help, so you can walk someone through theirs
 
@@ -175,7 +178,7 @@ Admin help, only you can see it, in `#requestarr-admin` only. Topics:
 
 ### Admin panel
 
-Pinned in `#requestarr-admin`. What it opens is visible only to you.
+The newest message in `#requestarr-admin`. What it opens is visible only to you.
 
 | Button | What it does |
 |---|---|
@@ -208,7 +211,19 @@ Deleting removes the files and the title from Sonarr or Radarr without excluding
 `#requestarr-announcements` is read-only for every member (through the shared **Requestarr Members** role) and admins post in it directly.
 
 - **Announce to users** appears on a Sonarr or Radarr down alert once it has been down for 30 minutes. It posts a plain notice ("TV requests are paused…") and the recovery is then announced automatically. Never pressed: users never hear about it.
-- On a new version, the full list of changes goes to `#requestarr-admin` and the changes for users go to `#requestarr-announcements`, once per version.
+- While an outage lasts, its alert in `#requestarr-admin` (and the notice, if announced) is pinned; when it's over both are removed and the "back" messages posted.
+- On a new version, a one-line card goes to `#requestarr-admin` ("6 changes for admins, 4 for users") and one to `#requestarr-announcements` ("4 new things for you", with the main one), once per version. **Read changes** on either shows the full card, only to whoever pressed it.
+
+### The welcome channel
+
+`#requestarr-welcome` is open to everyone in the server; only Requestarr posts there.
+
+| Button | Who | What it does |
+|---|---|---|
+| **Request access** | anyone | A private form: the types they'd like (only connected ones), then **Continue** and an optional note. Sends the admin a card. One open request per person; after a denial, they can ask again after the cooldown. Members already in are told where their channel is. |
+| **Plex access**, **Jellyfin access** | anyone | Only for media servers the admin has connected (none yet). Asks for media server access like Link Plex. |
+
+Clicks that can't do anything are answered privately; repeated ones make the person wait (5 within an hour: 1 minute; 10: 24 hours) and 5 more within 24 hours block them: the **Requestarr Blocked** role hides the welcome channel and shows `#requestarr-access-blocked`. **Unblock** on the admin notice or their member card lifts it, as does removing the role.
 
 ### Where the old admin commands went
 

@@ -13,7 +13,22 @@ namespace Requestarr.Core.Discord
         public string AdminChannelId { get; set; }
         public string AdminQueueChannelId { get; set; }
         public string AdminPanelMessageId { get; set; }
+
+        // The Requestarr Admin group (admin channel and feed) and the Requestarr Users groups (welcome,
+        // announcements and blocked channels in the first, then every member's private channel, spilling
+        // into "Requestarr Users 2", "3" and on). The users groups were the request groups before task 4e.
+        public string AdminCategoryId { get; set; }
         public List<string> RequestCategoryIds { get; set; } = new();
+
+        // The welcome channel everyone can read, and its one message with the access request buttons.
+        public string WelcomeChannelId { get; set; }
+        public string WelcomeMessageId { get; set; }
+
+        // Someone who keeps clicking the welcome buttons gets the blocked role: it hides the welcome channel and
+        // shows the blocked channel, with its one message.
+        public string BlockedRoleId { get; set; }
+        public string BlockedChannelId { get; set; }
+        public string BlockedMessageId { get; set; }
 
         // The admin-only feed: one card per request. Seeded with open requests once per channel.
         public string FeedChannelId { get; set; }

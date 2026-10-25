@@ -99,6 +99,54 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("RemovalReminderDay", value); }
         }
 
+        public int AccessDenialCooldownDays
+        {
+            get { return GetValueInt("AccessDenialCooldownDays", Requestarr.Core.Access.AccessSettings.DefaultDenialCooldownDays); }
+            set { SetValue("AccessDenialCooldownDays", value); }
+        }
+
+        public int AccessSpamWindowMinutes
+        {
+            get { return GetValueInt("AccessSpamWindowMinutes", Requestarr.Core.Access.AccessSettings.DefaultSpamWindowMinutes); }
+            set { SetValue("AccessSpamWindowMinutes", value); }
+        }
+
+        public int AccessShortCooldownClicks
+        {
+            get { return GetValueInt("AccessShortCooldownClicks", Requestarr.Core.Access.AccessSettings.DefaultShortCooldownClicks); }
+            set { SetValue("AccessShortCooldownClicks", value); }
+        }
+
+        public int AccessShortCooldownMinutes
+        {
+            get { return GetValueInt("AccessShortCooldownMinutes", Requestarr.Core.Access.AccessSettings.DefaultShortCooldownMinutes); }
+            set { SetValue("AccessShortCooldownMinutes", value); }
+        }
+
+        public int AccessLongCooldownClicks
+        {
+            get { return GetValueInt("AccessLongCooldownClicks", Requestarr.Core.Access.AccessSettings.DefaultLongCooldownClicks); }
+            set { SetValue("AccessLongCooldownClicks", value); }
+        }
+
+        public int AccessLongCooldownHours
+        {
+            get { return GetValueInt("AccessLongCooldownHours", Requestarr.Core.Access.AccessSettings.DefaultLongCooldownHours); }
+            set { SetValue("AccessLongCooldownHours", value); }
+        }
+
+        public int AccessBlockClicks
+        {
+            get { return GetValueInt("AccessBlockClicks", Requestarr.Core.Access.AccessSettings.DefaultBlockClicks); }
+            set { SetValue("AccessBlockClicks", value); }
+        }
+
+        public int AccessBlockWithinHours
+        {
+            get { return GetValueInt("AccessBlockWithinHours", Requestarr.Core.Access.AccessSettings.DefaultBlockWithinHours); }
+            set { SetValue("AccessBlockWithinHours", value); }
+        }
+
         public bool LogIndexerResponse
         {
             get { return GetValueBoolean("LogIndexerResponse", false); }

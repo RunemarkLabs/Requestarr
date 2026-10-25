@@ -15,7 +15,7 @@ Code workspace.
 - Commit style: ...
 - Test expectations: ...
 - Namespaces: copied Servarr foundation keeps `NzbDrone.*`; all new code is `Requestarr.*`.
-- Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z` section at the top of `CHANGELOG.md` with only **For users** and **For admins**, in plain words with a bold lead per line, no code-style text, no placeholders, empty sections left out (work neither sees is not listed). Requestarr posts it in Discord as a lasting record. CI's Changelog job (`.github/changelog_check.py`) and a unit test enforce it. Details: `docs/development.md#changelog`.
+- Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z (YYYY-MM-DD)` section (the day it was made) at the top of `CHANGELOG.md` with only **For users** and **For admins**, in plain words with a bold lead per line, no code-style text, no placeholders, empty sections left out (work neither sees is not listed). Requestarr posts it in Discord as a lasting record. CI's Changelog job (`.github/changelog_check.py`) and a unit test enforce it. Details: `docs/development.md#changelog`.
 
 ## Gotchas
 

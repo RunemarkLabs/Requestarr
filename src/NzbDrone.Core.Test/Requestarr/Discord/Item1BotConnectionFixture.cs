@@ -28,9 +28,11 @@ namespace Requestarr.Core.Test.Discord
         }
 
         [Test]
-        public void should_use_only_guilds_and_server_members_intents()
+        public void should_use_only_guilds_server_members_and_server_messages_intents()
         {
-            DiscordClientHost.Intents.Should().Be(GatewayIntents.Guilds | GatewayIntents.GuildMembers);
+            // Server messages: the bot sees its own posts so panels move below them. Message text needs the privileged
+            // Message Content intent, which Requestarr doesn't ask for.
+            DiscordClientHost.Intents.Should().Be(GatewayIntents.Guilds | GatewayIntents.GuildMembers | GatewayIntents.GuildMessages);
         }
 
         [Test]

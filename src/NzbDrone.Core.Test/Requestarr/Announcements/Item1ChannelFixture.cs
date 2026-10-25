@@ -28,7 +28,7 @@ namespace Requestarr.Core.Test.Announcements
             var channel = Discord.Channels[Channel];
 
             channel.Name.Should().Be(ChannelLayout.AnnouncementsChannelName);
-            channel.CategoryId.Should().BeNull();
+            channel.CategoryId.Should().Be(ulong.Parse(Config.RequestCategoryIds[0]), "it sits in the Requestarr Users group");
             channel.Topic.Should().Be(DiscordText.AnnouncementsChannelTopic);
         }
 

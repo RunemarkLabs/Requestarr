@@ -18,8 +18,9 @@ namespace Requestarr.Core.Discord.Help
 
     // Who is reading: the content types they can request and whether Plex is linked.
     // Everything is the admin's view of user help and an admin who isn't a user.
-    // Tmdb: a The Movie Database key is set, so its credits are shown.
-    public record HelpViewer(IReadOnlyCollection<ContentType> Types, bool Linked, bool Tmdb = false)
+    // Tmdb: a The Movie Database key is set, so its credits are shown. PlexServer: a Plex server is connected, so
+    // Link Plex is on their panel (the admin's view shows it either way).
+    public record HelpViewer(IReadOnlyCollection<ContentType> Types, bool Linked, bool Tmdb = false, bool PlexServer = true)
     {
         public static HelpViewer Everything => new(ContentTypes.Requestable, false);
 
@@ -139,8 +140,8 @@ namespace Requestarr.Core.Discord.Help
                 Key = "plex",
                 Title = "Linking Plex",
                 Summary = "Ask for access to the media server",
-                Visible = v => !v.Linked,
-                Intro = _ => "Enter your Plex username or email. The admin approves it, and the button disappears once your account is linked.",
+                Visible = v => v.PlexServer && !v.Linked,
+                Intro = _ => "Enter your Plex username or email. The admin approves it, and the button disappears once your account is linked. The button is only there while the admin has a Plex server connected to Requestarr.",
                 Buttons = new[] { PanelButtons.LinkPlex }
             },
             new HelpTopic
@@ -158,7 +159,9 @@ namespace Requestarr.Core.Discord.Help
                 Key = "news",
                 Title = "Announcements",
                 Summary = "News for everyone",
-                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is where Requestarr and the admin post news for everyone: new things you can do after an update, and outages that pause requests (and when they're over). You can read it but not post there."
+                Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is where Requestarr and the admin post news for everyone: new things you can do after an update, and outages that pause requests (and when they're over). You can read it but not post there.\n" +
+                             $"Each update is one line with how many new things it has and the main one; **{DiscordText.ReadChangesLabel}** shows you the full list, just for you. An outage notice stays pinned at the top while it lasts and goes when it's over.\n" +
+                             $"Your own channel and #{ChannelLayout.AnnouncementsChannelName} are in the **{ChannelLayout.UsersCategoryName}** group. Your panel is always the newest message in your channel, so it's where you look."
             },
             Credits
         };
@@ -179,11 +182,25 @@ namespace Requestarr.Core.Discord.Help
             },
             new HelpTopic
             {
+                Key = "access",
+                Title = "Access requests and the welcome channel",
+                Summary = "Newcomers ask; you approve",
+                Intro = _ => $"#{ChannelLayout.WelcomeChannelName} is open to everyone in the server and only Requestarr posts there: it says what Requestarr is, with **{DiscordText.RequestAccessLabel}**. " +
+                             "That opens a short private form: what they'd like (only types with a connected Sonarr or Radarr) and a note. It posts a card here and joins `/admin requests`. " +
+                             $"**{DiscordText.ApproveAccessLabel}** lets you choose their real access levels, then adds them exactly like **{DiscordText.AddMemberLabel}** does; **{DiscordText.DenyLabel}** takes an optional reason. They get the answer as a private message. " +
+                             $"One open request per person; after a denial they can ask again after {Access.AccessSettings.DefaultDenialCooldownDays} days (`accessRequests.denialCooldownDays`). Members already in are told where their channel is.\n" +
+                             "One button per media server you've connected sits next to it (none yet: connecting a media server comes with Plex sharing, so for now there are no media server buttons, and Link Plex is gone from member panels).\n" +
+                             $"Spam: only clicks that can't do anything count, within an hour. {Access.AccessSettings.DefaultShortCooldownClicks} make them wait {Access.AccessSettings.DefaultShortCooldownMinutes} minute, {Access.AccessSettings.DefaultLongCooldownClicks} make them wait {Access.AccessSettings.DefaultLongCooldownHours} hours, " +
+                             $"and {Access.AccessSettings.DefaultBlockClicks} more within {Access.AccessSettings.DefaultBlockWithinHours} hours block them: the **{ChannelLayout.BlockedRoleName}** role hides the welcome channel and shows #{ChannelLayout.BlockedChannelName}, which tells them to message you. " +
+                             $"You get one notice here; **{DiscordText.UnblockLabel}** on it or on their member card lifts the block, and so does removing the role in Discord. The numbers are under `accessRequests.spam` in provisioning."
+            },
+            new HelpTopic
+            {
                 Key = "approvals",
                 Title = "Approvals and the queue",
                 Summary = "Approve or deny requests",
                 Intro = _ => $"Requests that need approval post a card here with **{DiscordText.ApproveLabel}** and **{DiscordText.DenyLabel}**; the reason you give is shown to the user. Use **{DiscordText.AlreadyAvailableLabel}** when the title is already there; a request whose title is already in the library always ends as already available, never denied. When a request is approved, denied or cancelled, the user's request message and this card both change to show it. " +
-                             $"`/admin requests` (or **{DiscordText.PanelPendingQueue}** on the panel, which shows how many) goes through everything waiting on you, oldest first, one private card at a time: requests to approve, downloads that failed or got stuck, Plex link requests, and instances that are down. Each card has that item's actions plus **{DiscordText.SkipLabel}** and **{DiscordText.BackLabel}**; acting moves straight to the next. **{DiscordText.CancelLabel}** asks for an optional reason shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
+                             $"`/admin requests` (or **{DiscordText.PanelPendingQueue}** on the panel, which shows how many) goes through everything waiting on you, oldest first, one private card at a time: requests to approve, access requests from the welcome channel, downloads that failed or got stuck, Plex link requests, and instances that are down. Each card has that item's actions plus **{DiscordText.SkipLabel}** and **{DiscordText.BackLabel}**; acting moves straight to the next. **{DiscordText.CancelLabel}** asks for an optional reason shown to the user. `/request` in this channel requests as you, skipping approval and limits.",
                 Commands = new[] { "admin requests" },
                 Buttons = new[] { PanelButtons.PendingQueue }
             },
@@ -215,7 +232,8 @@ namespace Requestarr.Core.Discord.Help
                 Summary = "News for every member",
                 Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is for every member: they can read it but not post; admins can post there directly. Members get it through one shared role, **{ChannelLayout.MembersRoleName}**, given when they're added or unsuspended and taken when they're suspended or removed. " +
                              $"Outages: a Sonarr or Radarr that can't be reached gets an alert here after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAlertAfter)}; still down after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAnnounceAfter)}, the alert offers **{DiscordText.AnnounceLabel}**, which posts a plain notice for users. If you announced it, the recovery is announced too; if not, users never hear about it. " +
-                             "Upgrades: when Requestarr starts on a new version, the full list of changes is posted here and the changes for users go to the announcements channel, once per version."
+                             "While it lasts, the alert (and the notice, if you announced it) is pinned; when the instance is back both are removed and the \"back\" messages are posted. Every outage is also kept in Requestarr's own record: when it started and ended, and whether and by whom it was announced.\n" +
+                             $"Upgrades: when Requestarr starts on a new version, a one-line card here counts its changes for admins and users, and a card in the announcements channel counts the users' and names the main one. **{DiscordText.ReadChangesLabel}** shows the full list privately."
             },
             new HelpTopic
             {
@@ -239,7 +257,8 @@ namespace Requestarr.Core.Discord.Help
                 Key = "mediaserver",
                 Title = "Media server requests",
                 Summary = "Link Plex accounts",
-                Intro = _ => $"Users ask with Link Plex on their panel; the card here has Approve and Deny, and the member's card shows the waiting request with **{DiscordText.ApproveLinkLabel}** and **{DiscordText.DenyLinkLabel}**. **{DiscordText.AdminLinkPlexLabel}** on a member card links an account directly.",
+                Intro = _ => $"Users ask with Link Plex on their panel (or a media server button in #{ChannelLayout.WelcomeChannelName}); the card here has Approve and Deny, and the member's card shows the waiting request with **{DiscordText.ApproveLinkLabel}** and **{DiscordText.DenyLinkLabel}**. **{DiscordText.AdminLinkPlexLabel}** on a member card links an account directly.\n" +
+                             "Link Plex and the welcome channel's media server buttons only show for a media server you've connected. None can be connected yet (that comes with Plex sharing), so they're hidden for now; Plex usernames you link from member cards are kept.",
                 Commands = new[] { "admin user" }
             },
             new HelpTopic
@@ -251,6 +270,15 @@ namespace Requestarr.Core.Discord.Help
                              "Anime is always added as Sonarr's Anime series type; you can switch a series to Standard in Sonarr.\n" +
                              "Each instance has a priority in provisioning (`anime.priority`: dub, sub or first) and adjustable release terms; `anime.enabled: false` turns sub/dub off there. " +
                              "Separate sub and dub instances work through per-user instances, but need different root folders (and ideally separate media server libraries), or the show appears twice."
+            },
+            new HelpTopic
+            {
+                Key = "channels",
+                Title = "Channel groups and panels",
+                Summary = "Where Requestarr's channels live",
+                Intro = _ => $"Requestarr keeps two channel groups and recreates them if they're deleted. **{ChannelLayout.AdminCategoryName}**: this channel and #{ChannelLayout.FeedChannelName}; only admins and the bot see it, and both channels follow the group's permissions. " +
+                             $"**{ChannelLayout.UsersCategoryName}**: #{ChannelLayout.WelcomeChannelName}, #{ChannelLayout.AnnouncementsChannelName}, #{ChannelLayout.BlockedChannelName} and every member's private channel; when it's full, new channels go to \"{ChannelLayout.CategoryName(2)}\" and on.\n" +
+                             "Every panel (this one, each member's, the welcome and blocked messages) is always the newest message in its channel: when Requestarr posts something there, the panel moves below it. Panels aren't pinned, so there are no \"pinned a message\" notices."
             },
             new HelpTopic
             {
@@ -299,7 +327,7 @@ namespace Requestarr.Core.Discord.Help
 
             foreach (var button in topic.Buttons)
             {
-                lines.Add($"• **{button.Label}** on {(PanelButtons.Admin.Contains(button) ? "the admin panel" : "your pinned panel")}");
+                lines.Add($"• **{button.Label}** on {(PanelButtons.Admin.Contains(button) ? "the admin panel" : "your panel")}");
             }
 
             return DiscordLimits.Truncate(string.Join("\n", lines), DiscordLimits.MessageLength - 100);

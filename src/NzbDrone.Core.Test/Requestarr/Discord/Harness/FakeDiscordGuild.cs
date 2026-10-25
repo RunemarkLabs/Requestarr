@@ -22,7 +22,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             public ulong Id { get; init; }
             public string Name { get; set; }
             public bool IsCategory { get; init; }
-            public ulong? CategoryId { get; init; }
+            public ulong? CategoryId { get; set; }
             public string Topic { get; init; }
             public List<PermissionOverwrite> Overwrites { get; set; } = new();
             public List<InteractionReply> Messages { get; } = new();
@@ -35,6 +35,12 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Dictionary<ulong, string> Roles { get; } = new();
         public Dictionary<ulong, FakeChannel> Channels { get; } = new();
         public Dictionary<ulong, GuildMember> Members { get; } = new();
+
+        // Private messages the bot sent, per member.
+        public Dictionary<ulong, List<InteractionReply>> DirectMessages { get; } = new();
+
+        // Members who don't accept private messages from the server.
+        public HashSet<ulong> ClosedDirectMessages { get; } = new();
 
         public bool IsConnected { get; set; } = true;
         public ulong GuildId => Guild;
@@ -94,6 +100,23 @@ namespace Requestarr.Core.Test.Discord.Harness
             Task.FromResult(Channels.Values.FirstOrDefault(c => !c.IsCategory && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))?.Id);
 
         public Task<int> GetChannelCountInCategoryAsync(ulong categoryId) => Task.FromResult(ChannelsIn(categoryId).Count());
+
+        public Task<IReadOnlyList<GuildTextChannel>> GetTextChannelsAsync() =>
+            Task.FromResult<IReadOnlyList<GuildTextChannel>>(Channels.Values.Where(c => !c.IsCategory).Select(c => new GuildTextChannel(c.Id, c.Name, c.CategoryId)).ToList());
+
+        public Task<ulong?> GetChannelCategoryAsync(ulong channelId) =>
+            Task.FromResult(Channels.TryGetValue(channelId, out var channel) ? channel.CategoryId : null);
+
+        public Task MoveChannelAsync(ulong channelId, ulong categoryId)
+        {
+            if (Channels[channelId].CategoryId != categoryId && ChannelsIn(categoryId).Count() >= 50)
+            {
+                throw new InvalidOperationException("Discord: maximum number of channels in category reached (50)");
+            }
+
+            Channels[channelId].CategoryId = categoryId;
+            return Task.CompletedTask;
+        }
 
         public Task<ulong> CreateCategoryAsync(string name, IReadOnlyList<PermissionOverwrite> overwrites)
         {
@@ -219,6 +242,35 @@ namespace Requestarr.Core.Test.Discord.Harness
             return Task.CompletedTask;
         }
 
+        public Task UnpinMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (Channels.TryGetValue(channelId, out var channel))
+            {
+                channel.Pinned.Remove(messageId);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> SendDirectMessageAsync(ulong userId, InteractionReply message)
+        {
+            if (ClosedDirectMessages.Contains(userId) || !Members.ContainsKey(userId))
+            {
+                return Task.FromResult(false);
+            }
+
+            if (!DirectMessages.TryGetValue(userId, out var list))
+            {
+                DirectMessages[userId] = list = new List<InteractionReply>();
+            }
+
+            list.Add(message);
+            return Task.FromResult(true);
+        }
+
+        public Task<ulong?> GetLatestMessageIdAsync(ulong channelId) =>
+            Task.FromResult(Channels.TryGetValue(channelId, out var channel) && channel.MessageIds.Count > 0 ? channel.MessageIds[^1] : (ulong?)null);
+
         // Simulates a message the bot can't delete (missing permission).
         public bool CannotDelete { get; set; }
 
@@ -236,10 +288,13 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
         {
             IReadOnlyList<ChannelMessage> messages = Channels.TryGetValue(channelId, out var channel)
-                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.Content)).TakeLast(limit).ToList()
+                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m))).TakeLast(limit).ToList()
                 : new List<ChannelMessage>();
             return Task.FromResult(messages);
         }
+
+        private static List<string> CustomIds(InteractionReply message) =>
+            message.Buttons.Select(b => b.CustomId).Concat(new[] { message.SelectMenu }.Concat(message.MoreMenus).Where(x => x != null).Select(x => x.CustomId)).ToList();
 
         public void DeleteMessage(ulong channelId, ulong messageId)
         {

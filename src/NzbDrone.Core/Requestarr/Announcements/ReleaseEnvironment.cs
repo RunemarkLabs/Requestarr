@@ -24,6 +24,10 @@ namespace Requestarr.Core.Announcements
 
         // QA: the versions staging already has, which QA no longer shows.
         IReadOnlySet<Version> Staged { get; }
+
+        // The web app's icons and logo for this environment: "dev", "qa", "beta" (staging) or "production". The same
+        // published image runs on staging and production, so this follows where it runs, not how it was built.
+        string IconSet { get; }
     }
 
     public class ReleaseEnvironment : IReleaseEnvironment
@@ -41,6 +45,17 @@ namespace Requestarr.Core.Announcements
             "dev" => VersionPostMode.CurrentOnly,
             "qa" => VersionPostMode.NotYetStaged,
             _ => VersionPostMode.Standing
+        };
+
+        public string IconSet => IconSetFor(Variable(EnvironmentVariable));
+
+        // Anything that isn't dev, QA or staging gets production's icons.
+        public static string IconSetFor(string environment) => (environment ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "dev" => "dev",
+            "qa" => "qa",
+            "staging" => "beta",
+            _ => "production"
         };
 
         public IReadOnlySet<Version> Staged => (Variable(StagedVersionsVariable) ?? string.Empty)

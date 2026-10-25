@@ -26,6 +26,9 @@ function ApplyTheme() {
   // On Component Mount and Component Update
   useEffect(() => {
     updateCSSVariables();
+
+    // The icons follow the theme too (index.ejs): light or dark, Auto with the system setting.
+    window.Requestarr.applyIconTheme?.(theme);
   }, [updateCSSVariables, theme]);
 
   return null;

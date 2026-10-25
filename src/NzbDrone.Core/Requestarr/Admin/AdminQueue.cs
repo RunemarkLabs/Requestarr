@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Requestarr.Core.Access;
 using Requestarr.Core.Backends;
 using Requestarr.Core.MediaServers;
 using Requestarr.Core.Removals;
@@ -9,8 +10,8 @@ using Requestarr.Core.Requests;
 namespace Requestarr.Core.Admin
 {
     // One thing waiting on an admin decision. Key: what it is ("r12" request 12, "t12" request 12
-    // in trouble, "p3" Plex link request 3, "i2" instance 2 down, "x4" removal 4). Since: how
-    // long it has waited, which orders the walk (oldest first).
+    // in trouble, "p3" Plex link request 3, "i2" instance 2 down, "x4" removal 4, "a5" access request 5
+    // from the welcome channel). Since: how long it has waited, which orders the walk (oldest first).
     public record QueueItem(string Key, DateTime Since)
     {
         public char Kind => Key[0];
@@ -123,5 +124,18 @@ namespace Requestarr.Core.Admin
 
         public IEnumerable<QueueItem> Items() =>
             _backends.All().Where(b => b.Enable && b.DownSince.HasValue && b.DownAlertMessageId != null).Select(b => new QueueItem($"i{b.Id}", b.DownSince.Value));
+    }
+
+    // Access requests from the welcome channel.
+    public class AccessRequestSource : IAdminQueueSource
+    {
+        private readonly IAccessRequestRepository _requests;
+
+        public AccessRequestSource(IAccessRequestRepository requests)
+        {
+            _requests = requests;
+        }
+
+        public IEnumerable<QueueItem> Items() => _requests.Pending().Select(r => new QueueItem($"a{r.Id}", r.Requested));
     }
 }

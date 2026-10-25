@@ -39,7 +39,8 @@ namespace Requestarr.Core.Test.AdminRequests
     [ManualTest]
     public class LiveAdminRequestsFixture : DbTest
     {
-        private const int Matrix = 603;
+        // A film no other live check requests, so it's never already in the test Radarr when this check runs after them.
+        private const int Shawshank = 278;
         private const int Heat = 949;
 
         private static readonly TimeSpan ShortAlert = TimeSpan.FromSeconds(20);
@@ -98,12 +99,20 @@ namespace Requestarr.Core.Test.AdminRequests
             IUserManagementService users = null;
             IPanelService panels = null;
             IRequestFeed feed = null;
+
+            // Task 4e: no media server is connected (as on a real server today); the outage record and the access
+            // request stores are real.
+            Mocker.SetConstant<Requestarr.Core.MediaServers.IMediaServerConnections>(new FakeMediaServers { Servers = { MediaServerProvider.Plex } }); // the walk includes a Plex link
+            Mocker.SetConstant<Requestarr.Core.Backends.IOutageRepository>(Mocker.Resolve<Requestarr.Core.Backends.OutageRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestRepository>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IWelcomeGuardRepository>(Mocker.Resolve<Requestarr.Core.Access.WelcomeGuardRepository>());
             var host = new DiscordClientHost(settings,
                 new Lazy<IInteractionDispatcher>(() => null),
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 
@@ -173,19 +182,19 @@ namespace Requestarr.Core.Test.AdminRequests
                 Log($"[music] responses: {string.Join(", ", music.Responder.Responses.Select(r => r.Kind))}");
                 Log($"[music] card now: {music.Responder.Replies.First().Content.Replace("\n", " | ")}");
                 Log($"[music] private notice: {music.LastReply.Content}");
-                var panelOne = (await restOne.GetPinnedMessagesAsync()).Single();
-                Log($"[music] {one.Username}'s pinned panel, read back: \"{panelOne.Content.Replace("\n", " | ")}\"");
+                var panelOne = await restOne.GetMessageAsync(ulong.Parse(users.FindByDiscordId(one.Id).PanelMessageId));
+                Log($"[music] {one.Username}'s panel, read back: \"{panelOne.Content.Replace("\n", " | ")}\"");
 
                 // The member's name as Requestarr stored it (their display name, which can differ from the username).
                 music.LastReply.Content.Should().Be(DiscordText.NotConnectedYet(users.FindByDiscordId(one.Id).DisplayName, ContentType.Music));
                 panelOne.Content.Should().NotContain("Music");
 
                 // 2. Two pending requests from two members and one Plex link, walked through /admin requests.
-                await RequestInRealMessage(dispatcher, gateway, guild.Id, channelOne, one.Id, Matrix);
+                await RequestInRealMessage(dispatcher, gateway, guild.Id, channelOne, one.Id, Shawshank);
                 await RequestInRealMessage(dispatcher, gateway, guild.Id, channelTwo, two.Id, Heat);
                 await Send(dispatcher, FakeInteraction.ModalSubmit(PanelRoutes.LinkPlexForm).WithField(PanelRoutes.PlexUsernameField, "live_walk_plex").By(one.Id).InGuild(guild.Id).InChannel(channelOne));
 
-                var adminPanel = (await adminRest.GetPinnedMessagesAsync()).Single();
+                var adminPanel = await adminRest.GetMessageAsync(ulong.Parse(guildSetup.GetConfig().AdminPanelMessageId));
                 Log($"[panel] admin panel buttons, read back: [{string.Join("] [", Buttons(adminPanel))}]");
                 Buttons(adminPanel).Should().Contain(DiscordText.PanelPendingQueueCount(3));
 
@@ -214,7 +223,7 @@ namespace Requestarr.Core.Test.AdminRequests
 
                 requests.All().Select(r => r.Status).Should().BeEquivalentTo(new[] { RequestStatus.Approved, RequestStatus.Denied });
                 Log($"[walk] {one.Username}'s Plex account now: {Mocker.Resolve<IMediaServerAccountRepository>().GetForUser(users.FindByDiscordId(one.Id).Id).Single().Username}");
-                adminPanel = (await adminRest.GetPinnedMessagesAsync()).Single();
+                adminPanel = await adminRest.GetMessageAsync(ulong.Parse(guildSetup.GetConfig().AdminPanelMessageId));
                 Log($"[panel] admin panel buttons after the walk: [{string.Join("] [", Buttons(adminPanel))}]");
 
                 // 3. Stop the test Sonarr past the shortened threshold: one down alert, and TV requests say they're paused.
@@ -239,7 +248,7 @@ namespace Requestarr.Core.Test.AdminRequests
                 var paused = await Send(dispatcher, FakeInteraction.SlashCommand("request").WithOption("type", "tv").WithOption("query", "severance").By(one.Id).InGuild(guild.Id).InChannel(channelOne));
                 Log($"[outage] {one.Username}'s /request tv severance: {paused.LastReply.Content.Replace("\n", " | ")}");
                 paused.LastReply.Content.Should().Contain(DiscordText.RequestsPaused(ContentType.Tv, "Sonarr (test)"));
-                panelOne = (await restOne.GetPinnedMessagesAsync()).Single();
+                panelOne = await restOne.GetMessageAsync(ulong.Parse(users.FindByDiscordId(one.Id).PanelMessageId));
                 Log($"[outage] {one.Username}'s panel still lists TV: {panelOne.Content.Contains("TV")}; access TV={Mocker.Resolve<IUserMediaAccessRepository>().GetForUser(users.FindByDiscordId(one.Id).Id).Single(a => a.ContentType == ContentType.Tv).State}");
                 var walkDown = await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin requests")));
                 LogCard("outage walk", walkDown.LastReply);

@@ -58,7 +58,9 @@ namespace Requestarr.Core.Backends
     // Tracks never connected / connected / lost per instance. An outage longer than AlertAfter gets
     // one alert in the admin channel and one more when it's back; shorter blips get none. Still down
     // after AnnounceAfter, the alert offers "Announce to users"; only announced outages have their
-    // recovery announced.
+    // recovery announced. While an outage lasts its alert (and its notice to users, if announced) is
+    // pinned; on recovery both are removed and the "back" messages are posted unpinned. Discord is a
+    // working view: every outage is also kept in Requestarr's own record (Outage) for the web portal.
     public class ConnectionMonitor : IConnectionMonitor, IExecute<ConnectionCheckCommand>, IHandleAsync<BackendsCheckedEvent>
     {
         public static readonly TimeSpan DefaultAlertAfter = TimeSpan.FromMinutes(3);
@@ -70,11 +72,13 @@ namespace Requestarr.Core.Backends
         private readonly IGuildSetupService _guildSetup;
         private readonly IEventAggregator _events;
         private readonly IAnnouncementService _announcements;
+        private readonly IOutageRepository _outages;
         private readonly Logger _logger;
 
-        public ConnectionMonitor(IBackendRepository repository, IBackendService backends, IDiscordGuildGateway gateway, IGuildSetupService guildSetup, IEventAggregator events, IAnnouncementService announcements, Logger logger)
+        public ConnectionMonitor(IBackendRepository repository, IBackendService backends, IDiscordGuildGateway gateway, IGuildSetupService guildSetup, IEventAggregator events, IAnnouncementService announcements, IOutageRepository outages, Logger logger)
         {
             _announcements = announcements;
+            _outages = outages;
             _repository = repository;
             _backends = backends;
             _gateway = gateway;
@@ -137,19 +141,27 @@ namespace Requestarr.Core.Backends
 
                     if (alerted)
                     {
-                        await PostAsync(new InteractionReply { Content = DiscordText.InstanceBackAlert(instance, downFor) });
-                        _logger.Info("{0} is reachable again after {1:N0} minutes", instance.Name, downFor.TotalMinutes);
-
-                        // The alert loses its button; an announced outage gets its recovery announced.
-                        if (instance.DownAnnounceOffered || instance.DownAnnounceMessageId != null)
+                        // The pinned alert goes; if it can't be removed, it loses its button and says it's over.
+                        if (!await RemoveAsync(AdminChannel(), instance.DownAlertMessageId) && (instance.DownAnnounceOffered || instance.DownAnnounceMessageId != null))
                         {
                             await EditAlertAsync(instance, DiscordText.InstanceDownAlert(instance) + "\n" + DiscordText.AlertNowBack(downFor, instance.DownAnnounceMessageId != null), null);
                         }
 
+                        await PostAsync(new InteractionReply { Content = DiscordText.InstanceBackAlert(instance, downFor) });
+                        _logger.Info("{0} is reachable again after {1:N0} minutes", instance.Name, downFor.TotalMinutes);
+
+                        // An announced outage: its pinned notice goes, and the recovery is announced.
                         if (instance.DownAnnounceMessageId != null)
                         {
+                            await RemoveAsync(_guildSetup.AnnouncementsChannelId, instance.DownAnnounceMessageId);
                             await _announcements.PostAsync(DiscordText.OutageOverNotice(TypeOf(instance), downFor));
                         }
+                    }
+
+                    if (_outages.Ongoing(instance.Id) is { } outage)
+                    {
+                        outage.Ended = now;
+                        _outages.Update(outage);
                     }
 
                     instance.DownSince = null;
@@ -186,6 +198,8 @@ namespace Requestarr.Core.Backends
                 if (id.HasValue)
                 {
                     instance.DownAlertMessageId = id.ToString();
+                    await PinAsync(AdminChannel(), id.Value);
+                    _outages.Insert(new Outage { BackendId = instance.Id, InstanceName = instance.Name, Started = instance.DownSince.Value });
                     _logger.Warn("{0} has been unreachable since {1:u}; the admins were alerted", instance.Name, instance.DownSince);
                     Save(instance);
                     _events.PublishEvent(new AdminQueueChangedEvent());
@@ -226,6 +240,15 @@ namespace Requestarr.Core.Backends
 
             instance.DownAnnounceMessageId = id.ToString();
             _repository.SetFields(instance, i => i.DownAnnounceMessageId);
+            await PinAsync(_guildSetup.AnnouncementsChannelId, id.Value);
+
+            if (_outages.Ongoing(instance.Id) is { } outage)
+            {
+                outage.Announced = Clock();
+                outage.AnnouncedBy = adminName;
+                _outages.Update(outage);
+            }
+
             await EditAlertAsync(instance, DiscordText.InstanceDownAlert(instance) + "\n" + DiscordText.AlertAnnounced(adminName), null);
             _logger.Info("{0} announced the {1} outage to users", adminName, instance.Name);
 
@@ -267,6 +290,46 @@ namespace Requestarr.Core.Backends
         // The announcement itself is written only by AnnounceAsync and cleared on recovery.
         private void Save(BackendInstance instance, params Expression<Func<BackendInstance, object>>[] also) =>
             _repository.SetFields(instance, new Expression<Func<BackendInstance, object>>[] { i => i.FirstConnected, i => i.DownSince, i => i.DownAlertMessageId, i => i.DownAnnounceOffered }.Concat(also).ToArray());
+
+        private ulong? AdminChannel() => ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var channel) ? channel : null;
+
+        // Pinning needs the Pin Messages permission; without it the notice still works, unpinned.
+        private async Task PinAsync(ulong? channel, ulong message)
+        {
+            if (channel == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _gateway.PinMessageAsync(channel.Value, message);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not pin the outage notice. Give the bot the Pin Messages permission.");
+            }
+        }
+
+        // Unpins and removes a notice; false when it couldn't be removed.
+        private async Task<bool> RemoveAsync(ulong? channel, string messageId)
+        {
+            if (channel == null || !ulong.TryParse(messageId, out var message))
+            {
+                return false;
+            }
+
+            try
+            {
+                await _gateway.UnpinMessageAsync(channel.Value, message);
+                return await _gateway.DeleteMessageAsync(channel.Value, message);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not remove the outage notice {0}", message);
+                return false;
+            }
+        }
 
         private async Task<ulong?> PostAsync(InteractionReply message)
         {

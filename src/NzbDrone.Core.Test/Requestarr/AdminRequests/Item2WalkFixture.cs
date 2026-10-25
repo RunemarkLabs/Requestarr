@@ -19,6 +19,10 @@ namespace Requestarr.Core.Test.AdminRequests
     [TestFixture]
     public class Item2WalkFixture : FeedScenario
     {
+        // These cover Link Plex, which shows only while a Plex server is connected (task 4e).
+        [SetUp]
+        public void ConnectPlex() => ConnectedMediaServers.Servers.Add(Requestarr.Core.MediaServers.MediaServerProvider.Plex);
+
         private ConnectionMonitor Monitor => (ConnectionMonitor)Mocker.Resolve<IConnectionMonitor>();
 
         [SetUp]

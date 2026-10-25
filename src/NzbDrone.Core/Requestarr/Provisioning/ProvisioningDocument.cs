@@ -23,6 +23,36 @@ namespace Requestarr.Core.Provisioning
 
         // Optional: removal vote timings (days). Stored as settings the admin portal can change.
         public RemovalProvisioning Removal { get; set; }
+
+        // Optional: access requests from the welcome channel. Stored as settings the admin portal can change.
+        public AccessRequestsProvisioning AccessRequests { get; set; }
+    }
+
+    public class AccessRequestsProvisioning
+    {
+        // Days someone waits after a denial before they can ask again (default 7; 0 lets them ask right away).
+        public int? DenialCooldownDays { get; set; }
+
+        public AccessSpamProvisioning Spam { get; set; }
+    }
+
+    // Clicks on the welcome buttons that can't do anything (a request already open, a cooldown, the status again).
+    public class AccessSpamProvisioning
+    {
+        // Only clicks within this many minutes count (default 60).
+        public int? WindowMinutes { get; set; }
+
+        // This many counted clicks: a short cooldown (default 5 clicks, 1 minute).
+        public int? ShortCooldownClicks { get; set; }
+        public int? ShortCooldownMinutes { get; set; }
+
+        // This many: a long cooldown (default 10 clicks, 24 hours).
+        public int? LongCooldownClicks { get; set; }
+        public int? LongCooldownHours { get; set; }
+
+        // This many more within so many hours of the long cooldown: blocked until the admin lifts it (default 5, 24).
+        public int? BlockClicks { get; set; }
+        public int? BlockWithinHours { get; set; }
     }
 
     public class AvailabilityProvisioning

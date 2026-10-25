@@ -149,7 +149,7 @@ namespace Requestarr.Core.Test.AdminRequests
             await PendingMovie(Alice, Dune);
             await Mocker.Resolve<IPanelService>().RefreshAdminPanelAsync();
 
-            Discord.Channels[AdminChannel].PinnedMessage.Buttons.First().Label.Should().Be(DiscordText.PanelPendingQueueCount(1)).And.Be("Pending queue (1)");
+            PanelIn(Discord.Channels[AdminChannel]).Buttons.First().Label.Should().Be(DiscordText.PanelPendingQueueCount(1)).And.Be("Pending queue (1)");
         }
     }
 }

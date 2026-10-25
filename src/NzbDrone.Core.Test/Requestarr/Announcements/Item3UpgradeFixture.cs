@@ -15,7 +15,7 @@ namespace Requestarr.Core.Test.Announcements
     // Task 3d item 3: on a new version, the full list to the admin channel, the user-facing lines to the
     // announcements channel (nothing to users when there are none), once per version, across restarts.
     // Task 4d: two sections only, empty ones never shown; production and staging (the default here) keep every post
-    // and start with the full history.
+    // and start with the full history. Task 4e: each post is a one-line card (Read changes shows the full card).
     [TestFixture]
     public class Item3UpgradeFixture : DiscordScenario
     {
@@ -45,9 +45,17 @@ namespace Requestarr.Core.Test.Announcements
 
         private AnnouncementService Service => (AnnouncementService)Mocker.Resolve<IAnnouncementService>();
 
-        private System.Collections.Generic.List<string> AdminPosts => Discord.Channels[AdminChannel].Messages.Select(m => m.Content).Where(c => c.StartsWith("📋")).ToList();
+        // The version cards' titles, oldest first.
+        private System.Collections.Generic.List<string> AdminPosts => Titles(AdminChannel);
 
-        private System.Collections.Generic.List<string> UserPosts => Discord.Channels[ulong.Parse(Config.AnnouncementsChannelId)].Messages.Select(m => m.Content).ToList();
+        private System.Collections.Generic.List<string> UserPosts => Titles(ulong.Parse(Config.AnnouncementsChannelId));
+
+        private System.Collections.Generic.List<string> Titles(ulong channel) =>
+            Discord.Channels[channel].Messages.Where(m => m.Embeds.Any()).Select(m => m.Embeds[0].Title).Where(t => t != null && t.StartsWith("Requestarr ")).ToList();
+
+        private static string Admin(string version, string counts) => $"Requestarr {version} · {counts}";
+
+        private static string UserCard(string version, int count) => $"Requestarr {version} · {count} new thing{(count == 1 ? string.Empty : "s")} for you";
 
         private async Task StartOn(string version)
         {
@@ -73,10 +81,15 @@ namespace Requestarr.Core.Test.Announcements
         {
             await StartOn("0.2.0");
 
-            AdminPosts.Last().Should().Be("📋 **Requestarr 0.2.0: what's new**\n" +
-                $"**For users** (posted in #{ChannelLayout.AnnouncementsChannelName})\n• You can now follow a request from its card.\n• Your panel shows your limits.\n" +
+            AdminPosts.Last().Should().Be(Admin("0.2.0", "1 change for admins, 2 for users"));
+            UserPosts.Last().Should().Be(UserCard("0.2.0", 2));
+
+            var full = Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0)).Single();
+            full.Ephemeral.Should().BeTrue();
+            full.Embeds.Select(e => e.Description).Should().Equal(
+                "**For users**\n• You can now follow a request from its card.\n• Your panel shows your limits.",
                 "**For admins**\n• New member card layout.");
-            UserPosts.Last().Should().Be("✨ **What's new in Requestarr 0.2.0**\n• You can now follow a request from its card.\n• Your panel shows your limits.");
+            Service.FullCard(VersionAudience.Users, new Version(0, 2, 0)).Single().Embeds.Should().ContainSingle("members see only their lines");
             Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0");
         }
 
@@ -99,7 +112,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             AdminPosts.Should().HaveCount(3);
-            AdminPosts.Last().Should().Be("📋 **Requestarr 0.3.0: what's new**\n**For admins**\n• Faster startup.");
+            AdminPosts.Last().Should().Be(Admin("0.3.0", "1 change for admins"));
             UserPosts.Should().HaveCount(2, "0.3.0 has nothing for users");
             Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0,0.2.5,0.3.0");
         }
@@ -125,7 +138,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.1.0");
             await StartOn("0.3.0");
 
-            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal("📋 **Requestarr 0.1.0: what's new**", "📋 **Requestarr 0.2.0: what's new**", "📋 **Requestarr 0.3.0: what's new**");
+            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
             UserPosts.Should().HaveCount(2);
         }
 
@@ -136,8 +149,8 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal("📋 **Requestarr 0.1.0: what's new**", "📋 **Requestarr 0.2.0: what's new**", "📋 **Requestarr 0.3.0: what's new**");
-            UserPosts.Select(p => p.Split('\n')[0]).Should().Equal("✨ **What's new in Requestarr 0.1.0**", "✨ **What's new in Requestarr 0.2.0**");
+            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
+            UserPosts.Should().Equal(UserCard("0.1.0", 1), UserCard("0.2.0", 2));
         }
 
         [Test]
@@ -150,7 +163,7 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal("📋 **Requestarr 0.1.0: what's new**", "📋 **Requestarr 0.2.0: what's new**", "📋 **Requestarr 0.3.0: what's new**");
+            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
             UserPosts.Should().HaveCount(2);
         }
 
@@ -214,13 +227,8 @@ namespace Requestarr.Core.Test.Announcements
             await Service.PostVersionNotesAsync();
             await Service.PostVersionNotesAsync();
 
-            AdminPosts.Select(p => p.Split('\n')[0]).Should().Equal(
-                "📋 **Requestarr 0.2.3: what's new**",
-                "📋 **Requestarr 0.2.6: what's new**",
-                "📋 **Requestarr 0.2.4: what's new**",
-                "📋 **Requestarr 0.2.5: what's new**",
-                "📋 **Requestarr 0.2.7: what's new**");
-            UserPosts.Should().Equal("✨ **What's new in Requestarr 0.2.6**\n• The fix.", "✨ **What's new in Requestarr 0.2.5**\n• Five.");
+            AdminPosts.Select(t => t.Split(' ')[1]).Should().Equal("0.2.3", "0.2.6", "0.2.4", "0.2.5", "0.2.7");
+            UserPosts.Should().Equal(UserCard("0.2.6", 1), UserCard("0.2.5", 1));
             Config.AnnouncedVersion.Should().Be("0.2.3,0.2.4,0.2.5,0.2.6,0.2.7");
         }
 
@@ -233,7 +241,7 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Should().ContainSingle().Which.Should().StartWith("📋 **Requestarr 0.3.0: what's new**");
+            AdminPosts.Should().ContainSingle().Which.Should().StartWith("Requestarr 0.3.0 · ");
             Config.AnnouncedVersion.Should().Be("0.2.0,0.2.5,0.3.0");
         }
 
@@ -261,19 +269,29 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
-        public async Task a_long_list_is_split_into_messages_discord_accepts()
+        public async Task a_long_version_is_one_card_and_its_full_card_splits_within_discord_limits()
         {
-            var lines = string.Join("\n", Enumerable.Range(1, 60).Select(i => $"- Change number {i} with enough words to take some room in the message."));
-            Service.ChangelogText = () => $"## 0.9.0\n\n### For admins\n{lines}\n";
+            var lines = string.Join("\n", Enumerable.Range(1, 200).Select(i => $"- Change number {i} with enough words to take some room in the message."));
+            Service.ChangelogText = () => $"## 0.9.0 (2026-10-25)\n\n### For users\n{lines}\n\n### For admins\n{lines}\n";
             Service.CurrentVersion = () => new Version(0, 9, 0, 1);
 
             await Service.PostVersionNotesAsync();
 
-            var posts = Discord.Channels[AdminChannel].Messages.Skip(Discord.Channels[AdminChannel].Messages.FindIndex(m => m.Content.StartsWith("📋"))).ToList();
-            posts.Should().HaveCountGreaterThan(1);
-            posts.Should().OnlyContain(p => p.Content.Length <= DiscordLimits.MessageLength);
-            posts.Skip(1).Should().OnlyContain(p => p.Content.StartsWith("📋 **Requestarr 0.9.0: what's new** (continued)\n"), "each part says what it is");
-            string.Join("\n", posts.Select(p => p.Content)).Should().Contain("Change number 1 ").And.Contain("Change number 60 ");
+            AdminPosts.Should().Equal(Admin("0.9.0", "200 changes for admins, 200 for users"));
+            var full = Service.FullCard(VersionAudience.Admins, new Version(0, 9, 0));
+            full.Should().HaveCountGreaterThan(1, "more than 6,000 characters takes more than one message");
+            full[0].Embeds[0].Title.Should().Be("Requestarr 0.9.0 · 25 October 2026");
+
+            foreach (var reply in full)
+            {
+                reply.Embeds.Count.Should().BeLessOrEqualTo(VersionCards.EmbedsPerMessage);
+                reply.Embeds.Sum(e => (e.Title?.Length ?? 0) + e.Description.Length).Should().BeLessOrEqualTo(VersionCards.MessageEmbedsLength);
+                reply.Embeds.Should().OnlyContain(e => e.Description.Length <= VersionCards.EmbedTextLength);
+            }
+
+            var text = full.SelectMany(r => r.Embeds).Select(e => e.Description).ToList();
+            text.SelectMany(t => t.Split('\n')).Where(l => l.StartsWith("• ")).Should().HaveCount(400, "every line, none cut");
+            text.Count(t => t.StartsWith("**For users** (continued)")).Should().BeGreaterThan(0);
         }
 
         // The shipped CHANGELOG.md: the process every pull request follows (docs/development.md).

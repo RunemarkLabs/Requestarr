@@ -17,9 +17,11 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IUserManagementService _users;
         private readonly IRequestarrUserRepository _userStore;
         private readonly IUserMediaAccessRepository _access;
+        private readonly IMediaServerConnections _mediaServers;
 
-        public PanelHandler(ICallerResolver callers, IRequestService requests, IUserManagementService users, IRequestarrUserRepository userStore, IUserMediaAccessRepository access)
+        public PanelHandler(ICallerResolver callers, IRequestService requests, IUserManagementService users, IRequestarrUserRepository userStore, IUserMediaAccessRepository access, IMediaServerConnections mediaServers)
         {
+            _mediaServers = mediaServers;
             _callers = callers;
             _requests = requests;
             _users = users;
@@ -42,6 +44,13 @@ namespace Requestarr.Core.Discord.Handlers
             if (caller.UserDenial != null)
             {
                 await responder.Ephemeral(caller.UserDenial);
+                return;
+            }
+
+            // Link Plex is on the panel only while a Plex server is connected; an older panel's button does nothing.
+            if (interaction.Route is PanelRoutes.LinkPlex or PanelRoutes.LinkPlexForm && !_mediaServers.IsConnected(MediaServerProvider.Plex))
+            {
+                await responder.Ephemeral(DiscordText.MediaServerNotConnected(MediaServerProvider.Plex));
                 return;
             }
 

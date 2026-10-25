@@ -62,6 +62,25 @@ namespace Requestarr.Core.Discord.Gateway
             return channels.OfType<INestedChannel>().Count(c => c.CategoryId == categoryId);
         }
 
+        public async Task<IReadOnlyList<GuildTextChannel>> GetTextChannelsAsync()
+        {
+            var guild = await Client.Rest.GetGuildAsync(GuildId);
+            return (await guild.GetTextChannelsAsync()).Select(c => new GuildTextChannel(c.Id, c.Name, c.CategoryId)).ToList();
+        }
+
+        public async Task<ulong?> GetChannelCategoryAsync(ulong channelId)
+        {
+            return await Client.Rest.GetChannelAsync(channelId) is INestedChannel channel ? channel.CategoryId : null;
+        }
+
+        public async Task MoveChannelAsync(ulong channelId, ulong categoryId)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is RestTextChannel channel && channel.CategoryId != categoryId)
+            {
+                await channel.ModifyAsync(p => p.CategoryId = categoryId);
+            }
+        }
+
         public async Task<ulong> CreateCategoryAsync(string name, IReadOnlyList<PermissionOverwrite> overwrites)
         {
             var category = await RequireGuild().CreateCategoryChannelAsync(name, p => p.PermissionOverwrites = Map(overwrites));
@@ -161,9 +180,11 @@ namespace Requestarr.Core.Discord.Gateway
             try
             {
                 var text = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                var mentions = message.Quiet ? AllowedMentions.None : new AllowedMentions(AllowedMentionTypes.Users);
+                var flags = message.Quiet ? MessageFlags.SuppressNotification : MessageFlags.None;
                 var sent = files.Count == 0
-                    ? await channel.SendMessageAsync(text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users))
-                    : await channel.SendFilesAsync(files, text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users));
+                    ? await channel.SendMessageAsync(text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: mentions, flags: flags)
+                    : await channel.SendFilesAsync(files, text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: mentions, flags: flags);
 
                 return sent.Id;
             }
@@ -236,16 +257,80 @@ namespace Requestarr.Core.Discord.Gateway
             // Pages through Discord's 100-message batches; a bot always sees the content of its own messages.
             var messages = await channel.GetMessagesAsync(limit).FlattenAsync();
 
-            return messages.Where(m => m.Author.Id == BotUserId).OrderBy(m => m.Id).Select(m => new ChannelMessage(m.Id, m.Content)).ToList();
+            return messages.Where(m => m.Author.Id == BotUserId && m.Type != MessageType.ChannelPinnedMessage)
+                .OrderBy(m => m.Id)
+                .Select(m => new ChannelMessage(m.Id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m)))
+                .ToList();
         }
+
+        // The custom IDs of a message's buttons and menus.
+        private static List<string> CustomIds(IMessage message) =>
+            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<IInteractableComponent>().Select(c => c.CustomId).Where(id => id != null).ToList();
 
         public async Task PinMessageAsync(ulong channelId, ulong messageId)
         {
-            if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&
-                await channel.GetMessageAsync(messageId) is IUserMessage message && !message.IsPinned)
+            if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel ||
+                await channel.GetMessageAsync(messageId) is not IUserMessage message || message.IsPinned)
             {
-                await message.PinAsync();
+                return;
             }
+
+            await message.PinAsync();
+
+            // Discord posts "Requestarr pinned a message" right after; it's the bot's own message, so it can go.
+            try
+            {
+                foreach (var notice in (await channel.GetMessagesAsync(10).FlattenAsync())
+                         .Where(m => m.Type == MessageType.ChannelPinnedMessage && m.Author.Id == BotUserId && m.Reference?.MessageId.GetValueOrDefault() == messageId))
+                {
+                    await notice.DeleteAsync();
+                }
+            }
+            catch (global::Discord.Net.HttpException)
+            {
+                // The notice stays; the pin itself worked.
+            }
+        }
+
+        public async Task UnpinMessageAsync(ulong channelId, ulong messageId)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is IMessageChannel channel &&
+                await channel.GetMessageAsync(messageId) is IUserMessage message && message.IsPinned)
+            {
+                await message.UnpinAsync();
+            }
+        }
+
+        public async Task<bool> SendDirectMessageAsync(ulong userId, InteractionReply message)
+        {
+            try
+            {
+                var user = await Client.Rest.GetUserAsync(userId);
+
+                if (user == null)
+                {
+                    return false;
+                }
+
+                var dm = await user.CreateDMChannelAsync();
+                await dm.SendMessageAsync(DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength), embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: AllowedMentions.None);
+                return true;
+            }
+            catch (global::Discord.Net.HttpException)
+            {
+                // Their privacy settings don't allow messages from the server's members.
+                return false;
+            }
+        }
+
+        public async Task<ulong?> GetLatestMessageIdAsync(ulong channelId)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is not IMessageChannel channel)
+            {
+                return null;
+            }
+
+            return (await channel.GetMessagesAsync(1).FlattenAsync()).FirstOrDefault()?.Id;
         }
 
         private SocketGuild RequireGuild() => Guild ?? throw new InvalidOperationException(DiscordText.NotConnected);
