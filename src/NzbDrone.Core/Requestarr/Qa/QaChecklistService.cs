@@ -14,10 +14,10 @@ using Requestarr.Core.Discord.Interactions;
 
 namespace Requestarr.Core.Qa
 {
-    public record QaChecklistItemState(string Key, string Version, string Name, string State, string By, DateTimeOffset? At, int? BugReportId, string IssueUrl);
+    public record QaChecklistItemState(string Key, string Version, string Name, string State, string By, DateTime? At, int? BugReportId, string IssueUrl);
 
     // What Claude Code reads from the QA stack before promoting to staging, and what the portal will show.
-    public record QaChecklistState(string Environment, IReadOnlyList<string> Versions, int Total, int Passed, int Failing, bool Complete, string CompletedBy, DateTimeOffset? CompletedAt, IReadOnlyList<QaChecklistItemState> Items);
+    public record QaChecklistState(string Environment, IReadOnlyList<string> Versions, int Total, int Passed, int Failing, bool Complete, string CompletedBy, DateTime? CompletedAt, IReadOnlyList<QaChecklistItemState> Items);
 
     public interface IQaChecklistService
     {
@@ -171,7 +171,7 @@ namespace Requestarr.Core.Qa
             record.State = QaItemState.Passed;
             record.ByDiscordUserId = discordUserId.ToString();
             record.ByName = name;
-            record.At = DateTimeOffset.UtcNow;
+            record.At = DateTime.UtcNow;
             _items.Update(record);
             _audit.Record(Actor.Discord(discordUserId, name), "qa.checklist.pass", "qa-item", key);
 
@@ -199,7 +199,7 @@ namespace Requestarr.Core.Qa
             record.State = QaItemState.Failing;
             record.ByDiscordUserId = discordUserId.ToString();
             record.ByName = name;
-            record.At = DateTimeOffset.UtcNow;
+            record.At = DateTime.UtcNow;
             record.BugReportId = report?.Id;
             _items.Update(record);
             _audit.Record(Actor.Discord(discordUserId, name), "qa.checklist.fail", "qa-item", key, report != null ? $"bug report {report.Id}" : null);

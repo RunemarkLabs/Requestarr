@@ -122,7 +122,7 @@ namespace Requestarr.Core.Test.Qa
         [Test]
         public void an_issue_holds_only_what_was_typed_and_what_requestarr_adds_and_pings_nobody()
         {
-            var report = new BugReport { Id = 3, Component = "removals", WhatHappened = "Vote never closed @everyone", Expected = "It closes", Environment = "dev", Version = "0.4.15", ReporterName = "Alex", Created = _now };
+            var report = new BugReport { Id = 3, Component = "removals", WhatHappened = "Vote never closed @everyone", Expected = "It closes", Environment = "dev", Version = "0.4.15", ReporterName = "Alex", Created = _now.UtcDateTime };
             var body = QaText.IssueBody(report, null);
 
             body.Should().Contain("Vote never closed @​everyone").And.Contain("It closes").And.Contain("| Part | Removal votes |").And.Contain("| Environment | Dev |")

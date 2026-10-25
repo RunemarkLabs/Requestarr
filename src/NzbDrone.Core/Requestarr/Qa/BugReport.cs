@@ -51,7 +51,7 @@ namespace Requestarr.Core.Qa
         public string Version { get; set; }
         public string ReporterDiscordId { get; set; }
         public string ReporterName { get; set; }
-        public DateTimeOffset Created { get; set; }
+        public DateTime Created { get; set; }
         public string ChecklistItemKey { get; set; }
         public BugReportFiling Filing { get; set; }
         public int? IssueNumber { get; set; }

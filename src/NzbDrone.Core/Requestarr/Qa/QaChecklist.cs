@@ -105,7 +105,7 @@ namespace Requestarr.Core.Qa
         public QaItemState State { get; set; }
         public string ByDiscordUserId { get; set; }
         public string ByName { get; set; }
-        public DateTimeOffset? At { get; set; }
+        public DateTime? At { get; set; }
         public int? BugReportId { get; set; }
         public string MessageId { get; set; }
     }

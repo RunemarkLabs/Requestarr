@@ -98,7 +98,7 @@ namespace Requestarr.Core.Qa
                     Version = Changelog.Release(BuildInfo.Version).ToString(),
                     ReporterDiscordId = discordUserId.ToString(),
                     ReporterName = reporterName,
-                    Created = now,
+                    Created = now.UtcDateTime,
                     ChecklistItemKey = item?.Key,
                     Filing = !_settings.FileIssues ? BugReportFiling.Off : _settings.Token == null ? BugReportFiling.NoToken : BugReportFiling.Failed,
                     ChannelId = channel.ToString()

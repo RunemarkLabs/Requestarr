@@ -41,7 +41,7 @@ namespace Requestarr.Core.Qa
         public const string ItemGone = "That item isn't on the checklist any more.";
         public const string NoChannel = "The bug reports channel isn't set up yet. Try again in a minute.";
 
-        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTimeOffset? completedAt)
+        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTime? completedAt)
         {
             var which = versions.Count == 0 ? "nothing to test" : versions.Count == 1 ? $"version {versions[0]}" : $"versions {string.Join(", ", versions)}";
             var status = total == 0
@@ -88,7 +88,7 @@ namespace Requestarr.Core.Qa
             $"**Bug report #{report.Id}** · {BugReportComponents.NameOf(report.Component)}\n" +
             $"**What happened:** {Plain(report.WhatHappened)}\n" +
             (string.IsNullOrWhiteSpace(report.Expected) ? string.Empty : $"**Expected:** {Plain(report.Expected)}\n") +
-            $"-# {EnvironmentName(report.Environment)} · Requestarr {report.Version} · <t:{report.Created.ToUnixTimeSeconds()}:f> · reported by {Plain(report.ReporterName)}\n" +
+            $"-# {EnvironmentName(report.Environment)} · Requestarr {report.Version} · <t:{Unix(report.Created)}:f> · reported by {Plain(report.ReporterName)}\n" +
             Filing(report);
 
         public static string Filing(BugReport report) => report.Filing switch
@@ -139,7 +139,10 @@ namespace Requestarr.Core.Qa
             _ => "Production"
         };
 
-        private static string Stamp(DateTimeOffset? at) => at.HasValue ? $"<t:{at.Value.ToUnixTimeSeconds()}:R>" : string.Empty;
+        private static string Stamp(DateTime? at) => at.HasValue ? $"<t:{Unix(at.Value)}:R>" : string.Empty;
+
+        // Stored times are UTC.
+        private static long Unix(DateTime at) => new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeSeconds();
 
         private static string ReportLink(BugReport report) => report.IssueUrl != null ? $"[bug report #{report.Id}]({report.IssueUrl})" : $"bug report #{report.Id}";
 

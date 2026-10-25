@@ -86,7 +86,7 @@ namespace Requestarr.Core.Test.Qa
                 new Lazy<IGuildSetupService>(() => guildSetup),
                 new Lazy<IUserManagementService>(() => null),
                 new Lazy<IPanelService>(() => panels),
-                new Lazy<IRequestFeed>(() => null),
+                new Lazy<IRequestFeed>(() => Mocker.GetMock<IRequestFeed>().Object),
                 new Lazy<IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
@@ -108,8 +108,16 @@ namespace Requestarr.Core.Test.Qa
             var stateDir = Environment.GetEnvironmentVariable("LIVE_QA_STATE_DIR") ?? Path.Combine(Path.GetTempPath(), "requestarr-live-qa");
             Directory.CreateDirectory(stateDir);
 
+            // Warnings and errors (a handler that failed, GitHub refusing) are printed at the end.
+            var problems = new NLog.Targets.MemoryTarget("live-qa") { Layout = "${level}: ${logger}: ${message} ${exception:format=tostring}" };
+            LogManager.Configuration ??= new NLog.Config.LoggingConfiguration();
+            LogManager.Configuration.AddRule(NLog.LogLevel.Warn, NLog.LogLevel.Fatal, problems);
+            LogManager.ReconfigExistingLoggers();
+
             await host.StartAsync(settings.Current);
             await host.WaitUntilReadyAsync(TimeSpan.FromSeconds(60));
+            ulong? membersRole = null;
+            IUser member = null;
 
             try
             {
@@ -124,17 +132,25 @@ namespace Requestarr.Core.Test.Qa
                 var channels = await rest.GetChannelsAsync();
                 var adminGroup = channels.OfType<ICategoryChannel>().Single(c => c.Name == ChannelLayout.AdminCategoryName);
                 var usersGroup = channels.OfType<ICategoryChannel>().Single(c => c.Name == ChannelLayout.UsersCategoryName);
-                var member = LiveTestMembers.Pick(await rest.GetUsersAsync().FlattenAsync())[0];
+                member = LiveTestMembers.Pick(await rest.GetUsersAsync().FlattenAsync())[0];
                 await guild.DownloadUsersAsync();
                 var memberPerms = (ulong id) => guild.GetUser(member.Id).GetPermissions(guild.GetChannel(id));
 
-                // 1. The two channels, read back from Discord.
+                // 1. The two channels, read back from Discord. The test member, given the members role every onboarded
+                // member holds (taken away again at the end), sees the bug reports channel but can't type in it, and
+                // doesn't see the checklist.
                 var checklistRest = (ITextChannel)await host.Client.Rest.GetChannelAsync(checklistChannel);
                 var reportsRest = (ITextChannel)await host.Client.Rest.GetChannelAsync(reportsChannel);
-                Log($"[channels] #{checklistRest.Name} in {(checklistRest.CategoryId == adminGroup.Id ? adminGroup.Name : "?")}; the test member sees it: {memberPerms(checklistChannel).ViewChannel}");
-                Log($"[channels] #{reportsRest.Name} in {(reportsRest.CategoryId == usersGroup.Id ? usersGroup.Name : "?")}; the test member sees it: {memberPerms(reportsChannel).ViewChannel}, can type: {memberPerms(reportsChannel).SendMessages}");
+                Log($"[channels] #{checklistRest.Name} in {(checklistRest.CategoryId == adminGroup.Id ? adminGroup.Name : "?")}; #{reportsRest.Name} in {(reportsRest.CategoryId == usersGroup.Id ? usersGroup.Name : "?")}");
+                Log($"[channels] the test member before they're a member: sees the checklist {memberPerms(checklistChannel).ViewChannel}, sees bug reports {memberPerms(reportsChannel).ViewChannel}");
+                membersRole = ulong.Parse(config.MembersRoleId);
+                await gateway.AddRoleToMemberAsync(member.Id, membersRole.Value);
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                Log($"[channels] the test member with the members role: sees the checklist {memberPerms(checklistChannel).ViewChannel}, sees bug reports {memberPerms(reportsChannel).ViewChannel}, can type there {memberPerms(reportsChannel).SendMessages}");
                 checklistRest.CategoryId.Should().Be(adminGroup.Id);
                 reportsRest.CategoryId.Should().Be(usersGroup.Id);
+                memberPerms(checklistChannel).ViewChannel.Should().BeFalse();
+                (memberPerms(reportsChannel).ViewChannel, memberPerms(reportsChannel).SendMessages).Should().Be((true, false));
 
                 // 2. The checklist as posted: a summary, then one card per item with Passes and Failing.
                 var entries = checklist.State().Items;
@@ -187,6 +203,9 @@ namespace Requestarr.Core.Test.Qa
                     .WithField(QaRoutes.WhatField, "Live check: a report from the test member.")
                     .WithField(QaRoutes.ExpectedField, "It reaches the bug reports channel (this is a test; it will be closed).")));
                 Log($"[reports] the test member's report: \"{memberSent.LastReply.Content}\"");
+
+                // The panel moves below new posts a few seconds after them.
+                await Task.Delay(TimeSpan.FromSeconds(8));
                 var cards = (await reportsRest.GetMessagesAsync(20).FlattenAsync()).Where(m => m.Author.Id == host.Client.CurrentUser.Id).OrderBy(m => m.Id).ToList();
                 foreach (var m in cards)
                 {
@@ -221,7 +240,17 @@ namespace Requestarr.Core.Test.Qa
             }
             finally
             {
+                if (membersRole != null)
+                {
+                    await gateway.RemoveRoleFromMemberAsync(member.Id, membersRole.Value);
+                }
+
                 await host.StopAsync();
+
+                foreach (var problem in problems.Logs.Where(l => !l.Contains("Discord.Net")))
+                {
+                    Log("[log] " + problem);
+                }
             }
         }
 

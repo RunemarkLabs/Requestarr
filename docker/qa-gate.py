@@ -44,6 +44,10 @@ def main(argv):
     as_json = "--json" in argv
     try:
         data = checklist()
+    except urllib.error.HTTPError as error:
+        reason = 'it runs a Requestarr from before the QA checklist' if error.code == 404 else 'HTTP %d' % error.code
+        print('qa-gate: the stack has no QA checklist to read (%s).' % reason, file=sys.stderr)
+        return 2
     except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
         print("qa-gate: couldn't read the checklist from the stack (%s). Is it running?" % type(error).__name__, file=sys.stderr)
         return 2
@@ -56,12 +60,12 @@ def main(argv):
         print("qa-gate: couldn't list the open issues on GitHub with gh (%s)." % type(error).__name__, file=sys.stderr)
         return 2
 
-    unfiled = [r for r in data["bugReports"] if r["filing"] != "Filed"]
+    unfiled = [r for r in data.get("bugReports", []) if r.get("filing") != "Filed"]
     complete = state["complete"]
     clear = complete and state["failing"] == 0 and not issues
     verdict = {
         "clear": clear, "environment": state["environment"], "versions": versions, "total": state["total"], "passed": state["passed"],
-        "failing": state["failing"], "complete": complete, "completedBy": state["completedBy"], "completedAt": state["completedAt"],
+        "failing": state["failing"], "complete": complete, "completedBy": state.get("completedBy"), "completedAt": state.get("completedAt"),
         "openIssues": [{"number": i["number"], "title": i["title"], "url": i["url"]} for i in issues],
         "unfiledReports": [r["id"] for r in unfiled],
     }
@@ -72,7 +76,7 @@ def main(argv):
 
     print("QA checklist (%s server) for %s: %d of %d passed, %d failing%s." % (
         state["environment"], ", ".join(versions) or "no versions", state["passed"], state["total"], state["failing"],
-        ", complete, the last item passed by %s at %s" % (state["completedBy"], state["completedAt"]) if complete else ""))
+        ", complete, the last item passed by %s at %s" % (state.get("completedBy"), state.get("completedAt")) if complete else ""))
     for item in state["items"]:
         if item["state"] != "Passed":
             print("  %-8s %s: %s%s" % (item["state"].lower(), item["version"], item["name"], " (%s)" % item["issueUrl"] if item.get("issueUrl") else ""))
