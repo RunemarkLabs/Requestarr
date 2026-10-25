@@ -60,6 +60,29 @@ def automatic(update_type):
     return update_type in ("version-update:semver-patch", "version-update:semver-minor")
 
 
+def _version(text):
+    numbers = re.findall(r"\d+", text.lstrip("vV"))[:3]
+    return tuple(int(n) for n in numbers) + (0,) * (3 - len(numbers)) if numbers else None
+
+
+def size_from_text(text):
+    """The biggest change among the "from A to B" lines of Dependabot's commit message, named the way fetch-metadata
+    names it, for when fetch-metadata can't read the message (Dependabot's newer grouped format)."""
+    pairs = re.findall(r"(?:Updates|Bump) `?[^`\s]+`? from (\S+) to (\S+?)(?:\s|$)", text)
+    rank = 0
+    for old, new in pairs:
+        a, b = _version(old), _version(new)
+        if a is None or b is None:
+            return ""
+        rank = max(rank, 3 if a[0] != b[0] else 2 if a[1] != b[1] else 1)
+    return {1: "version-update:semver-patch", 2: "version-update:semver-minor", 3: "version-update:semver-major"}.get(rank, "")
+
+
+def group_from_text(text):
+    match = re.search(r"Bumps the (\S+) group", text)
+    return match.group(1) if match else ""
+
+
 def is_security(group):
     return bool(group) and (group.endswith("security") or group in DEFAULT_SECURITY_GROUPS)
 
@@ -166,6 +189,10 @@ def sort():
     ecosystem = os.environ.get("ECOSYSTEM", "")
     names = [d["dependencyName"] for d in json.loads(os.environ.get("DEPENDENCIES") or "[]")]
     ensure_labels(repo)
+    if not update_type or not group:
+        commits = json.loads(gh("api", "repos/%s/pulls/%s/commits" % (repo, number), "--jq", "[.[].commit.message]"))
+        update_type = update_type or size_from_text("\n".join(commits))
+        group = group or group_from_text("\n".join(commits))
 
     labels = []
     if is_security(group):
@@ -287,6 +314,18 @@ tool-dep@~1.0.0:
 '''
 
 
+GROUPED = """Bump fast-uri
+
+Bumps the npm_and_yarn group with 2 updates in the / directory: [fast-uri](x) and [ajv](y).
+
+
+Updates `fast-uri` from 3.1.8 to 3.1.9
+- [Release notes](x)
+
+Updates `ajv` from 8.17.1 to 8.18.0
+"""
+
+
 def self_test():
     package = json.dumps({"dependencies": {"app-dep": "^1.0.0"}, "devDependencies": {"tool": "3.0.0"}})
     checks = [
@@ -304,6 +343,13 @@ def self_test():
          == "# Changelog\n\nintro\n\n## 0.4.3 (2026-10-26)\n\n## 0.4.2 (2026-10-25)\n", "a heading-only version"),
         ("### For admins\n- **Security update:**" in with_section("## 0.1.0 (x)\n", (0, 1, 1), "d", SECURITY_LINE),
          "a security fix that ships tells admins"),
+        (size_from_text(GROUPED) == "version-update:semver-minor", "a grouped update is sized by its biggest change"),
+        (size_from_text("Updates `fast-uri` from 3.1.8 to 3.1.9\n") == "version-update:semver-patch", "a patch update"),
+        (size_from_text("Bump actions/checkout from 4 to 5\n") == "version-update:semver-major", "a major update"),
+        (size_from_text("Bump node from 20-bookworm-slim to 24-bookworm-slim") == "version-update:semver-major",
+         "an image tag"),
+        (size_from_text("nothing to size") == "", "no versions, no size"),
+        (group_from_text(GROUPED) == "npm_and_yarn" and group_from_text("Bump x") == "", "the group from the message"),
         (with_assembly_version("<AssemblyVersion>0.4.2.*</AssemblyVersion>", (0, 4, 3))
          == "<AssemblyVersion>0.4.3.*</AssemblyVersion>", "the assembly version follows"),
     ]
