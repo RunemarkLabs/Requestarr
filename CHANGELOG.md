@@ -6,6 +6,13 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.10 (2026-10-25)
+
+### For admins
+- **Dark theme icons:** in the dark theme, Requestarr's icons now sit on the same charcoal gray as the app's header instead of black, so they no longer look like a hole in the page.
+- **Bigger logo in the web app:** the logo in the header and on the sign-in page is now full height, with the R beside a colored bar naming the environment (Dev, QA or Beta), so it's easier to see at a glance.
+- **Version on the logo:** on your live install, the header and sign-in logo shows the version you're running on a green bar, and it updates by itself when you upgrade.
+
 ## 0.4.9 (2026-10-25)
 
 ## 0.4.8 (2026-10-25)

@@ -2,6 +2,7 @@ using System;
 using Microsoft.AspNetCore.Http;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
+using Requestarr.Http.Frontend.Mappers;
 
 namespace Requestarr.Http.Middleware
 {
@@ -47,6 +48,12 @@ namespace Requestarr.Http.Middleware
             }
 
             if (path.EndsWith("/initialize.json"))
+            {
+                return false;
+            }
+
+            // The production logo carries the running version, so it must change on upgrade.
+            if (path.EndsWith("/" + VersionLogoMapper.FileName, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }

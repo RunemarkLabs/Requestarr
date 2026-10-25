@@ -17,7 +17,7 @@ namespace Requestarr.Core.Test.Welcome
         private static readonly string[] Files =
         {
             "android-chrome-192x192.png", "android-chrome-512x512.png", "apple-touch-icon.png", "favicon-16x16.png", "favicon-32x32.png", "favicon.ico",
-            "logo.png", "mstile-144x144.png", "mstile-150x150.png", "mstile-310x150.png", "mstile-310x310.png", "mstile-70x70.png"
+            "logo.png", "logo-header.png", "mstile-144x144.png", "mstile-150x150.png", "mstile-310x150.png", "mstile-310x310.png", "mstile-70x70.png"
         };
 
         private static string Icons(params string[] parts) => Item4To6Fixture.RepoFile(new[] { "frontend", "src", "Content", "Images", "Icons" }.Concat(parts).ToArray());
@@ -65,7 +65,7 @@ namespace Requestarr.Core.Test.Welcome
                     .And.NotContain("#7048e8", "the placeholder purple is gone");
             }
 
-            login.Should().Contain("/Content/Images/Icons/__ICON_THEME__/__ICON_SET__/logo.png");
+            login.Should().Contain("/Content/Images/Icons/__ICON_THEME__/__ICON_SET__/__HEADER_LOGO__");
 
             foreach (var theme in new[] { "light", "dark" })
             {

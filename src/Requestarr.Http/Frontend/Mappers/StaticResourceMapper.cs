@@ -33,7 +33,8 @@ namespace Requestarr.Http.Frontend.Mappers
             resourceUrl = resourceUrl.ToLowerInvariant();
 
             if (resourceUrl.StartsWith("/content/manifest") ||
-                resourceUrl.StartsWith("/content/browserconfig"))
+                resourceUrl.StartsWith("/content/browserconfig") ||
+                VersionLogoMapper.Handles(resourceUrl))
             {
                 return false;
             }
