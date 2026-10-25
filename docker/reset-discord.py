@@ -2,7 +2,8 @@
 
 Deletes: Requestarr's channel groups ("Requestarr Admin", "Requestarr Users" and its numbered ones, and the older
 "Requestarr Requests") and every channel in them (including archived ones), #requestarr-admin, #requestarr-feed,
-#requestarr-announcements, #requestarr-welcome and #requestarr-access-blocked wherever they are, the per-user
+#requestarr-announcements, #requestarr-welcome, #requestarr-access-blocked and members' request channels wherever they
+are, the per-user
 "requestarr-*" roles and the shared "Requestarr Members" and "Requestarr Blocked" roles.
 Keeps: the bot's own role, the Requestarr Admin role, and anything else in the server.
 The "what's new" posts go with their channels and are rebuilt when Requestarr starts again, as that stack keeps them
@@ -52,7 +53,9 @@ def main():
 
     channels = call("GET", f"/guilds/{guild}/channels")
     categories = {c["id"] for c in channels if c["type"] == 4 and c["name"].startswith(CATEGORIES)}
-    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] in ADMIN_CHANNELS)]
+    # Members' request channels too, wherever they are: one left loose at the top level after a group was deleted.
+    member = lambda c: c["type"] == 0 and c["name"].startswith(("requests-", "archived-requests-"))
+    doomed = [c for c in channels if c["parent_id"] in categories or (c["type"] == 0 and c["name"] in ADMIN_CHANNELS) or member(c)]
     doomed += [c for c in channels if c["id"] in categories]
 
     for channel in doomed:
@@ -65,7 +68,7 @@ def main():
             print(f"deleted role {role['name']}")
 
     left = call("GET", f"/guilds/{guild}/channels")
-    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] in ADMIN_CHANNELS]
+    remaining = [c["name"] for c in left if c["parent_id"] in categories or c["id"] in categories or c["name"] in ADMIN_CHANNELS or member(c)]
     print(f"Requestarr channels left in the server: {len(remaining)}")
     sys.exit(1 if remaining else 0)
 
