@@ -2,9 +2,9 @@ name: Dependency updates
 
 # Dependabot's pull requests into dev (docs/development.md#dependency-updates; .github/dependency_updates.py does the
 # work). A new update is labelled: patch and minor "automatic update", major "needs review" (held, with a comment).
-# Automatic updates go one at a time: the next version and its changelog section are added, build runs on that commit,
-# and GitHub merges it once build passes. This runs again when dev moves and every hour, because a merge this workflow
-# enabled doesn't start workflows itself, so a waiting update always carries a version above dev's, qa's and staging's.
+# Automatic updates go one at a time: the next version and its changelog section are added, build is started on that
+# commit and waited for, then the update is merged (or held if build failed) and the next one starts. It also runs when
+# dev moves and every hour, so a waiting update always carries a version above dev's, qa's and staging's.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
@@ -52,7 +52,7 @@ jobs:
       always() && needs.sort.result != 'failure' &&
       (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
