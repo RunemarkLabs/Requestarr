@@ -9,7 +9,10 @@
 #
 # Backups go to ./backups (one per update; delete old ones when you like).
 set -euo pipefail
+# Git Bash on Windows would rewrite the container paths below (/config, /backups); this changes nothing elsewhere.
+export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")"
+HERE="$(pwd -W 2>/dev/null || pwd)"
 
 VOLUME=requestarr-beta_requestarr-config
 IMAGE=ghcr.io/runemarklabs/requestarr
@@ -53,17 +56,25 @@ pin() {
     mv .env.new .env
 }
 
+# Prints the backup's file name, or fails (printing nothing) when there's no backup to show for it.
 backup() {
     local version="$1" file
     mkdir -p backups
     file="backups/requestarr-config-${version:-unknown}-$(date +%Y%m%d-%H%M%S).tar.gz"
-    docker run --rm -v "$VOLUME:/config:ro" -v "$PWD/backups:/backups" busybox:stable \
-        tar czf "/backups/$(basename "$file")" -C /config .
+    docker run --rm -v "$VOLUME:/config:ro" -v "$HERE/backups:/backups" busybox:stable \
+        tar czf "/backups/$(basename "$file")" -C /config . >&2 || return 1
+    [ -s "$file" ] || return 1
     echo "$file"
 }
 
+# docker compose, showing its output only when it fails.
+compose_quiet() {
+    local out
+    out=$(docker compose "$@" 2>&1) || { echo "$out" | tail -20 >&2; return 1; }
+}
+
 wait_healthy() {
-    docker compose up -d --wait requestarr >/dev/null || die "Requestarr didn't come up healthy: docker compose logs requestarr"
+    compose_quiet up -d --wait requestarr || die "Requestarr didn't come up healthy: docker compose logs requestarr"
 }
 
 # Downloads an image. When it can't (the server is offline, or the package isn't public and Docker isn't logged in to
@@ -96,9 +107,12 @@ update() {
 
     if [ -n "$before" ]; then
         echo "Stopping Requestarr $before and backing up its data…"
-        docker compose stop requestarr >/dev/null
+        compose_quiet stop requestarr
         local file
-        file=$(backup "$before")
+        if ! file=$(backup "$before"); then
+            compose_quiet start requestarr || true
+            die "backing up Requestarr's data failed, so nothing was updated; Requestarr $before is running again"
+        fi
         printf '%s %s\n' "$before" "$file" > .previous-version
         echo "Backed up to $file"
     fi
@@ -115,8 +129,8 @@ rollback() {
 
     echo "Rolling back from $(running_version) to $version, with the data from $file…"
     fetch "$IMAGE:$version"
-    docker compose stop requestarr >/dev/null
-    docker run --rm -v "$VOLUME:/config" -v "$PWD/backups:/backups:ro" busybox:stable \
+    compose_quiet stop requestarr
+    docker run --rm -v "$VOLUME:/config" -v "$HERE/backups:/backups:ro" busybox:stable \
         sh -c "find /config -mindepth 1 -delete && tar xzf /backups/$(basename "$file") -C /config"
     pin "$version"
     wait_healthy
