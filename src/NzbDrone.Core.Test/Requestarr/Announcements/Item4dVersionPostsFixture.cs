@@ -12,7 +12,8 @@ namespace Requestarr.Core.Test.Announcements
 {
     // Task 4d item 7: the "what's new" posts are a standing record, kept in step with each environment. Production and
     // staging keep every version for good (Item3UpgradeFixture); QA shows what staging doesn't have yet and rebuilds
-    // after a reset; dev shows only the version running now.
+    // after a reset; dev shows only the version running now. Task 4e: each post is a one-line card; the lists below are
+    // the versions of the cards in each channel, oldest first.
     [TestFixture]
     public class Item4dVersionPostsFixture : DiscordScenario
     {
@@ -43,12 +44,12 @@ namespace Requestarr.Core.Test.Announcements
 
         private ulong UsersChannel => ulong.Parse(Config.AnnouncementsChannelId);
 
-        private List<string> AdminHeaders => Headers(AdminChannel, "📋");
+        private List<string> AdminHeaders => Cards(AdminChannel, VersionAudience.Admins);
 
-        private List<string> UserHeaders => Headers(UsersChannel, "✨");
+        private List<string> UserHeaders => Cards(UsersChannel, VersionAudience.Users);
 
-        private List<string> Headers(ulong channel, string mark) =>
-            Discord.Channels[channel].Messages.Select(m => m.Content).Where(c => c.StartsWith(mark)).Select(c => c.Split('\n')[0]).ToList();
+        private List<string> Cards(ulong channel, VersionAudience audience) =>
+            Discord.Channels[channel].Messages.Where(m => m.Embeds.Any()).Select(m => VersionCards.Parse(m.Embeds[0].Title, audience)?.ToString()).Where(v => v != null).ToList();
 
         private void Environment(string name, string staged = null)
         {
@@ -64,9 +65,9 @@ namespace Requestarr.Core.Test.Announcements
             await Service.PostVersionNotesAsync();
         }
 
-        private static string Admin(string version) => $"📋 **Requestarr {version}: what's new**";
+        private static string Admin(string version) => version;
 
-        private static string UserPost(string version) => $"✨ **What's new in Requestarr {version}**";
+        private static string UserPost(string version) => version;
 
         [Test]
         public void the_environment_decides_how_posts_are_kept()
@@ -172,13 +173,13 @@ namespace Requestarr.Core.Test.Announcements
         {
             Environment("qa");
             await StartOn("0.3.0");
-            var ids = Discord.Channels[AdminChannel].MessageIds.ToList();
+            var ids = Discord.Channels[UsersChannel].MessageIds.ToList();
+            Discord.Channels[UsersChannel].Messages.First().Embeds[0].Description.Should().Be("Requests", "the main change in a few words");
 
-            await StartOn("0.3.0", Text.Replace("ask for movies and TV.", "ask for movies and TV shows."));
+            await StartOn("0.3.0", Text.Replace("**Requests:**", "**Requesting:**"));
 
-            Discord.Channels[AdminChannel].MessageIds.Should().Equal(ids);
-            Discord.Channels[AdminChannel].Messages.Select(m => m.Content).Should().Contain(c => c.Contains("ask for movies and TV shows."));
-            Discord.Channels[UsersChannel].Messages.First().Content.Should().EndWith("ask for movies and TV shows.");
+            Discord.Channels[UsersChannel].MessageIds.Should().Equal(ids);
+            Discord.Channels[UsersChannel].Messages.First().Embeds[0].Description.Should().Be("Requesting");
         }
 
         [Test]
@@ -193,7 +194,7 @@ namespace Requestarr.Core.Test.Announcements
 
             Discord.Channels[AdminChannel].Messages.Select(m => m.Content).Should().Contain("⚠️ Sonarr (test) can't be reached.");
             AdminHeaders.Should().Equal(Admin("0.1.0"), Admin("0.2.0"), Admin("0.3.0"));
-            string.Join("\n", Discord.Channels[AdminChannel].Messages.Select(m => m.Content)).Should().NotContain("nothing this time").And.NotContain("Internal");
+            string.Join("\n", Discord.Channels[AdminChannel].Messages.Select(m => m.Content ?? string.Empty)).Should().NotContain("nothing this time").And.NotContain("Internal");
             UserHeaders.Should().Equal(UserPost("0.1.0"), UserPost("0.2.0"));
         }
 
@@ -215,10 +216,10 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
-        public async Task staging_never_removes_a_post()
+        public async Task staging_never_removes_a_card()
         {
             Environment("staging");
-            await Discord.SendMessageAsync(AdminChannel, new InteractionReply { Content = "📋 **Requestarr 0.0.9: what's new**\n**For admins**\n• Kept." });
+            await Discord.SendMessageAsync(AdminChannel, new InteractionReply { Embeds = new List<InteractionEmbed> { new() { Title = "Requestarr 0.0.9 · 1 change for admins" } } });
 
             await StartOn("0.2.0");
             await StartOn("0.3.0");
@@ -227,7 +228,27 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
-        public async Task a_long_post_is_kept_as_one_post_across_restarts()
+        public async Task staging_replaces_its_posts_from_before_cards_once_keeping_the_history()
+        {
+            Environment("staging");
+            await Discord.SendMessageAsync(AdminChannel, new InteractionReply { Content = "📋 **Requestarr 0.1.0: what's new**\n**For users**\n• Old." });
+            await Discord.SendMessageAsync(UsersChannel, new InteractionReply { Content = "✨ **What's new in Requestarr 0.1.0**\n• Old." });
+            var config = Config;
+            config.AnnouncedVersion = "0.2.0";
+            Mocker.Resolve<Requestarr.Core.Discord.IDiscordGuildConfigRepository>().Upsert(config);
+
+            await StartOn("0.2.0");
+            var ids = Discord.Channels[AdminChannel].MessageIds.ToList();
+            await StartOn("0.2.0");
+
+            AdminHeaders.Should().Equal(Admin("0.1.0"), Admin("0.2.0"));
+            UserHeaders.Should().Equal(UserPost("0.1.0"), UserPost("0.2.0"));
+            Discord.Channels[AdminChannel].Messages.Should().NotContain(m => m.Content != null && m.Content.StartsWith("📋"));
+            Discord.Channels[AdminChannel].MessageIds.Should().Equal(ids, "converted once");
+        }
+
+        [Test]
+        public async Task a_long_version_is_kept_as_one_card_across_restarts()
         {
             Environment("qa");
             var lines = string.Join("\n", Enumerable.Range(1, 60).Select(i => $"- **Change {i}:** with enough words to take some room in the message."));
@@ -238,7 +259,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.9.0", text);
 
             Discord.Channels[AdminChannel].MessageIds.Should().Equal(ids);
-            AdminHeaders.Should().HaveCountGreaterThan(1).And.OnlyContain(h => h.StartsWith(Admin("0.9.0")));
+            AdminHeaders.Should().ContainSingle("a long version is still one card").Which.Should().Be(Admin("0.9.0"));
         }
     }
 }

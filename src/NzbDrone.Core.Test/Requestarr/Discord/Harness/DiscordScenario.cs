@@ -34,6 +34,9 @@ namespace Requestarr.Core.Test.Discord.Harness
         protected FakeTmdb Tmdb { get; set; }
         protected TmdbSettingsStore TmdbKey { get; set; }
         protected InteractionHarness Harness { get; private set; }
+
+        // Media servers the admin has connected (none by default, as on a real server today).
+        protected FakeMediaServers ConnectedMediaServers { get; private set; }
         protected DiscordGuildConfig Config => Mocker.Resolve<IGuildSetupService>().GetConfig();
         protected ulong AdminChannel => ulong.Parse(Config.AdminChannelId);
 
@@ -68,6 +71,12 @@ namespace Requestarr.Core.Test.Discord.Harness
             Mocker.SetConstant<NzbDrone.Core.Configuration.IConfigRepository>(Mocker.Resolve<NzbDrone.Core.Configuration.ConfigRepository>());
             Mocker.SetConstant<NzbDrone.Core.Configuration.IConfigService>(Mocker.Resolve<NzbDrone.Core.Configuration.ConfigService>());
             Mocker.SetConstant<Requestarr.Core.Removals.IRemovalSettings>(Mocker.Resolve<Requestarr.Core.Removals.RemovalSettings>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestRepository>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IWelcomeGuardRepository>(Mocker.Resolve<Requestarr.Core.Access.WelcomeGuardRepository>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessSettings>(Mocker.Resolve<Requestarr.Core.Access.AccessSettings>());
+            Mocker.SetConstant<IOutageRepository>(Mocker.Resolve<OutageRepository>());
+            ConnectedMediaServers = new FakeMediaServers();
+            Mocker.SetConstant<IMediaServerConnections>(ConnectedMediaServers);
             UseBackends();
 
             // As on startup: instances that answer count as connected (users see their content types).
@@ -81,13 +90,15 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<Requestarr.Core.Admin.TroubleSource>(),
                 Mocker.Resolve<Requestarr.Core.Admin.PlexLinkSource>(),
                 Mocker.Resolve<Requestarr.Core.Admin.DownInstanceSource>(),
-                Mocker.Resolve<Requestarr.Core.Admin.RemovalSource>()
+                Mocker.Resolve<Requestarr.Core.Admin.RemovalSource>(),
+                Mocker.Resolve<Requestarr.Core.Admin.AccessRequestSource>()
             }));
             Mocker.SetConstant<Requestarr.Core.Announcements.IAnnouncementService>(Mocker.Resolve<Requestarr.Core.Announcements.AnnouncementService>());
             Mocker.SetConstant<IConnectionMonitor>(Mocker.Resolve<ConnectionMonitor>());
             Mocker.SetConstant<ICallerResolver>(Mocker.Resolve<CallerResolver>());
             Mocker.SetConstant<IPanelService>(Mocker.Resolve<PanelService>());
             Mocker.SetConstant<IUserManagementService>(Mocker.Resolve<UserManagementService>());
+            Mocker.SetConstant<Requestarr.Core.Access.IAccessRequestService>(Mocker.Resolve<Requestarr.Core.Access.AccessRequestService>());
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestFeed>(Mocker.Resolve<RequestFeed>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
@@ -106,7 +117,10 @@ namespace Requestarr.Core.Test.Discord.Harness
                 Mocker.Resolve<SeasonsHandler>(),
                 Mocker.Resolve<AdminRequestsHandler>(),
                 Mocker.Resolve<OutageHandler>(),
-                Mocker.Resolve<RemovalHandler>());
+                Mocker.Resolve<RemovalHandler>(),
+                Mocker.Resolve<WelcomeHandler>(),
+                Mocker.Resolve<AccessRequestHandler>(),
+                Mocker.Resolve<VersionCardHandler>());
         }
 
         // Fake The Movie Database (no key) by default; live fixtures may use the real client.
@@ -340,6 +354,25 @@ namespace Requestarr.Core.Test.Discord.Harness
         protected ulong RoleOf(ulong discordId) => ulong.Parse(UserFor(discordId).DiscordRoleId);
 
         protected FakeDiscordGuild.FakeChannel ChannelFor(ulong discordId) => Discord.Channels[ChannelOf(discordId)];
+
+        // The panel Requestarr keeps in a channel, found by the ID it stored (panels aren't pinned since task 4e).
+        protected ulong? PanelIdIn(FakeDiscordGuild.FakeChannel channel)
+        {
+            var config = Config;
+            var id = channel.Id.ToString();
+            var stored = id == config.AdminChannelId ? config.AdminPanelMessageId
+                : id == config.WelcomeChannelId ? config.WelcomeMessageId
+                : id == config.BlockedChannelId ? config.BlockedMessageId
+                : Mocker.Resolve<IRequestarrUserRepository>().FindByChannel(id)?.PanelMessageId;
+
+            return ulong.TryParse(stored, out var panel) && channel.MessageIds.Contains(panel) ? panel : null;
+        }
+
+        protected Requestarr.Core.Discord.Interactions.InteractionReply PanelIn(FakeDiscordGuild.FakeChannel channel) =>
+            PanelIdIn(channel) is { } id ? channel.Messages[channel.MessageIds.IndexOf(id)] : null;
+
+        // Every message in a channel that is a panel of this kind (counted to show there's only one).
+        protected int PanelsIn(FakeDiscordGuild.FakeChannel channel, string route) => channel.Messages.Count(m => m.Buttons.Any(b => b.CustomId == route));
 
         protected PermissionOverwrite OverwriteFor(FakeDiscordGuild.FakeChannel channel, ulong target) => channel.Overwrites.SingleOrDefault(o => o.TargetId == target);
 
