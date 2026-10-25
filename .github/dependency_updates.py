@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 AUTOMATIC = "automatic update"
 REVIEW = "needs review"
@@ -266,9 +267,21 @@ def sort():
     print("#%s: %s %s, group %s, %s -> %s" % (number, ecosystem, update_type, group or "none", ", ".join(names), labels))
 
 
-def build_runs(repo, sha):
-    return json.loads(gh("run", "list", "--repo", repo, "--workflow", "build.yml", "--commit", sha,
+def dispatched_builds(repo, sha):
+    # Only the build this workflow starts counts: its commit can also queue pull request runs that wait for an
+    # approval nobody gives ("action_required"), and those aren't failures.
+    runs = json.loads(gh("run", "list", "--repo", repo, "--workflow", "build.yml", "--commit", sha,
                          "--json", "status,conclusion,event,databaseId"))
+    return [r for r in runs if r["event"] == "workflow_dispatch"]
+
+
+def wait_for_build(repo, sha, minutes=45):
+    deadline = time.time() + minutes * 60
+    while True:
+        runs = dispatched_builds(repo, sha)
+        if (runs and all(r["status"] == "completed" for r in runs)) or time.time() > deadline:
+            return runs
+        time.sleep(30)
 
 
 def update():
@@ -331,23 +344,20 @@ def update_next(repo):
         print("#%d: version %d.%d.%d added" % ((number,) + version))
 
     sha = git("rev-parse", "HEAD")
-    # Only the build this workflow starts counts: its push can also queue pull request runs that wait for an approval
-    # nobody gives ("action_required"), and those aren't failures.
-    runs = [r for r in build_runs(repo, sha) if r["event"] == "workflow_dispatch"]
-    if any(r["status"] == "completed" and r["conclusion"] in FAILED for r in runs) \
-            and not any(r["conclusion"] == "success" for r in runs):
+    if not dispatched_builds(repo, sha):
+        # Commits made by this workflow don't start workflows, so build is started here on this commit.
+        gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
+        print("#%d: build started on %s" % (number, sha[:7]))
+    # Wait for it here: GitHub starts no workflow when a build this workflow started finishes, nor when auto-merge
+    # that it turned on merges, and the hourly run can come late or not at all.
+    runs = wait_for_build(repo, sha)
+    if any(r["conclusion"] in FAILED for r in runs) and not any(r["conclusion"] == "success" for r in runs):
         hold(repo, number, "build failed on it.")
         return True
     if any(r["conclusion"] == "success" for r in runs):
-        # Build passed on this commit (this run was started when it finished): merge now rather than wait for
-        # auto-merge, whose merge into dev wouldn't start this workflow again for the next update.
         if subprocess.run(["gh", "pr", "merge", str(number), "--repo", repo, "--merge"]).returncode == 0:
             print("#%d: build passed, merged into dev" % number)
             return True
-    elif not any(r["status"] != "completed" for r in runs):
-        # Commits pushed by this workflow don't start workflows, so build is started here on this commit.
-        gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
-        print("#%d: build started on %s" % (number, sha[:7]))
     gh("pr", "merge", str(number), "--repo", repo, "--auto", "--merge")
     print("#%d: merges on its own once build passes" % number)
     return False
