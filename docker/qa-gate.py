@@ -23,6 +23,10 @@ REPOSITORY = os.environ.get("BUG_REPORTS_REPOSITORY", "RunemarkLabs/Requestarr")
 
 
 def checklist():
+    # A saved answer instead of the stack (the live test writes one at each step, in the same format).
+    if os.environ.get("QA_GATE_FILE"):
+        with open(os.environ["QA_GATE_FILE"], encoding="utf-8") as handle:
+            return json.load(handle)
     url = os.environ["QA_GATE_URL"].rstrip("/") + "/api/v1/qa/checklist"
     request = urllib.request.Request(url, headers={"X-Api-Key": os.environ.get("REQUESTARR_API_KEY", ""), "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=15) as response:
