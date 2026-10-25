@@ -24,9 +24,11 @@ namespace Requestarr.Core.Test.Welcome
         [Test]
         public void the_welcome_message_says_what_requestarr_is_and_has_request_access_only()
         {
-            WelcomeMessage.Content.Should().StartWith("**Welcome to Requestarr**").And.Contain("movies and TV shows").And.Contain("private channel").And.Contain(ChannelLayout.UsersCategoryName);
-            WelcomeMessage.Buttons.Select(b => (b.Label, b.CustomId)).Should().Equal((DiscordText.RequestAccessLabel, WelcomeRoutes.Request));
-            PanelIn(Discord.Channels[BlockedChannel]).Content.Should().Be(DiscordText.BlockedMessage);
+            WelcomeMessage.Cards.Single().Text.Should().StartWith("# Welcome to Requestarr\n").And.Contain("movies and TV shows").And.Contain("private channel").And.Contain(ChannelLayout.UsersCategoryName);
+            WelcomeMessage.Cards.Single().Color.Should().Be(DiscordText.WelcomeColor);
+            WelcomeMessage.Cards.Single().Buttons.Select(b => (b.Label, b.CustomId)).Should().Equal((DiscordText.RequestAccessLabel, WelcomeRoutes.Request));
+            PanelIn(Discord.Channels[BlockedChannel]).Cards.Single().Text.Should().Be(DiscordText.BlockedMessage).And.StartWith("## ");
+            PanelIn(Discord.Channels[BlockedChannel]).Cards.Single().Color.Should().Be(DiscordText.BlockedColor);
             Discord.Channels[WelcomeChannel].Messages.Should().ContainSingle("the one message the bot keeps current");
         }
 
@@ -36,8 +38,8 @@ namespace Requestarr.Core.Test.Welcome
             ConnectedMediaServers.Servers.Add(MediaServerProvider.Plex);
             await Mocker.Resolve<IPanelService>().EnsureWelcomeAsync();
 
-            WelcomeMessage.Buttons.Select(b => b.CustomId).Should().Equal(WelcomeRoutes.Request, $"{WelcomeRoutes.Media}:plex");
-            WelcomeMessage.Content.Should().Contain("Plex");
+            WelcomeMessage.Cards.Single().Buttons.Select(b => b.CustomId).Should().Equal(WelcomeRoutes.Request, $"{WelcomeRoutes.Media}:plex");
+            WelcomeMessage.Cards.Single().Text.Should().Contain("Plex");
         }
 
         [Test]
@@ -80,6 +82,37 @@ namespace Requestarr.Core.Test.Welcome
             LastRequest.Status.Should().Be(AccessRequestState.Approved);
             AdminRoom.Messages.Single(m => m.Content != null && m.Content.StartsWith("🙋")).Buttons.Should().BeEmpty("the card shows the outcome instead");
             Mocker.Resolve<IAdminQueue>().Items().Should().NotContain(i => i.Key == $"a{request.Id}");
+        }
+
+        // Admins ask the same way and get their own request channel straight away: what they picked on automatic
+        // approval, nothing else, and no card in the admin channel waiting on themselves.
+        [Test]
+        public async Task an_admin_asking_gets_their_own_channel_straight_away()
+        {
+            var run = await AskForAccess(FakeDiscordGuild.Owner, null, "movie");
+
+            var user = UserFor(FakeDiscordGuild.Owner);
+            user.PrivateChannelId.Should().NotBeNull("admins make their requests in their own channel, like everyone");
+            run.LastReply.Content.Should().Be(DiscordText.AdminChannelReady(user.PrivateChannelId));
+            var access = Mocker.Resolve<IUserMediaAccessRepository>().GetForUser(user.Id).ToDictionary(a => a.ContentType, a => a.State);
+            (access[ContentType.Movie], access[ContentType.Tv]).Should().Be((AccessState.AutoApprove, AccessState.Off));
+            LastRequest.Status.Should().Be(AccessRequestState.Approved);
+            AdminRoom.Messages.Should().NotContain(m => m.Content != null && m.Content.StartsWith("🙋"), "nothing for an admin to decide");
+            Mocker.Resolve<IAdminQueue>().Items().Should().BeEmpty();
+            LastDirectMessage(FakeDiscordGuild.Owner).Should().BeNull("they were told right there");
+        }
+
+        [Test]
+        public async Task an_admin_requesting_in_the_admin_channel_is_pointed_to_their_own_channel()
+        {
+            var before = await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("request").WithOption("type", "movie").WithOption("query", "dune")));
+            before.LastReply.Content.Should().Be(DiscordText.AdminRequestsInOwnChannel(null));
+            before.LastReply.Ephemeral.Should().BeTrue();
+
+            await AskForAccess(FakeDiscordGuild.Owner, null, "movie");
+            var after = await Harness.SendAsync(AsAdmin(FakeInteraction.SlashCommand("request").WithOption("type", "movie").WithOption("query", "dune")));
+
+            after.LastReply.Content.Should().Be(DiscordText.AdminRequestsInOwnChannel(UserFor(FakeDiscordGuild.Owner).PrivateChannelId));
         }
 
         [Test]

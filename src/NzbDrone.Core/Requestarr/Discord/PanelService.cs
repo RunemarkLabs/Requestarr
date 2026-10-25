@@ -206,10 +206,10 @@ namespace Requestarr.Core.Discord
 
             buttons.AddRange(media.Select(p => new InteractionButton { CustomId = $"{WelcomeRoutes.Media}:{p.ToString().ToLowerInvariant()}", Label = DiscordText.MediaAccessLabel(p), Style = ButtonStyle.Secondary }));
 
-            return new InteractionReply { Content = DiscordText.WelcomeMessage(types, media), Buttons = buttons };
+            return new InteractionReply { Cards = { new InteractionCard { Color = DiscordText.WelcomeColor, Text = DiscordText.WelcomeMessage(types, media), Buttons = buttons } } };
         }
 
-        public static InteractionReply BlockedPanel() => new() { Content = DiscordText.BlockedMessage };
+        public static InteractionReply BlockedPanel() => new() { Cards = { new InteractionCard { Color = DiscordText.BlockedColor, Text = DiscordText.BlockedMessage } } };
 
         // Pending queue shows how many things wait on the admin ("Pending queue (3)").
         public static InteractionReply AdminPanel(int waiting = 0) => new()
@@ -310,6 +310,8 @@ namespace Requestarr.Core.Discord
 
                 if (keep.HasValue && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
                 {
+                    // Gone, or an older message that can't take the new layout: a new one replaces it.
+                    copies.Add(keep.Value);
                     keep = null;
                 }
 
@@ -321,7 +323,7 @@ namespace Requestarr.Core.Discord
                 {
                     // The new one first, so the channel is never without its panel; it doesn't ping or notify anyone.
                     var old = keep.Value;
-                    keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Quiet = true });
+                    keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Cards = reply.Cards, Quiet = true });
                     copies.Add(old);
                 }
 
@@ -386,7 +388,7 @@ namespace Requestarr.Core.Discord
 
             if (config.BlockedChannelId == id)
             {
-                return new Panel(config.BlockedMessageId, BlockedPanel, m => m.Content == DiscordText.BlockedMessage, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
+                return new Panel(config.BlockedMessageId, BlockedPanel, m => m.Content?.Contains(DiscordText.BlockedTitle) == true, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
             }
 
             var user = _users.FindByChannel(id);

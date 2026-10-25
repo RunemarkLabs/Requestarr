@@ -28,10 +28,11 @@ namespace Requestarr.Core.Announcements
     // (only those with something in them), one line per change.
     public static class VersionCards
     {
-        // Discord's limits: 4,096 characters in an embed's text, 6,000 in all of a message's embeds, ten embeds.
-        public const int EmbedTextLength = 4096;
-        public const int MessageEmbedsLength = 6000;
-        public const int EmbedsPerMessage = 10;
+        // Discord's limits for cards: 4,000 characters of text in all of a message's cards (a heading and a little room
+        // kept aside), and no more than forty parts to a message (a card is two).
+        public const int MessageTextLength = 4000;
+        public const int CardTextLength = 3700;
+        public const int CardsPerMessage = 10;
 
         public const uint UsersColor = 0x2BB3A3;
         public const uint AdminsColor = 0xE0A030;
@@ -68,8 +69,8 @@ namespace Requestarr.Core.Announcements
             return match.Success ? Version.Parse(match.Groups["version"].Value) : null;
         }
 
-        // The full card, private: one embed per section (a long section carries on in more embeds, split between
-        // lines), as many messages as Discord's limits need.
+        // The full card, private: one coloured card per section (a long section carries on in more cards, split between
+        // lines), in as many messages as Discord's limits need. Cards show text at a message's size, with headings.
         public static IReadOnlyList<InteractionReply> Full(ChangelogVersion version, VersionAudience audience)
         {
             var sections = new List<(string Heading, IReadOnlyList<string> Lines, uint Color)>();
@@ -84,42 +85,39 @@ namespace Requestarr.Core.Announcements
                 sections.Add((Changelog.AdminsHeading, version.Admins, AdminsColor));
             }
 
-            var embeds = new List<InteractionEmbed>();
+            var title = $"## {DiscordText.VersionCardFullTitle(version.Version, version.Date)}\n";
+            var cards = new List<InteractionCard>();
 
             foreach (var (heading, lines, color) in sections)
             {
                 var first = true;
 
-                foreach (var chunk in Chunks(lines.Select(l => DiscordLimits.Truncate($"• {l}", EmbedTextLength - 100)), EmbedTextLength - 100))
+                foreach (var chunk in Chunks(lines.Select(l => DiscordLimits.Truncate($"- {l}", CardTextLength)), CardTextLength))
                 {
-                    var header = $"**{heading}**{(first ? string.Empty : DiscordText.VersionNotesContinued)}";
-                    embeds.Add(new InteractionEmbed { Description = header + "\n" + chunk, Color = color });
+                    var header = $"{(cards.Count == 0 ? title : string.Empty)}### {heading}{(first ? string.Empty : DiscordText.VersionNotesContinued)}\n";
+                    cards.Add(new InteractionCard { Text = header + chunk, Color = color });
                     first = false;
                 }
             }
 
-            embeds[0] = new InteractionEmbed { Title = DiscordText.VersionCardFullTitle(version.Version, version.Date), Description = embeds[0].Description, Color = embeds[0].Color };
-
             var replies = new List<InteractionReply>();
-            var current = new List<InteractionEmbed>();
+            var current = new List<InteractionCard>();
             var length = 0;
 
-            foreach (var embed in embeds)
+            foreach (var card in cards)
             {
-                var size = (embed.Title?.Length ?? 0) + embed.Description.Length;
-
-                if (current.Count > 0 && (current.Count == EmbedsPerMessage || length + size > MessageEmbedsLength))
+                if (current.Count > 0 && (current.Count == CardsPerMessage || length + card.Text.Length > MessageTextLength))
                 {
-                    replies.Add(new InteractionReply { Embeds = current, Ephemeral = true });
-                    current = new List<InteractionEmbed>();
+                    replies.Add(new InteractionReply { Cards = current, Ephemeral = true });
+                    current = new List<InteractionCard>();
                     length = 0;
                 }
 
-                current.Add(embed);
-                length += size;
+                current.Add(card);
+                length += card.Text.Length;
             }
 
-            replies.Add(new InteractionReply { Embeds = current, Ephemeral = true });
+            replies.Add(new InteractionReply { Cards = current, Ephemeral = true });
             return replies;
         }
 

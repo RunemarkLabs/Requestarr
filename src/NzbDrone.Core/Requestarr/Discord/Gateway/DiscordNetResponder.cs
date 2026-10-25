@@ -30,7 +30,7 @@ namespace Requestarr.Core.Discord.Gateway
             {
                 if (files.Count == 0)
                 {
-                    await _interaction.RespondAsync(reply.Content, embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None);
+                    await _interaction.RespondAsync(Text(reply), embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None, flags: Flags(reply));
                 }
                 else
                 {
@@ -51,7 +51,7 @@ namespace Requestarr.Core.Discord.Gateway
             {
                 if (files.Count == 0)
                 {
-                    await _interaction.FollowupAsync(reply.Content, embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None);
+                    await _interaction.FollowupAsync(Text(reply), embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None, flags: Flags(reply));
                 }
                 else
                 {
@@ -177,6 +177,11 @@ namespace Requestarr.Core.Discord.Gateway
         // Each menu takes a row of its own (Discord's limit is 5 rows); buttons follow, 5 to a row.
         public static MessageComponent Components(InteractionReply reply)
         {
+            if (reply.IsCards)
+            {
+                return CardComponents(reply);
+            }
+
             var menus = new[] { reply.SelectMenu }.Concat(reply.MoreMenus ?? new List<InteractionSelectMenu>()).Where(m => m != null).ToList();
             var buttons = reply.Buttons ?? new List<InteractionButton>();
 
@@ -223,9 +228,34 @@ namespace Requestarr.Core.Discord.Gateway
             return builder.Build();
         }
 
+        // Cards need the newer layout's flag; a message with cards has no text or embeds of its own.
+        public static MessageFlags Flags(InteractionReply reply) => reply.IsCards ? MessageFlags.ComponentsV2 : MessageFlags.None;
+
+        public static string Text(InteractionReply reply) => reply.IsCards ? null : reply.Content;
+
+        private static MessageComponent CardComponents(InteractionReply reply)
+        {
+            var builder = new ComponentBuilderV2();
+
+            foreach (var card in reply.Cards)
+            {
+                var container = new ContainerBuilder().WithAccentColor(card.Color.HasValue ? new Color(card.Color.Value) : null);
+                container.WithTextDisplay(DiscordLimits.Truncate(card.Text, 4000));
+
+                if (card.Buttons.Any())
+                {
+                    container.WithActionRow(card.Buttons.Take(5).Select(b => (IMessageComponentBuilder)new ButtonBuilder(DiscordLimits.Truncate(b.Label, 80), b.CustomId, Map(b.Style), isDisabled: b.Disabled)).ToList());
+                }
+
+                builder.WithContainer(container);
+            }
+
+            return builder.Build();
+        }
+
         public static Embed[] Embeds(InteractionReply reply)
         {
-            if (reply.Embeds == null || !reply.Embeds.Any())
+            if (reply.IsCards || reply.Embeds == null || !reply.Embeds.Any())
             {
                 return null;
             }

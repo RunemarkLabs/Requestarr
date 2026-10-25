@@ -154,7 +154,7 @@ Every card has **Skip**, and **Back** after the first. Request cards show the fu
 
 A member's own requests open as request cards from **Their requests** on their card, with the same buttons as the feed card; the card changes in place when you act on it. A request whose title is already in the library by the time you act always ends as **already available**: approving doesn't add it again, and denying or cancelling it says "already available" instead. A late click changes nothing: you're told why, and the card shows the request as it is.
 
-`/request …` in the admin channel makes a request as yourself. Admin requests skip approval and quotas and use the default instance.
+The admin channel is for admin actions, not your own requests: `/request …` there only points you to your own request channel. To get one, press **Request access** in `#requestarr-welcome` like everyone else; as an admin you're added straight away, with the types you pick on automatic approval and the rest off, and your requests are made from your channel like any member's. Request messages already posted in the admin channel keep their buttons.
 
 ### `/admin help`
 
@@ -220,7 +220,7 @@ Deleting removes the files and the title from Sonarr or Radarr without excluding
 
 | Button | Who | What it does |
 |---|---|---|
-| **Request access** | anyone | A private form: the types they'd like (only connected ones), then **Continue** and an optional note. Sends the admin a card. One open request per person; after a denial, they can ask again after the cooldown. Members already in are told where their channel is. |
+| **Request access** | anyone | A private form: the types they'd like (only connected ones), then **Continue** and an optional note. Sends the admin a card. One open request per person; after a denial, they can ask again after the cooldown. Members already in are told where their channel is. Admins get their own channel straight away, with what they picked on automatic approval. |
 | **Plex access**, **Jellyfin access** | anyone | Only for media servers the admin has connected (none yet). Asks for media server access like Link Plex. |
 
 Clicks that can't do anything are answered privately; repeated ones make the person wait (5 within an hour: 1 minute; 10: 24 hours) and 5 more within 24 hours block them: the **Requestarr Blocked** role hides the welcome channel and shows `#requestarr-access-blocked`. **Unblock** on the admin notice or their member card lifts it, as does removing the role.

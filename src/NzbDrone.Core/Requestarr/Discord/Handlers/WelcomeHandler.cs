@@ -91,7 +91,7 @@ namespace Requestarr.Core.Discord.Handlers
                     interaction.Fields.TryGetValue(WelcomeRoutes.UsernameField, out var username);
 
                     await responder.DeferAsync(ephemeral: true);
-                    var result = await _access.SubmitAsync(interaction.UserId, interaction.Username, interaction.DisplayName, types, note, media, username);
+                    var result = await _access.SubmitAsync(interaction.UserId, interaction.Username, interaction.DisplayName, types, note, media, username, caller.IsAdmin);
 
                     // From the private form: the form becomes the answer. Opened straight from the welcome message
                     // (nothing to pick): a private answer, and the welcome message stays as it is.

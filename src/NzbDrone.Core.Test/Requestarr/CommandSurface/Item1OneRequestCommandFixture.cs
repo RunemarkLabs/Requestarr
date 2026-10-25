@@ -49,11 +49,11 @@ namespace Requestarr.Core.Test.CommandSurface
         }
 
         [Test]
-        public async Task autocomplete_for_admin_in_admin_channel_offers_types_with_a_backend()
+        public async Task autocomplete_offers_nothing_in_the_admin_channel()
         {
             var run = await Harness.SendAsync(FakeInteraction.Autocomplete("request", "type", "").By(FakeDiscordGuild.Owner).InGuild(FakeDiscordGuild.Guild).InChannel(AdminChannel));
 
-            run.Responder.Suggestions.Select(s => s.Value).Should().Equal("movie", "tv");
+            run.Responder.Suggestions.Should().BeEmpty("admins request from their own channel");
         }
 
         [Test]

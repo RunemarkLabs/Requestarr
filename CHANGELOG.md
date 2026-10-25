@@ -6,6 +6,15 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.1 (2026-10-25)
+
+### For users
+- **Easier to read:** the welcome message, the blocked notice and Read changes are now coloured cards with large headings and text at normal message size, instead of small print.
+
+### For admins
+- **Your own request channel:** admins now ask for access from the welcome channel like everyone and get their own request channel straight away, with what they picked on automatic approval and nothing else.
+- **The admin channel is for admin actions:** requesting there now points you to your own request channel instead of making the request.
+
 ## 0.4.0 (2026-10-24)
 
 ### For users

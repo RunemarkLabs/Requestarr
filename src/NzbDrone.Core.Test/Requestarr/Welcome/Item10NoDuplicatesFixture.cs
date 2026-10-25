@@ -44,7 +44,7 @@ namespace Requestarr.Core.Test.Welcome
             Discord.Channels.Count.Should().Be(channels, "no second group or channel");
             Panels(AdminChannel, PanelRoutes.AdminQueue).Should().Be(1);
             Panels(WelcomeChannel, WelcomeRoutes.Request).Should().Be(1);
-            Discord.Channels[BlockedChannel].Messages.Count(m => m.Content == DiscordText.BlockedMessage).Should().Be(1);
+            Discord.Channels[BlockedChannel].Messages.Count(m => m.Cards.Any(c => c.Text == DiscordText.BlockedMessage)).Should().Be(1);
             AdminRoom.MessageIds.Last().ToString().Should().Be(Config.AdminPanelMessageId, "and it's the newest message");
         }
 

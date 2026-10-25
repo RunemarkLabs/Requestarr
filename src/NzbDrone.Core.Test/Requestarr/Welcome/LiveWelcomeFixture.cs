@@ -185,9 +185,26 @@ namespace Requestarr.Core.Test.Welcome
 
                 var welcomeRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(welcomeChannel);
                 var welcome = await welcomeRest.GetMessageAsync(ulong.Parse(guildSetup.GetConfig().WelcomeMessageId));
-                Log($"[welcome] message: \"{welcome.Content.Replace("\n", " | ")}\"");
+                Log($"[welcome] card: {CardsOf(welcome)}");
                 Log($"[welcome] buttons: [{string.Join("] [", Buttons(welcome))}] (no media server is connected)");
                 Buttons(welcome).Should().Equal(DiscordText.RequestAccessLabel);
+                welcome.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2).Should().BeTrue("a card, at a message's text size");
+                CardsOf(welcome).Should().Contain("# Welcome to Requestarr");
+
+                // A server from before cards (QA, staging) has a plain welcome message saved: it becomes the one card.
+                var plain = await gateway.SendMessageAsync(welcomeChannel, new InteractionReply
+                {
+                    Content = "**Welcome to Requestarr**\nAn older welcome message.",
+                    Buttons = { new InteractionButton { CustomId = WelcomeRoutes.Request, Label = DiscordText.RequestAccessLabel, Style = Requestarr.Core.Discord.Interactions.ButtonStyle.Primary } }
+                });
+                var oldConfig = guildSetup.GetConfig();
+                oldConfig.WelcomeMessageId = plain.ToString();
+                Mocker.Resolve<IDiscordGuildConfigRepository>().SetFields(oldConfig, c => c.WelcomeMessageId);
+                await panels.EnsureAllAsync();
+                var upgraded = (await welcomeRest.GetMessagesAsync(20).FlattenAsync()).Where(m => m.Author.Id == host.Client.CurrentUser.Id && Buttons(m).Contains(DiscordText.RequestAccessLabel)).ToList();
+                Log($"[welcome] after an older plain welcome message: {upgraded.Count} welcome message(s): {string.Join(" / ", upgraded.Select(CardsOf))}");
+                upgraded.Should().ContainSingle().Which.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2).Should().BeTrue();
+                welcome = upgraded[0];
 
                 // 3. An access request, denied; refused within the cooldown.
                 Task<InteractionRun> Press(string customId = WelcomeRoutes.Request) =>
@@ -272,7 +289,8 @@ namespace Requestarr.Core.Test.Welcome
                 var notice = (await adminRest.GetMessagesAsync(10).FlattenAsync()).First(m => m.Content.StartsWith("🚫"));
                 Log($"[block] admin notice: \"{notice.Content}\" buttons [{string.Join("] [", Buttons(notice))}]");
                 var blockedMessage = await ((IMessageChannel)await host.Client.Rest.GetChannelAsync(blockedChannel)).GetMessageAsync(ulong.Parse(guildSetup.GetConfig().BlockedMessageId));
-                Log($"[block] #{ChannelLayout.BlockedChannelName}: \"{blockedMessage.Content.Replace("\n", " | ")}\"");
+                Log($"[block] #{ChannelLayout.BlockedChannelName}: {CardsOf(blockedMessage)}");
+                CardsOf(blockedMessage).Should().Contain("## " + DiscordText.BlockedTitle);
 
                 var card2 = (await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", member.Id)))).LastReply;
                 Log($"[block] member card buttons: [{string.Join("] [", card2.Buttons.Select(b => b.Label))}]");
@@ -321,8 +339,15 @@ namespace Requestarr.Core.Test.Welcome
 
                 cards.Should().NotBeEmpty();
                 var read = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{VersionCardRoutes.ReadChanges}:a:{Changelog.Release(NzbDrone.Common.EnvironmentInfo.BuildInfo.Version)}")));
-                Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): \"{read.LastReply.Embeds.FirstOrDefault()?.Title}\", {read.LastReply.Embeds.Count} section(s)");
+                Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): {read.LastReply.Cards.Count} card(s), first \"{read.LastReply.Cards.FirstOrDefault()?.Text.Split('\n')[0]}\"");
                 read.LastReply.Ephemeral.Should().BeTrue();
+
+                // Discord takes the full card's layout: posted once for real, read back, and removed.
+                var fullPosted = await gateway.SendMessageAsync(adminChannel, new InteractionReply { Cards = read.LastReply.Cards });
+                var fullBack = await adminRest.GetMessageAsync(fullPosted);
+                Log($"[cards] Read changes as Discord shows it: {CardsOf(fullBack)}");
+                CardsOf(fullBack).Should().Contain("\"## Requestarr ");
+                await gateway.DeleteMessageAsync(adminChannel, fullPosted);
 
                 // 8. The version card sits right above the one admin panel.
                 await Task.Delay(TimeSpan.FromSeconds(4));
@@ -388,21 +413,34 @@ namespace Requestarr.Core.Test.Welcome
                 return channel == null ? -1 : (await channel.GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && what(m));
             }
 
-            bool Has(IMessage m, string route) => m.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Any(b => b.CustomId == route);
+            bool Has(IMessage m, string route) => All(m.Components).OfType<ButtonComponent>().Any(b => b.CustomId == route);
             var theirs = channels.Where(c => c.Name.EndsWith(ChannelLayout.UserChannelName(username))).ToList();
             var live = theirs.Where(c => c.Name == ChannelLayout.UserChannelName(username)).ToList();
             var requestarr = channels.Where(c => c.Name.StartsWith("requestarr-") || c.Name.Contains(ChannelLayout.UserChannelPrefix)).ToList();
 
             return $"admin panels {await Count(ChannelLayout.AdminChannelName, m => Has(m, PanelRoutes.AdminQueue))}, " +
                    $"welcome messages {await Count(ChannelLayout.WelcomeChannelName, m => Has(m, WelcomeRoutes.Request))}, " +
-                   $"blocked messages {await Count(ChannelLayout.BlockedChannelName, m => m.Content == DiscordText.BlockedMessage)}, " +
+                   $"blocked messages {await Count(ChannelLayout.BlockedChannelName, m => All(m.Components).OfType<TextDisplayComponent>().Any(t => t.Content == DiscordText.BlockedMessage))}, " +
                    $"{string.Join(", ", theirs.GroupBy(c => c.Name).Select(g => $"#{g.Key}={g.Count()} in {string.Join("/", g.Select(c => c.CategoryId.HasValue && groups.ContainsKey(c.CategoryId.Value) ? groups[c.CategoryId.Value] : "the top level"))}"))}, " +
                    $"their panels {(live.Count == 1 ? (await live[0].GetMessagesAsync(100).FlattenAsync()).Count(m => m.Author.Id == bot && Has(m, PanelRoutes.MyRequests)) : -1)}, " +
                    $"loose {requestarr.Count(c => c.CategoryId == null)}";
         }
 
         private static List<string> Buttons(IMessage message) =>
-            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
+            All(message.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
+
+        // A card message's text and colour, on one line.
+        private static string CardsOf(IMessage message) =>
+            string.Join(" / ", message.Components.OfType<ContainerComponent>().Select(c =>
+                $"[colour {c.AccentColor?.RawValue:X6}] \"{string.Join(" ", All(c.Components).OfType<TextDisplayComponent>().Select(t => t.Content)).Replace("\n", " | ")}\""));
+
+        private static IEnumerable<IMessageComponent> All(IEnumerable<IMessageComponent> components) =>
+            components.SelectMany(c => new[] { c }.Concat(All(c switch
+            {
+                ActionRowComponent row => row.Components,
+                ContainerComponent container => container.Components,
+                _ => Enumerable.Empty<IMessageComponent>()
+            })));
 
         private static async Task<InteractionRun> Send(InteractionDispatcher dispatcher, FakeInteraction interaction)
         {

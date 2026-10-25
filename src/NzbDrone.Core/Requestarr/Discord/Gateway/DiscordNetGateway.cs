@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
+using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
 using Requestarr.Core.Discord.Interactions;
@@ -179,9 +180,9 @@ namespace Requestarr.Core.Discord.Gateway
 
             try
             {
-                var text = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                var text = DiscordLimits.Truncate(DiscordNetResponder.Text(message), DiscordLimits.MessageLength);
                 var mentions = message.Quiet ? AllowedMentions.None : new AllowedMentions(AllowedMentionTypes.Users);
-                var flags = message.Quiet ? MessageFlags.SuppressNotification : MessageFlags.None;
+                var flags = (message.Quiet ? MessageFlags.SuppressNotification : MessageFlags.None) | DiscordNetResponder.Flags(message);
                 var sent = files.Count == 0
                     ? await channel.SendMessageAsync(text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: mentions, flags: flags)
                     : await channel.SendFilesAsync(files, text, embeds: DiscordNetResponder.Embeds(message), components: DiscordNetResponder.Components(message), allowedMentions: mentions, flags: flags);
@@ -208,7 +209,12 @@ namespace Requestarr.Core.Discord.Gateway
             {
                 await existing.ModifyAsync(m =>
                 {
-                    m.Content = DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+                    m.Content = message.IsCards ? string.Empty : DiscordLimits.Truncate(message.Content, DiscordLimits.MessageLength);
+
+                    if (message.IsCards)
+                    {
+                        m.Flags = MessageFlags.ComponentsV2;
+                    }
 
                     if (!message.KeepEmbeds)
                     {
@@ -220,6 +226,11 @@ namespace Requestarr.Core.Discord.Gateway
 
                     m.Components = DiscordNetResponder.Components(message) ?? new ComponentBuilder().Build();
                 });
+            }
+            catch (HttpException) when (message.IsCards)
+            {
+                // An older plain message Discord won't turn into cards: the caller posts a new one instead.
+                return false;
             }
             finally
             {
@@ -259,13 +270,37 @@ namespace Requestarr.Core.Discord.Gateway
 
             return messages.Where(m => m.Author.Id == BotUserId && m.Type != MessageType.ChannelPinnedMessage)
                 .OrderBy(m => m.Id)
-                .Select(m => new ChannelMessage(m.Id, m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m)))
+                .Select(m => new ChannelMessage(m.Id, string.IsNullOrEmpty(m.Content) ? CardText(m) : m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m)))
                 .ToList();
         }
 
-        // The custom IDs of a message's buttons and menus.
+        // The custom IDs of a message's buttons and menus, inside cards too.
         private static List<string> CustomIds(IMessage message) =>
-            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<IInteractableComponent>().Select(c => c.CustomId).Where(id => id != null).ToList();
+            All(message.Components).OfType<IInteractableComponent>().Select(c => c.CustomId).Where(id => id != null).ToList();
+
+        // A card message's text.
+        private static string CardText(IMessage message) =>
+            string.Join("\n", All(message.Components).OfType<TextDisplayComponent>().Select(t => t.Content));
+
+        private static IEnumerable<IMessageComponent> All(IEnumerable<IMessageComponent> components)
+        {
+            foreach (var component in components)
+            {
+                yield return component;
+
+                var children = component switch
+                {
+                    ActionRowComponent row => row.Components,
+                    ContainerComponent container => container.Components,
+                    _ => null
+                };
+
+                foreach (var child in All(children ?? Enumerable.Empty<IMessageComponent>()))
+                {
+                    yield return child;
+                }
+            }
+        }
 
         public async Task PinMessageAsync(ulong channelId, ulong messageId)
         {

@@ -86,10 +86,10 @@ namespace Requestarr.Core.Test.Announcements
 
             var full = Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0)).Single();
             full.Ephemeral.Should().BeTrue();
-            full.Embeds.Select(e => e.Description).Should().Equal(
-                "**For users**\n• You can now follow a request from its card.\n• Your panel shows your limits.",
-                "**For admins**\n• New member card layout.");
-            Service.FullCard(VersionAudience.Users, new Version(0, 2, 0)).Single().Embeds.Should().ContainSingle("members see only their lines");
+            full.Cards.Select(c => c.Text).Should().Equal(
+                "## Requestarr 0.2.0\n### For users\n- You can now follow a request from its card.\n- Your panel shows your limits.",
+                "### For admins\n- New member card layout.");
+            Service.FullCard(VersionAudience.Users, new Version(0, 2, 0)).Single().Cards.Should().ContainSingle("members see only their lines");
             Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0");
         }
 
@@ -279,19 +279,18 @@ namespace Requestarr.Core.Test.Announcements
 
             AdminPosts.Should().Equal(Admin("0.9.0", "200 changes for admins, 200 for users"));
             var full = Service.FullCard(VersionAudience.Admins, new Version(0, 9, 0));
-            full.Should().HaveCountGreaterThan(1, "more than 6,000 characters takes more than one message");
-            full[0].Embeds[0].Title.Should().Be("Requestarr 0.9.0 · 25 October 2026");
+            full.Should().HaveCountGreaterThan(1, "more than 4,000 characters takes more than one message");
+            full[0].Cards[0].Text.Should().StartWith("## Requestarr 0.9.0 · 25 October 2026\n### For users\n");
 
             foreach (var reply in full)
             {
-                reply.Embeds.Count.Should().BeLessOrEqualTo(VersionCards.EmbedsPerMessage);
-                reply.Embeds.Sum(e => (e.Title?.Length ?? 0) + e.Description.Length).Should().BeLessOrEqualTo(VersionCards.MessageEmbedsLength);
-                reply.Embeds.Should().OnlyContain(e => e.Description.Length <= VersionCards.EmbedTextLength);
+                reply.Cards.Count.Should().BeLessOrEqualTo(VersionCards.CardsPerMessage);
+                reply.Cards.Sum(c => c.Text.Length).Should().BeLessOrEqualTo(VersionCards.MessageTextLength);
             }
 
-            var text = full.SelectMany(r => r.Embeds).Select(e => e.Description).ToList();
-            text.SelectMany(t => t.Split('\n')).Where(l => l.StartsWith("• ")).Should().HaveCount(400, "every line, none cut");
-            text.Count(t => t.StartsWith("**For users** (continued)")).Should().BeGreaterThan(0);
+            var text = full.SelectMany(r => r.Cards).Select(c => c.Text).ToList();
+            text.SelectMany(t => t.Split('\n')).Where(l => l.StartsWith("- ")).Should().HaveCount(400, "every line, none cut");
+            text.Count(t => t.StartsWith("### For users (continued)")).Should().BeGreaterThan(0);
         }
 
         // The shipped CHANGELOG.md: the process every pull request follows (docs/development.md).

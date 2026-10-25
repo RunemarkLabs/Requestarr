@@ -70,11 +70,12 @@ namespace Requestarr.Core.Test.Requests
         }
 
         [Test]
-        public async Task admin_search_in_admin_channel_uses_default_instance()
+        public async Task admin_search_in_admin_channel_points_to_their_own_channel()
         {
             var run = await Harness.SendAsync(AdminRequest("movie", "dune"));
 
-            run.LastReply.SelectMenu.Options.Should().HaveCount(2);
+            run.LastReply.Content.Should().Be(DiscordText.AdminRequestsInOwnChannel(null));
+            run.LastReply.SelectMenu.Should().BeNull("the admin channel is for admin actions");
         }
 
         [Test]

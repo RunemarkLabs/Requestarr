@@ -62,7 +62,16 @@ namespace Requestarr.Core.Discord.Handlers
 
             if (interaction.Kind == InteractionKind.Autocomplete)
             {
-                await responder.SuggestAsync(asAdmin || context.UserDenial == null ? TypeChoices(context, asAdmin, interaction.GetOption<string>("type")) : Array.Empty<InteractionChoice>());
+                await responder.SuggestAsync(!asAdmin && context.UserDenial == null ? TypeChoices(context, false, interaction.GetOption<string>("type")) : Array.Empty<InteractionChoice>());
+                return;
+            }
+
+            // The admin channel is for admin actions: admins request from their own channel, like everyone. (Buttons on
+            // request messages already posted here keep working.)
+            if (asAdmin && interaction.Kind == InteractionKind.SlashCommand)
+            {
+                var own = context.User?.Status == Users.UserStatus.Active ? context.User.PrivateChannelId : null;
+                await responder.Ephemeral(DiscordText.AdminRequestsInOwnChannel(own));
                 return;
             }
 

@@ -69,11 +69,11 @@ namespace Requestarr.Core.Test.Welcome
 
             var full = run.LastReply;
             full.Ephemeral.Should().BeTrue("only the person who pressed it sees it");
-            full.Embeds[0].Title.Should().Be("Requestarr 0.2.0 · 22 October 2026");
-            full.Embeds.Select(e => e.Description).Should().Equal(
-                "**For users**\n• **Follow:** follow a request from its card.\n• **Limits:** your panel shows your limits.",
-                "**For admins**\n• **Member cards:** a clearer layout.");
-            full.Embeds.Select(e => e.Color).Should().Equal(VersionCards.UsersColor, VersionCards.AdminsColor);
+            full.Embeds.Should().BeEmpty("cards show text at a message's size");
+            full.Cards.Select(c => c.Text).Should().Equal(
+                "## Requestarr 0.2.0 · 22 October 2026\n### For users\n- **Follow:** follow a request from its card.\n- **Limits:** your panel shows your limits.",
+                "### For admins\n- **Member cards:** a clearer layout.");
+            full.Cards.Select(c => c.Color).Should().Equal(VersionCards.UsersColor, VersionCards.AdminsColor);
         }
 
         [Test]
@@ -84,7 +84,7 @@ namespace Requestarr.Core.Test.Welcome
             var run = await Harness.SendAsync(FakeInteraction.Button("whatsnew:u:0.2.0").By(Alice).InGuild(FakeDiscordGuild.Guild).InChannel(UsersChannel));
 
             run.LastReply.Ephemeral.Should().BeTrue();
-            run.LastReply.Embeds.Single().Description.Should().StartWith("**For users**").And.NotContain("Member cards");
+            run.LastReply.Cards.Single().Text.Should().StartWith("## Requestarr 0.2.0").And.Contain("### For users").And.NotContain("Member cards");
         }
 
         [Test]
