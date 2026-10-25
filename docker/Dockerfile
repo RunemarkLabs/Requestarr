@@ -15,7 +15,7 @@ RUN yarn build --env production
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
 ARG TARGETARCH
 WORKDIR /src
-COPY .editorconfig LICENSE CHANGELOG.md ./
+COPY .editorconfig LICENSE CHANGELOG.md QA-CHECKLIST.md ./
 COPY src/ src/
 # global.json pins the local SDK patch; the image's 10.0 SDK is used as-is.
 RUN case "$TARGETARCH" in arm64) RID=linux-arm64 ;; *) RID=linux-x64 ;; esac \
