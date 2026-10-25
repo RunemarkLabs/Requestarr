@@ -6,6 +6,16 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.11 (2026-10-25)
+
+### For users
+- **Softer logo:** the arrow in Requestarr's logo is now a soft charcoal instead of solid black, so it sits more gently next to the teal.
+
+### For admins
+- **Logo without a box:** in the web app the header and sign-in logo, and the icon in your browser tab, no longer sit on a square of their own color; the page shows through around them in both themes.
+- **Made for the purple header:** the light theme's purple header has its own logo, and on Beta the label bar there is white so it doesn't disappear into the purple.
+- **Charcoal arrow everywhere:** the light theme's icons, home screen icons and tiles use the softer charcoal arrow too.
+
 ## 0.4.10 (2026-10-25)
 
 ### For admins

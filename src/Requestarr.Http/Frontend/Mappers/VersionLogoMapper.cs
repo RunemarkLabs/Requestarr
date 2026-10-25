@@ -10,14 +10,15 @@ using NzbDrone.Core.Configuration;
 
 namespace Requestarr.Http.Frontend.Mappers
 {
-    // /Content/Images/Icons/{light|dark}/production/logo-version.svg: the production header and login logo with the
-    // running version on its bar (VersionLogo). Made from the delivered R the first time it's asked for; never cached
-    // by the browser, so an upgrade shows the new version straight away.
+    // /Content/Images/Icons/{light|light-purple|dark}/production/logo-version.svg: the production header and login logo
+    // with the running version on its bar (VersionLogo); light-purple is the light theme's purple header. Made from the
+    // delivered R the first time it's asked for; never cached by the browser, so an upgrade shows the new version
+    // straight away.
     public class VersionLogoMapper : IMapHttpRequestsToDisk
     {
         public const string FileName = "logo-version.svg";
 
-        private static readonly Regex Url = new(@"^/content/images/icons/(light|dark)/production/logo-version\.svg$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex Url = new(@"^/content/images/icons/(light|light-purple|dark)/production/logo-version\.svg$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly ConcurrentDictionary<string, string> Made = new();
 
         private readonly IAppFolderInfo _appFolderInfo;
@@ -56,7 +57,7 @@ namespace Requestarr.Http.Frontend.Mappers
                 return Task.FromResult<IActionResult>(null);
             }
 
-            var svg = Made.GetOrAdd(logo, path => VersionLogo.Svg(BuildInfo.Version, File.ReadAllBytes(path), path.Contains(Path.DirectorySeparatorChar + "dark" + Path.DirectorySeparatorChar)));
+            var svg = Made.GetOrAdd(logo, path => VersionLogo.Svg(BuildInfo.Version, File.ReadAllBytes(path)));
 
             return Task.FromResult<IActionResult>(new ContentResult { Content = svg, ContentType = "image/svg+xml" });
         }

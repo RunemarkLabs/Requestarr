@@ -7,7 +7,7 @@ namespace Requestarr.Http.Frontend.Mappers
 {
     // The production header and login logo: a green bar with the running version beside the delivered R
     // (Icons/{theme}/production/logo-header.png), laid out like the dev, QA and beta logos so it always shows the
-    // version actually running. The rules are the ones the branch logos were made with, at 512 px tall: a 138 px bar,
+    // version actually running. Like them it has no background: the page shows through around the bar and the R. The rules are the ones the branch logos were made with, at 512 px tall: a 138 px bar,
     // a 38 px gap, white Inter Display Black reading bottom to top and centred in the bar, at the largest size where
     // "BETA" is no taller than 62% of the bar's width and no longer than 80% of the height; the version uses that size
     // and shrinks only if it would be longer than 86% of the height.
@@ -34,7 +34,7 @@ namespace Requestarr.Http.Frontend.Mappers
             return Math.Min(size, longest);
         }
 
-        public static string Svg(Version version, byte[] logo, bool dark)
+        public static string Svg(Version version, byte[] logo)
         {
             var text = Text(version);
             var ink = Ink(text);
@@ -47,7 +47,6 @@ namespace Requestarr.Http.Frontend.Mappers
             var svg = new StringBuilder();
             svg.Append($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{Width}\" height=\"{Height}\" viewBox=\"0 0 {Width} {Height}\">");
             svg.Append($"<title>{text}</title>");
-            svg.Append($"<rect width=\"{Width}\" height=\"{Height}\" fill=\"{(dark ? "#282828" : "#FFFFFF")}\"/>");
             svg.Append($"<rect width=\"{BarWidth}\" height=\"{Height}\" fill=\"{Green}\"/>");
             svg.Append($"<g fill=\"#FFFFFF\" transform=\"matrix(0 {N(-scale)} {N(-scale)} 0 {N(e)} {N(f)})\">");
 

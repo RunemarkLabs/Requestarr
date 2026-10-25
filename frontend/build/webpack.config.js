@@ -120,7 +120,8 @@ module.exports = (env) => {
                 destination: path.join(distFolder, 'Content/Fonts')
               },
 
-              // Icon Images: Icons/{light|dark}/{production|dev|qa|beta}/ per theme and environment
+              // Icon Images: Icons/{light|dark}/{production|dev|qa|beta}/ per theme and environment, and
+              // Icons/light-purple/ for the light theme's purple header
               {
                 source: 'frontend/src/Content/Images/Icons/*.*',
                 destination: path.join(distFolder, 'Content/Images/Icons')
@@ -128,6 +129,10 @@ module.exports = (env) => {
               {
                 source: 'frontend/src/Content/Images/Icons/light',
                 destination: path.join(distFolder, 'Content/Images/Icons/light')
+              },
+              {
+                source: 'frontend/src/Content/Images/Icons/light-purple',
+                destination: path.join(distFolder, 'Content/Images/Icons/light-purple')
               },
               {
                 source: 'frontend/src/Content/Images/Icons/dark',

@@ -46,6 +46,12 @@ namespace Requestarr.Core.Test.Welcome
                 }
             }
 
+            // The light theme's header is purple, so it has its own header logos (beta's bar is white there).
+            foreach (var set in Sets)
+            {
+                Directory.GetFiles(Icons("light-purple", set)).Select(Path.GetFileName).Should().BeEquivalentTo(new[] { "logo-header.png" }, $"light-purple/{set}");
+            }
+
             File.Exists(Icons("safari-pinned-tab.svg")).Should().BeTrue();
         }
 
