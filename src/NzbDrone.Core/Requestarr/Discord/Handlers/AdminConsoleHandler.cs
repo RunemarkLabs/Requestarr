@@ -55,6 +55,7 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly IMediaServerAccessRequestRepository _accessRequests;
         private readonly IBackendService _backends;
         private readonly IDiscordGuildGateway _gateway;
+        private readonly Access.IWelcomeGuardRepository _guards;
 
         public AdminConsoleHandler(ICallerResolver callers,
                                    IUserManagementService users,
@@ -67,8 +68,10 @@ namespace Requestarr.Core.Discord.Handlers
                                    IMediaServerAccountRepository accounts,
                                    IMediaServerAccessRequestRepository accessRequests,
                                    IBackendService backends,
-                                   IDiscordGuildGateway gateway)
+                                   IDiscordGuildGateway gateway,
+                                   Access.IWelcomeGuardRepository guards)
         {
+            _guards = guards;
             _callers = callers;
             _users = users;
             _requests = requests;
@@ -410,6 +413,9 @@ namespace Requestarr.Core.Discord.Handlers
         {
             var user = _users.FindByDiscordId(member);
             var buttons = new List<InteractionButton>();
+            var blocked = _guards.Find(member.ToString())?.Blocked;
+            var blockedLine = blocked.HasValue ? DiscordText.BlockedLine(blocked.Value) + "\n" : string.Empty;
+            var unblock = new InteractionButton { CustomId = $"{Access.AccessRoutes.Unblock}:{member}", Label = DiscordText.UnblockLabel, Style = ButtonStyle.Secondary };
 
             if (user == null || user.Status == UserStatus.Removed || user.PrivateChannelId == null)
             {
@@ -418,10 +424,21 @@ namespace Requestarr.Core.Discord.Handlers
                 var intro = user?.Status == UserStatus.Removed ? _users.Info(member).Message + "\n" : string.Empty;
                 buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Add}:{member}", Label = DiscordText.AddMemberLabel, Style = ButtonStyle.Success });
 
-                return new InteractionReply { Content = intro + DiscordText.MemberNotAdded(name, member), Buttons = buttons };
+                if (blocked.HasValue)
+                {
+                    buttons.Add(unblock);
+                }
+
+                return new InteractionReply { Content = blockedLine + intro + DiscordText.MemberNotAdded(name, member), Buttons = buttons };
             }
 
             var lines = new List<string> { _users.Info(member).Message };
+
+            if (blocked.HasValue)
+            {
+                lines.Add(DiscordText.BlockedLine(blocked.Value));
+            }
+
             var access = _access.GetForUser(user.Id);
             var instances = _backends.All().Where(b => b.Enable).ToList();
 
@@ -487,6 +504,11 @@ namespace Requestarr.Core.Discord.Handlers
                 ? new InteractionButton { CustomId = $"{AdminRoutes.Unsuspend}:{member}", Label = DiscordText.UnsuspendLabel, Style = ButtonStyle.Success }
                 : new InteractionButton { CustomId = $"{AdminRoutes.Suspend}:{member}", Label = DiscordText.SuspendLabel, Style = ButtonStyle.Secondary });
             buttons.Add(new InteractionButton { CustomId = $"{AdminRoutes.Remove}:{member}", Label = DiscordText.RemoveLabel, Style = ButtonStyle.Danger });
+
+            if (blocked.HasValue)
+            {
+                buttons.Add(unblock);
+            }
 
             foreach (var link in pending.Take(1))
             {

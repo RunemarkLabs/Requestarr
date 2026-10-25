@@ -28,6 +28,9 @@ namespace Requestarr.Core.Users
         Task<ServiceResult> UnsuspendAsync(ulong discordUserId, Actor actor);
         ServiceResult SetAccess(ulong discordUserId, ContentType type, AccessState state, Actor actor, string instanceName = null);
         RequestarrUser EnsureAdminUser(ulong discordUserId, string username, string displayName);
+
+        // A record without a role or channel, so something someone asks for has an owner before they're added.
+        RequestarrUser EnsureRecord(ulong discordUserId, string username, string displayName);
         ServiceResult SetQuota(ulong discordUserId, ContentType type, int limit, int days, Actor actor);
         ServiceResult Info(ulong discordUserId);
         Task HandleMemberLeftAsync(ulong discordUserId);
@@ -313,17 +316,20 @@ namespace Requestarr.Core.Users
         // Requestarr user record (no role, no channel) so requests have an owner.
         public RequestarrUser EnsureAdminUser(ulong discordUserId, string username, string displayName)
         {
-            var existing = FindByDiscordId(discordUserId);
+            return FindByDiscordId(discordUserId) ?? CreateRecord(discordUserId, username, displayName, "user.admin-record");
+        }
 
-            if (existing != null)
-            {
-                return existing;
-            }
+        public RequestarrUser EnsureRecord(ulong discordUserId, string username, string displayName)
+        {
+            return FindByDiscordId(discordUserId) ?? CreateRecord(discordUserId, username, displayName, "user.record");
+        }
 
+        private RequestarrUser CreateRecord(ulong discordUserId, string username, string displayName, string auditAction)
+        {
             var now = DateTime.UtcNow;
             var user = _users.Insert(new RequestarrUser { DisplayName = displayName ?? username, Status = UserStatus.Active, Added = now, StatusChanged = now });
             _identities.Insert(new UserIdentity { UserId = user.Id, Provider = UserIdentity.DiscordProvider, ExternalId = discordUserId.ToString(), Username = username, DisplayName = displayName, Linked = now });
-            _audit.Record(Actor.Discord(discordUserId, username, user.Id), "user.admin-record", "user", user.Id.ToString());
+            _audit.Record(Actor.Discord(discordUserId, username, user.Id), auditAction, "user", user.Id.ToString());
 
             return user;
         }

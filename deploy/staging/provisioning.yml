@@ -34,6 +34,21 @@ removal:
   requesterTimeoutDays: 7
   reminderDay: 5
 
+# Access requests from the welcome channel (these are the defaults; the admin web portal can change them).
+# After a denial, someone can ask again after denialCooldownDays. The spam guard counts only clicks that can't
+# do anything, within the last windowMinutes: shortCooldownClicks of them wait shortCooldownMinutes,
+# longCooldownClicks wait longCooldownHours, and blockClicks more within blockWithinHours block them.
+accessRequests:
+  denialCooldownDays: 7
+  spam:
+    windowMinutes: 60
+    shortCooldownClicks: 5
+    shortCooldownMinutes: 1
+    longCooldownClicks: 10
+    longCooldownHours: 24
+    blockClicks: 5
+    blockWithinHours: 24
+
 # The beta Sonarr and Radarr only. Their only media folders are /tv-beta and /movies-beta (compose.yaml).
 backends:
   sonarr:

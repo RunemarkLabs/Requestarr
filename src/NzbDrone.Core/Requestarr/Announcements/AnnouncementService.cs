@@ -27,24 +27,28 @@ namespace Requestarr.Core.Announcements
         // Posts in the announcements channel; null when there is none or Discord refused.
         Task<ulong?> PostAsync(string content);
 
-        // What's new, per version: both sections to the admin channel, the users' lines to the announcements channel.
-        // Which versions a server shows depends on its environment (VersionPostMode): production and staging keep every
-        // version for good, QA shows what staging doesn't have yet, dev only the version running now.
+        // What's new, per version, as one-line cards: both sections counted in the admin channel, the users' lines in
+        // the announcements channel. Which versions a server shows depends on its environment (VersionPostMode):
+        // production and staging keep every version for good, QA shows what staging doesn't have yet, dev only the
+        // version running now.
         Task PostVersionNotesAsync();
+
+        // The full card a Read changes button shows, privately; long versions take more than one message.
+        IReadOnlyList<InteractionReply> FullCard(VersionAudience audience, Version version);
     }
 
-    internal record Post(Version Version, IReadOnlyList<string> Parts);
-
-    internal record FoundPost(Version Version, List<ChannelMessage> Messages);
+    // A version post found in a channel: a card, or (Card null) a post from before cards.
+    internal record FoundPost(Version Version, List<ChannelMessage> Messages, VersionCard Card);
 
     public class AnnouncementService : IAnnouncementService, IHandleAsync<DiscordReadyEvent>
     {
         // How many of a channel's newest messages are read to find this server's version posts again.
         public const int ScanLimit = 1000;
 
+        // Posts from before version cards (task 4e), found so they can be replaced by cards.
         private static readonly Regex AdminPost = new(@"^📋 \*\*Requestarr (?<version>\d+\.\d+\.\d+): what's new\*\*");
 
-        // Users' posts carry their version since task 4d; older ones have none and are replaced where posts are rebuilt.
+        // Users' posts carry their version since task 4d; older ones have none.
         private static readonly Regex UsersPost = new(@"^✨ \*\*What's new in Requestarr(?: (?<version>\d+\.\d+\.\d+))?\*\*");
 
         private readonly IDiscordGuildGateway _gateway;
@@ -161,17 +165,17 @@ namespace Requestarr.Core.Announcements
                     return;
                 }
 
-                // Dev and QA: the posts are rebuilt to show exactly the versions that apply, whatever the channels hold now
-                // (after a reset they hold nothing).
+                // Dev and QA: the cards are rebuilt to show exactly the versions that apply, whatever the channels hold
+                // now (after a reset they hold nothing).
                 var staged = _environment.Staged ?? new HashSet<Version>();
                 var news = versions.Where(v => v.HasNews && (mode == VersionPostMode.CurrentOnly ? v.Version == current : !staged.Contains(v.Version))).ToList();
                 var users = _guildSetup.AnnouncementsChannelId;
 
-                await KeepExactlyAsync(adminChannel, AdminPost, news.Select(v => AdminNotes(v, users.HasValue)).ToList());
+                await KeepExactlyAsync(adminChannel, await FindPostsAsync(adminChannel, VersionAudience.Admins), news.Select(v => VersionCards.Collapsed(v, VersionAudience.Admins)).ToList());
 
                 if (users.HasValue)
                 {
-                    await KeepExactlyAsync(users.Value, UsersPost, news.Where(v => v.Users.Count > 0).Select(UserNotes).ToList());
+                    await KeepExactlyAsync(users.Value, await FindPostsAsync(users.Value, VersionAudience.Users), news.Where(v => v.Users.Count > 0).Select(v => VersionCards.Collapsed(v, VersionAudience.Users)).ToList());
                 }
 
                 _logger.Info("What's new ({0}): {1}", mode, news.Count == 0 ? "no versions to show" : string.Join(", ", news.Select(v => v.Version)));
@@ -183,34 +187,56 @@ namespace Requestarr.Core.Announcements
             }
         }
 
-        // Production and staging: each version with something in it is posted once, oldest first, and never removed.
+        public IReadOnlyList<InteractionReply> FullCard(VersionAudience audience, Version version)
+        {
+            var found = Changelog.Parse(ChangelogText()).FirstOrDefault(v => v.Version == version);
+
+            return found == null || !found.HasNews
+                ? new[] { new InteractionReply { Content = DiscordText.VersionNotFound(version), Ephemeral = true } }
+                : VersionCards.Full(found, audience);
+        }
+
+        // Production and staging: each version with something in it gets a card, oldest first, and keeps it. A card
+        // already in the channel isn't posted again (a server set up again with its channels kept). Posts from before
+        // version cards are replaced once by cards for the whole history.
         private async Task PostStandingAsync(DiscordGuildConfig config, ulong adminChannel, List<ChangelogVersion> versions, Version current)
         {
             var announced = Announced.Parse(config.AnnouncedVersion);
             var users = _guildSetup.AnnouncementsChannelId;
-            var inAdmin = new HashSet<Version>();
-            var inUsers = new HashSet<Version>();
+            var inAdmin = await FindPostsAsync(adminChannel, VersionAudience.Admins);
+            var inUsers = users.HasValue ? await FindPostsAsync(users.Value, VersionAudience.Users) : new List<FoundPost>();
 
-            // First start: the full history. A server whose channels were kept (Requestarr set up again) doesn't get
-            // a second copy of what's already there.
-            if (announced.IsEmpty)
+            if (inAdmin.Concat(inUsers).Any(p => p.Card == null))
             {
-                inAdmin = (await FindPostsAsync(adminChannel, AdminPost)).Where(p => p.Version != null).Select(p => p.Version).ToHashSet();
-                inUsers = users.HasValue ? (await FindPostsAsync(users.Value, UsersPost)).Where(p => p.Version != null).Select(p => p.Version).ToHashSet() : inUsers;
+                var history = versions.Where(v => v.HasNews).ToList();
+                await KeepExactlyAsync(adminChannel, inAdmin, history.Select(v => VersionCards.Collapsed(v, VersionAudience.Admins)).ToList());
+
+                if (users.HasValue)
+                {
+                    await KeepExactlyAsync(users.Value, inUsers, history.Where(v => v.Users.Count > 0).Select(v => VersionCards.Collapsed(v, VersionAudience.Users)).ToList());
+                }
+
+                _logger.Info("What's new: the history is now shown as cards ({0} versions)", history.Count);
+                config.AnnouncedVersion = announced.With(versions.Select(v => v.Version).Append(current)).ToString();
+                _configs.Upsert(config);
+                return;
             }
+
+            var shownAdmin = inAdmin.Select(p => p.Version).ToHashSet();
+            var shownUsers = inUsers.Select(p => p.Version).ToHashSet();
 
             foreach (var version in versions.Where(v => !announced.Contains(v.Version)))
             {
                 if (version.HasNews)
                 {
-                    if (!inAdmin.Contains(version.Version))
+                    if (!shownAdmin.Contains(version.Version))
                     {
-                        await SendAsync(adminChannel, AdminNotes(version, users.HasValue));
+                        await SendAsync(adminChannel, VersionCards.Collapsed(version, VersionAudience.Admins));
                     }
 
-                    if (users.HasValue && version.Users.Count > 0 && !inUsers.Contains(version.Version))
+                    if (users.HasValue && version.Users.Count > 0 && !shownUsers.Contains(version.Version))
                     {
-                        await SendAsync(users.Value, UserNotes(version));
+                        await SendAsync(users.Value, VersionCards.Collapsed(version, VersionAudience.Users));
                     }
 
                     _logger.Info("Announced what's new in {0} ({1} for users, {2} for admins)", version.Version, version.Users.Count, version.Admins.Count);
@@ -229,22 +255,22 @@ namespace Requestarr.Core.Announcements
             }
         }
 
-        // Makes a channel's version posts exactly `wanted`, oldest first: posts for other versions are removed, a post
-        // whose words changed is edited in place, and from the first post out of order on, everything is posted again.
-        private async Task KeepExactlyAsync(ulong channel, Regex header, IReadOnlyList<Post> wanted)
+        // Makes a channel's version cards exactly `wanted`, oldest first: anything else that is a version post (another
+        // version's card, or a post from before cards) is removed, a card whose words changed is edited in place, and
+        // from the first card out of order on, everything is posted again.
+        private async Task KeepExactlyAsync(ulong channel, List<FoundPost> found, IReadOnlyList<VersionCard> wanted)
         {
-            var found = await FindPostsAsync(channel, header);
-            var versions = wanted.Select(p => p.Version).ToHashSet();
+            var versions = wanted.Select(c => c.Version).ToHashSet();
 
-            foreach (var post in found.Where(p => p.Version == null || !versions.Contains(p.Version)))
+            foreach (var post in found.Where(p => p.Card == null || !versions.Contains(p.Version)))
             {
                 await DeleteAsync(channel, post);
             }
 
-            var kept = found.Where(p => p.Version != null && versions.Contains(p.Version)).ToList();
+            var kept = found.Where(p => p.Card != null && versions.Contains(p.Version)).ToList();
             var inOrder = 0;
 
-            while (inOrder < kept.Count && inOrder < wanted.Count && kept[inOrder].Version == wanted[inOrder].Version && kept[inOrder].Messages.Count == wanted[inOrder].Parts.Count)
+            while (inOrder < kept.Count && inOrder < wanted.Count && kept[inOrder].Version == wanted[inOrder].Version)
             {
                 inOrder++;
             }
@@ -256,58 +282,59 @@ namespace Requestarr.Core.Announcements
 
             for (var i = 0; i < inOrder; i++)
             {
-                for (var part = 0; part < wanted[i].Parts.Count; part++)
+                if (kept[i].Card.Title != wanted[i].Title || kept[i].Card.Description != wanted[i].Description)
                 {
-                    if (kept[i].Messages[part].Content != wanted[i].Parts[part])
-                    {
-                        await _gateway.EditMessageAsync(channel, kept[i].Messages[part].Id, new InteractionReply { Content = wanted[i].Parts[part] });
-                    }
+                    await _gateway.EditMessageAsync(channel, kept[i].Messages[0].Id, wanted[i].Reply);
                 }
             }
 
-            foreach (var post in wanted.Skip(inOrder))
+            foreach (var card in wanted.Skip(inOrder))
             {
-                await SendAsync(channel, post);
+                await SendAsync(channel, card);
             }
         }
 
-        // This server's version posts in a channel, oldest first, found by their header line. A post split over several
-        // messages continues in messages whose header says "(continued)".
-        private async Task<List<FoundPost>> FindPostsAsync(ulong channel, Regex header)
+        // This server's version posts in a channel, oldest first: cards (found by their title), and posts from before
+        // cards (found by their header line; one split over several messages continues in "(continued)" messages).
+        private async Task<List<FoundPost>> FindPostsAsync(ulong channel, VersionAudience audience)
         {
             var posts = new List<FoundPost>();
+            var legacy = audience == VersionAudience.Admins ? AdminPost : UsersPost;
 
             foreach (var message in await _gateway.GetOwnMessagesAsync(channel, ScanLimit))
             {
-                var match = header.Match(message.Content ?? string.Empty);
+                if (VersionCards.Parse(message.EmbedTitle, audience) is { } version)
+                {
+                    posts.Add(new FoundPost(version, new List<ChannelMessage> { message }, new VersionCard(version, message.EmbedTitle, message.EmbedDescription, null)));
+                    continue;
+                }
+
+                var match = legacy.Match(message.Content ?? string.Empty);
 
                 if (!match.Success)
                 {
                     continue;
                 }
 
-                var version = match.Groups["version"].Success ? Version.Parse(match.Groups["version"].Value) : null;
-                var continued = message.Content.Split('\n')[0].EndsWith(DiscordText.VersionNotesContinued);
+                var old = match.Groups["version"].Success ? Version.Parse(match.Groups["version"].Value) : null;
+                var continued = message.Content.Split('\n')[0].EndsWith(" (continued)");
 
-                if (continued && version != null && posts.Count > 0 && posts[^1].Version == version)
+                if (continued && old != null && posts.Count > 0 && posts[^1].Version == old && posts[^1].Card == null)
                 {
                     posts[^1].Messages.Add(message);
                 }
                 else
                 {
-                    posts.Add(new FoundPost(version, new List<ChannelMessage> { message }));
+                    posts.Add(new FoundPost(old, new List<ChannelMessage> { message }, null));
                 }
             }
 
             return posts;
         }
 
-        private async Task SendAsync(ulong channel, Post post)
+        private async Task SendAsync(ulong channel, VersionCard card)
         {
-            foreach (var part in post.Parts)
-            {
-                await _gateway.SendMessageAsync(channel, new InteractionReply { Content = part });
-            }
+            await _gateway.SendMessageAsync(channel, card.Reply);
         }
 
         private async Task DeleteAsync(ulong channel, FoundPost post)
@@ -315,39 +342,6 @@ namespace Requestarr.Core.Announcements
             foreach (var message in post.Messages)
             {
                 await _gateway.DeleteMessageAsync(channel, message.Id);
-            }
-        }
-
-        private static Post AdminNotes(ChangelogVersion version, bool announcementsChannel) =>
-            new(version.Version, Split(DiscordText.VersionNotesForAdmins(version, announcementsChannel && version.Users.Count > 0)).ToList());
-
-        private static Post UserNotes(ChangelogVersion version) => new(version.Version, Split(DiscordText.VersionNotesForUsers(version)).ToList());
-
-        // Whole lines into messages under Discord's 2,000 characters; each message after the first starts with the
-        // header line again, marked continued.
-        private static IEnumerable<string> Split(string text)
-        {
-            var lines = text.Split('\n');
-            var continued = lines[0] + DiscordText.VersionNotesContinued;
-            var part = new List<string>();
-            var length = 0;
-
-            foreach (var line in lines)
-            {
-                if (part.Count > 0 && length + line.Length + 1 > DiscordLimits.MessageLength)
-                {
-                    yield return string.Join("\n", part);
-                    part = new List<string> { continued };
-                    length = continued.Length + 1;
-                }
-
-                part.Add(DiscordLimits.Truncate(line, DiscordLimits.MessageLength));
-                length += line.Length + 1;
-            }
-
-            if (part.Count > 0)
-            {
-                yield return string.Join("\n", part);
             }
         }
     }

@@ -95,6 +95,7 @@ namespace Requestarr.Core.Test.Gaps
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<Requestarr.Core.Requests.IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 

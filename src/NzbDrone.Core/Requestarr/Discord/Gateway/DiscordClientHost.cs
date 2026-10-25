@@ -44,8 +44,9 @@ namespace Requestarr.Core.Discord.Gateway
                                      IHandleAsync<ProvisioningCompletedEvent>,
                                      IHandle<ApplicationShutdownRequested>
     {
-        // Only what Requestarr needs: server structure and member join/leave.
-        public static readonly GatewayIntents Intents = GatewayIntents.Guilds | GatewayIntents.GuildMembers;
+        // Only what Requestarr needs: server structure, member join/leave and role changes, and that a message was
+        // posted (its own, so panels move below it; message text isn't read, so no privileged message intent).
+        public static readonly GatewayIntents Intents = GatewayIntents.Guilds | GatewayIntents.GuildMembers | GatewayIntents.GuildMessages;
 
         private static readonly TimeSpan WatchdogInterval = TimeSpan.FromSeconds(30);
 
@@ -55,6 +56,7 @@ namespace Requestarr.Core.Discord.Gateway
         private readonly Lazy<IUserManagementService> _users;
         private readonly Lazy<IPanelService> _panels;
         private readonly Lazy<Requestarr.Core.Requests.IRequestFeed> _feed;
+        private readonly Lazy<Requestarr.Core.Access.IAccessRequestService> _access;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
         private readonly SemaphoreSlim _startLock = new(1, 1);
@@ -69,6 +71,7 @@ namespace Requestarr.Core.Discord.Gateway
                                  Lazy<IUserManagementService> users,
                                  Lazy<IPanelService> panels,
                                  Lazy<Requestarr.Core.Requests.IRequestFeed> feed,
+                                 Lazy<Requestarr.Core.Access.IAccessRequestService> access,
                                  IEventAggregator eventAggregator,
                                  Logger logger)
         {
@@ -78,6 +81,7 @@ namespace Requestarr.Core.Discord.Gateway
             _users = users;
             _panels = panels;
             _feed = feed;
+            _access = access;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -143,6 +147,8 @@ namespace Requestarr.Core.Discord.Gateway
                 Client.Ready += OnReady;
                 Client.InteractionCreated += OnInteraction;
                 Client.UserLeft += OnUserLeft;
+                Client.GuildMemberUpdated += OnMemberUpdated;
+                Client.MessageReceived += OnMessage;
 
                 _watchdog = new DiscordWatchdog(() => DateTime.UtcNow, reason => Terminate(reason));
                 _watchdogTimer = new Timer(_ => _watchdog.Check(), null, WatchdogInterval, WatchdogInterval);
@@ -230,6 +236,12 @@ namespace Requestarr.Core.Discord.Gateway
                 await _panels.Value.EnsureAllAsync();
                 await _feed.Value.SeedAsync();
 
+                // Blocked roles removed by hand while the bot was away count as unblocking.
+                if (_access.Value != null)
+                {
+                    await _access.Value.ReconcileBlocksAsync();
+                }
+
                 // Members role sync and what's new on upgrade (AnnouncementService).
                 _eventAggregator.PublishEvent(new Announcements.DiscordReadyEvent());
 
@@ -282,6 +294,45 @@ namespace Requestarr.Core.Discord.Gateway
                 catch (Exception ex)
                 {
                     _logger.Error(ex, "Handling member departure failed");
+                }
+            });
+
+            return Task.CompletedTask;
+        }
+
+        // Something the bot posted in the server: that channel's panel moves below it (PanelService waits a moment so
+        // several posts in a row move it once). Private replies never reach the channel, so they don't count.
+        private Task OnMessage(SocketMessage message)
+        {
+            if (message.Author.Id == Client?.CurrentUser?.Id && message.Channel is SocketGuildChannel channel && channel.Guild.Id == _settings.Current.GuildId &&
+                !message.Flags.GetValueOrDefault().HasFlag(MessageFlags.Ephemeral) && message.Type != MessageType.ChannelPinnedMessage)
+            {
+                _panels.Value.NoticeBotMessage(channel.Id, message.Id);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        // A member's roles changed: removing the blocked role by hand unblocks them.
+        private Task OnMemberUpdated(Cacheable<SocketGuildUser, ulong> before, SocketGuildUser after)
+        {
+            if (after.Guild.Id != _settings.Current.GuildId || after.IsBot)
+            {
+                return Task.CompletedTask;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (_access.Value != null)
+                    {
+                        await _access.Value.MemberRolesChangedAsync(after.Id, after.Roles.Select(r => r.Id).ToList());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Handling a member's role change failed");
                 }
             });
 

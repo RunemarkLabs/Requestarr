@@ -28,7 +28,8 @@ namespace Requestarr.Core.Discord.Gateway
 
     public record PermissionOverwrite(ulong TargetId, OverwriteTarget TargetType, ChannelPermissions Allow, ChannelPermissions Deny);
 
-    public record ChannelMessage(ulong Id, string Content);
+    // A message as Requestarr reads it back: its text, and its first embed's title and description (version cards).
+    public record ChannelMessage(ulong Id, string Content, string EmbedTitle = null, string EmbedDescription = null);
 
     // Operations Requestarr performs in its one Discord server. Implemented over Discord.Net
     // for the live bot and in memory for tests, so all rules are testable without Discord.
@@ -49,6 +50,12 @@ namespace Requestarr.Core.Discord.Gateway
         Task<ulong?> FindCategoryAsync(string name);
         Task<ulong?> FindTextChannelAsync(string name);
         Task<int> GetChannelCountInCategoryAsync(ulong categoryId);
+
+        // The group (category) a channel sits in; null when it's in none or is gone.
+        Task<ulong?> GetChannelCategoryAsync(ulong channelId);
+
+        // Moves a channel into a group, keeping its messages and its own permissions.
+        Task MoveChannelAsync(ulong channelId, ulong categoryId);
         Task<ulong> CreateCategoryAsync(string name, IReadOnlyList<PermissionOverwrite> overwrites);
         Task<ulong> CreateTextChannelAsync(string name, ulong? categoryId, string topic, IReadOnlyList<PermissionOverwrite> overwrites);
         Task SetChannelOverwritesAsync(ulong channelId, IReadOnlyList<PermissionOverwrite> overwrites);
@@ -67,7 +74,16 @@ namespace Requestarr.Core.Discord.Gateway
 
         // False when the message no longer exists (deleted by someone).
         Task<bool> EditMessageAsync(ulong channelId, ulong messageId, InteractionReply message);
+
+        // Pins a message and removes Discord's "pinned a message" notice, so pins don't clutter the channel.
         Task PinMessageAsync(ulong channelId, ulong messageId);
+        Task UnpinMessageAsync(ulong channelId, ulong messageId);
+
+        // A private message to a member; false when Discord refuses (they don't accept messages from the server).
+        Task<bool> SendDirectMessageAsync(ulong userId, InteractionReply message);
+
+        // The newest message in a channel, whoever wrote it; null when it's empty or gone.
+        Task<ulong?> GetLatestMessageIdAsync(ulong channelId);
 
         // False when the message is gone already or can't be deleted.
         Task<bool> DeleteMessageAsync(ulong channelId, ulong messageId);

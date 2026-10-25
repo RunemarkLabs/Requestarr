@@ -19,24 +19,29 @@ namespace Requestarr.Core.Discord
         // The shared role every onboarded member holds; it can read the announcements channel.
         ulong? MembersRoleId { get; }
         ulong? AnnouncementsChannelId { get; }
+        ulong? WelcomeChannelId { get; }
+        ulong? BlockedRoleId { get; }
     }
 
-    // Makes sure the admin channel, the admin feed channel, the members role, the announcements channel and a
-    // request-channel category exist. Existing ones are reused (by stored ID, provisioned ID, then name) and only
-    // missing ones are created.
+    // Makes sure the two channel groups exist with what belongs in them: Requestarr Admin (the admin channel and the
+    // feed) and Requestarr Users (the welcome, announcements and blocked channels, then every member's private
+    // channel), plus the members and blocked roles. Existing ones are reused (by stored ID, provisioned ID, then
+    // name), moved into their group if they're elsewhere (messages kept), and only missing ones are created.
     public class GuildSetupService : IGuildSetupService
     {
         private readonly IDiscordGuildGateway _gateway;
         private readonly IDiscordSettingsStore _settings;
         private readonly IDiscordGuildConfigRepository _repository;
+        private readonly Users.IRequestarrUserRepository _users;
         private readonly IAuditService _audit;
         private readonly Logger _logger;
 
-        public GuildSetupService(IDiscordGuildGateway gateway, IDiscordSettingsStore settings, IDiscordGuildConfigRepository repository, IAuditService audit, Logger logger)
+        public GuildSetupService(IDiscordGuildGateway gateway, IDiscordSettingsStore settings, IDiscordGuildConfigRepository repository, Users.IRequestarrUserRepository users, IAuditService audit, Logger logger)
         {
             _gateway = gateway;
             _settings = settings;
             _repository = repository;
+            _users = users;
             _audit = audit;
             _logger = logger;
         }
@@ -46,6 +51,10 @@ namespace Requestarr.Core.Discord
         public ulong? MembersRoleId => Parse(GetConfig()?.MembersRoleId);
 
         public ulong? AnnouncementsChannelId => Parse(GetConfig()?.AnnouncementsChannelId);
+
+        public ulong? WelcomeChannelId => Parse(GetConfig()?.WelcomeChannelId);
+
+        public ulong? BlockedRoleId => Parse(GetConfig()?.BlockedRoleId);
 
         public DiscordGuildConfig GetConfig()
         {
@@ -59,6 +68,20 @@ namespace Requestarr.Core.Discord
 
             var adminRoleId = await EnsureAdminRoleAsync(settings, config);
             config.AdminRoleId = adminRoleId.ToString();
+            var group = ChannelLayout.Group(_gateway.GuildId, _gateway.BotUserId, adminRoleId);
+
+            // The Requestarr Admin group: its permissions are set once, and the admin channel and the feed follow them.
+            var adminGroup = await ExistingOrNull(Parse(config.AdminCategoryId)) ?? await _gateway.FindCategoryAsync(ChannelLayout.AdminCategoryName);
+
+            if (adminGroup == null)
+            {
+                adminGroup = await _gateway.CreateCategoryAsync(ChannelLayout.AdminCategoryName, group);
+                _logger.Info("Created Discord group '{0}' ({1})", ChannelLayout.AdminCategoryName, adminGroup);
+                _audit.Record(Actor.System, "discord.category.create", "channel", adminGroup.ToString(), ChannelLayout.AdminCategoryName);
+            }
+
+            await SyncOverwrites(adminGroup.Value, group);
+            config.AdminCategoryId = adminGroup.ToString();
 
             var adminChannel = await ExistingOrNull(Parse(config.AdminChannelId)) ??
                                await ExistingOrNull(settings.AdminChannelId) ??
@@ -66,13 +89,12 @@ namespace Requestarr.Core.Discord
 
             if (adminChannel == null)
             {
-                var overwrites = ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, adminRoleId);
-                adminChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.AdminChannelName, null, "Requestarr admin commands and approvals", overwrites);
+                adminChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.AdminChannelName, adminGroup, "Requestarr admin commands and approvals", group);
                 _logger.Info("Created Discord admin channel {0}", adminChannel);
                 _audit.Record(Actor.System, "discord.admin-channel.create", "channel", adminChannel.ToString());
             }
 
-            await EnsureAdminAccess(adminChannel.Value, adminRoleId);
+            await PlaceAsync(adminChannel.Value, adminGroup.Value, group);
             config.AdminChannelId = adminChannel.ToString();
             config.AdminQueueChannelId = adminChannel.ToString();
 
@@ -81,13 +103,12 @@ namespace Requestarr.Core.Discord
 
             if (feedChannel == null)
             {
-                var overwrites = ChannelLayout.AdminOnly(_gateway.GuildId, _gateway.BotUserId, adminRoleId);
-                feedChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.FeedChannelName, null, DiscordText.FeedChannelTopic, overwrites);
+                feedChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.FeedChannelName, adminGroup, DiscordText.FeedChannelTopic, group);
                 _logger.Info("Created Discord admin feed channel {0}", feedChannel);
                 _audit.Record(Actor.System, "discord.feed-channel.create", "channel", feedChannel.ToString());
             }
 
-            await EnsureAdminAccess(feedChannel.Value, adminRoleId);
+            await PlaceAsync(feedChannel.Value, adminGroup.Value, group);
 
             if (config.FeedChannelId != feedChannel.ToString())
             {
@@ -96,60 +117,157 @@ namespace Requestarr.Core.Discord
             }
 
             // One shared role for every member (it costs one of the server's 250 roles, not one each) reads the
-            // announcements channel; only admins and the bot post there.
-            var membersRole = await EnsureMembersRoleAsync(config);
+            // announcements channel; only admins and the bot post there. Another hides the welcome channel from
+            // someone blocked for spamming its buttons.
+            var membersRole = await EnsureRoleAsync(config.MembersRoleId, ChannelLayout.MembersRoleName, "discord.members-role.create");
             config.MembersRoleId = membersRole.ToString();
-            var announcementsLayout = ChannelLayout.Announcements(_gateway.GuildId, _gateway.BotUserId, adminRoleId, membersRole);
-            var announcements = await ExistingOrNull(Parse(config.AnnouncementsChannelId)) ?? await _gateway.FindTextChannelAsync(ChannelLayout.AnnouncementsChannelName);
+            var blockedRole = await EnsureRoleAsync(config.BlockedRoleId, ChannelLayout.BlockedRoleName, "discord.blocked-role.create");
+            config.BlockedRoleId = blockedRole.ToString();
 
-            if (announcements == null)
-            {
-                announcements = await _gateway.CreateTextChannelAsync(ChannelLayout.AnnouncementsChannelName, null, DiscordText.AnnouncementsChannelTopic, announcementsLayout);
-                _logger.Info("Created Discord announcements channel {0}", announcements);
-                _audit.Record(Actor.System, "discord.announcements-channel.create", "channel", announcements.ToString());
-            }
-            else
-            {
-                await EnsureOverwrites(announcements.Value, announcementsLayout.Where(o => o.TargetId != _gateway.GuildId && o.TargetId != _gateway.BotUserId));
-            }
-
-            config.AnnouncementsChannelId = announcements.ToString();
-
-            var categories = new List<string>();
-
-            foreach (var id in config.RequestCategoryIds ?? new List<string>())
-            {
-                if (await ExistingOrNull(Parse(id)) != null)
-                {
-                    await EnsureAdminAccess(ulong.Parse(id), adminRoleId);
-                    categories.Add(id);
-                }
-            }
-
-            if (!categories.Any())
-            {
-                var category = await ExistingOrNull(settings.RequestCategoryId) ?? await _gateway.FindCategoryAsync(ChannelLayout.RequestCategoryName);
-
-                if (category == null)
-                {
-                    category = await CreateCategoryAsync(1);
-                }
-                else
-                {
-                    await EnsureAdminAccess(category.Value, adminRoleId);
-                }
-
-                categories.Add(category.ToString());
-            }
-
-            config.RequestCategoryIds = categories;
+            // The Requestarr Users groups: the request groups from before, renamed in place.
+            config.RequestCategoryIds = await EnsureUsersGroupsAsync(config, settings, adminRoleId);
             _repository.Upsert(config);
+            var usersGroup = ulong.Parse(config.RequestCategoryIds[0]);
+
+            var welcome = ChannelLayout.Welcome(_gateway.GuildId, _gateway.BotUserId, adminRoleId, blockedRole);
+            var announcements = ChannelLayout.Announcements(_gateway.GuildId, _gateway.BotUserId, adminRoleId, membersRole);
+            var blocked = ChannelLayout.Blocked(_gateway.GuildId, _gateway.BotUserId, adminRoleId, blockedRole);
+
+            config.WelcomeChannelId = (await EnsureUsersChannelAsync(usersGroup, config.WelcomeChannelId, ChannelLayout.WelcomeChannelName, DiscordText.WelcomeChannelTopic, welcome, "discord.welcome-channel.create")).ToString();
+            config.AnnouncementsChannelId = (await EnsureUsersChannelAsync(usersGroup, config.AnnouncementsChannelId, ChannelLayout.AnnouncementsChannelName, DiscordText.AnnouncementsChannelTopic, announcements, "discord.announcements-channel.create")).ToString();
+            config.BlockedChannelId = (await EnsureUsersChannelAsync(usersGroup, config.BlockedChannelId, ChannelLayout.BlockedChannelName, DiscordText.BlockedChannelTopic, blocked, "discord.blocked-channel.create")).ToString();
+
+            config.RequestCategoryIds = GetConfig()?.RequestCategoryIds ?? config.RequestCategoryIds;
+            _repository.Upsert(config);
+
+            // Members' private channels that ended up outside the users groups (a group was deleted) go back in.
+            foreach (var user in _users.All().Where(u => u.Status != Users.UserStatus.Removed && u.PrivateChannelId != null))
+            {
+                if (ulong.TryParse(user.PrivateChannelId, out var channel) && await _gateway.ChannelExistsAsync(channel) &&
+                    !config.RequestCategoryIds.Contains((await _gateway.GetChannelCategoryAsync(channel))?.ToString()))
+                {
+                    await _gateway.MoveChannelAsync(channel, await GetCategoryWithRoomAsync());
+                    config = GetConfig();
+                    _logger.Info("Moved {0}'s channel back into the {1} group", user.DisplayName, ChannelLayout.UsersCategoryName);
+                }
+            }
+
+            // The old request group, if one is left over and empty, goes.
+            if (await _gateway.FindCategoryAsync(ChannelLayout.OldRequestCategoryName) is { } old && !config.RequestCategoryIds.Contains(old.ToString()) &&
+                await _gateway.GetChannelCountInCategoryAsync(old) == 0)
+            {
+                await _gateway.DeleteChannelAsync(old);
+                _logger.Info("Removed the empty '{0}' group", ChannelLayout.OldRequestCategoryName);
+                _audit.Record(Actor.System, "discord.category.delete", "channel", old.ToString(), ChannelLayout.OldRequestCategoryName);
+            }
 
             return config;
         }
 
+        // The users groups in order, each named for its place and admin-only; the first is created if there's none.
+        private async Task<List<string>> EnsureUsersGroupsAsync(DiscordGuildConfig config, DiscordSettings settings, ulong adminRoleId)
+        {
+            var groups = new List<string>();
+
+            foreach (var id in config.RequestCategoryIds ?? new List<string>())
+            {
+                if (await ExistingOrNull(Parse(id)) is { } existing)
+                {
+                    groups.Add(existing.ToString());
+                }
+            }
+
+            if (!groups.Any())
+            {
+                var found = await ExistingOrNull(settings.RequestCategoryId) ??
+                            await _gateway.FindCategoryAsync(ChannelLayout.UsersCategoryName) ??
+                            await _gateway.FindCategoryAsync(ChannelLayout.OldRequestCategoryName) ??
+                            await CreateCategoryAsync(1);
+
+                groups.Add(found.ToString());
+            }
+
+            for (var i = 0; i < groups.Count; i++)
+            {
+                var id = ulong.Parse(groups[i]);
+
+                // Discord allows only a couple of renames per channel every ten minutes: rename only when needed.
+                if (await _gateway.FindCategoryAsync(ChannelLayout.CategoryName(i + 1)) != id)
+                {
+                    await _gateway.RenameChannelAsync(id, ChannelLayout.CategoryName(i + 1));
+                    _logger.Info("Renamed group {0} to '{1}'", id, ChannelLayout.CategoryName(i + 1));
+                }
+
+                await SyncOverwrites(id, ChannelLayout.Group(_gateway.GuildId, _gateway.BotUserId, adminRoleId));
+            }
+
+            return groups;
+        }
+
+        // A channel of the first users group: found again (stored ID, then name) or created, moved into the group if
+        // it isn't there (making room if the group is full), with its own permissions.
+        private async Task<ulong> EnsureUsersChannelAsync(ulong usersGroup, string storedId, string name, string topic, IReadOnlyList<PermissionOverwrite> layout, string auditAction)
+        {
+            var channel = await ExistingOrNull(Parse(storedId)) ?? await _gateway.FindTextChannelAsync(name);
+
+            if (channel == null)
+            {
+                await MakeRoomAsync(usersGroup);
+                channel = await _gateway.CreateTextChannelAsync(name, usersGroup, topic, layout);
+                _logger.Info("Created Discord channel {0} ({1})", name, channel);
+                _audit.Record(Actor.System, auditAction, "channel", channel.ToString());
+                return channel.Value;
+            }
+
+            if (await _gateway.GetChannelCategoryAsync(channel.Value) != usersGroup)
+            {
+                await MakeRoomAsync(usersGroup);
+                await _gateway.MoveChannelAsync(channel.Value, usersGroup);
+                _logger.Info("Moved {0} into the {1} group", name, ChannelLayout.UsersCategoryName);
+            }
+
+            await SyncOverwrites(channel.Value, layout);
+            return channel.Value;
+        }
+
+        // A full first users group makes room: its newest member channel moves to a group with room.
+        private async Task MakeRoomAsync(ulong usersGroup)
+        {
+            if (await _gateway.GetChannelCountInCategoryAsync(usersGroup) < DiscordLimits.ChannelsPerCategory)
+            {
+                return;
+            }
+
+            var channels = _users.All()
+                .Select(u => ulong.TryParse(u.PrivateChannelId, out var id) ? id : 0)
+                .Where(id => id != 0)
+                .OrderByDescending(id => id);
+
+            foreach (var channel in channels)
+            {
+                if (await _gateway.GetChannelCategoryAsync(channel) == usersGroup)
+                {
+                    await _gateway.MoveChannelAsync(channel, await GetCategoryWithRoomAsync(usersGroup));
+                    return;
+                }
+            }
+        }
+
+        // Puts a channel in its group with exactly the group's permissions.
+        private async Task PlaceAsync(ulong channelId, ulong groupId, IReadOnlyList<PermissionOverwrite> group)
+        {
+            if (await _gateway.GetChannelCategoryAsync(channelId) != groupId)
+            {
+                await _gateway.MoveChannelAsync(channelId, groupId);
+            }
+
+            await SyncOverwrites(channelId, group);
+        }
+
         // Request channels spill into a new category once one holds Discord's 50-channel maximum.
-        public async Task<ulong> GetCategoryWithRoomAsync()
+        public Task<ulong> GetCategoryWithRoomAsync() => GetCategoryWithRoomAsync(null);
+
+        private async Task<ulong> GetCategoryWithRoomAsync(ulong? except)
         {
             var config = GetConfig() ?? await EnsureAsync();
 
@@ -157,7 +275,7 @@ namespace Requestarr.Core.Discord
             {
                 var categoryId = ulong.Parse(id);
 
-                if (await _gateway.ChannelExistsAsync(categoryId) &&
+                if (categoryId != except && await _gateway.ChannelExistsAsync(categoryId) &&
                     await _gateway.GetChannelCountInCategoryAsync(categoryId) < DiscordLimits.ChannelsPerCategory)
                 {
                     return categoryId;
@@ -211,57 +329,36 @@ namespace Requestarr.Core.Discord
             return created;
         }
 
-        private async Task<ulong> EnsureMembersRoleAsync(DiscordGuildConfig config)
+        private async Task<ulong> EnsureRoleAsync(string storedId, string name, string auditAction)
         {
-            if (ulong.TryParse(config.MembersRoleId, out var stored) && await _gateway.RoleExistsAsync(stored))
+            if (ulong.TryParse(storedId, out var stored) && await _gateway.RoleExistsAsync(stored))
             {
                 return stored;
             }
 
-            var existing = await _gateway.FindRoleAsync(ChannelLayout.MembersRoleName);
+            var existing = await _gateway.FindRoleAsync(name);
 
             if (existing.HasValue)
             {
                 return existing.Value;
             }
 
-            var created = await _gateway.CreateRoleAsync(ChannelLayout.MembersRoleName);
-            _logger.Info("Created Discord members role '{0}' ({1})", ChannelLayout.MembersRoleName, created);
-            _audit.Record(Actor.System, "discord.members-role.create", "role", created.ToString(), ChannelLayout.MembersRoleName);
+            var created = await _gateway.CreateRoleAsync(name);
+            _logger.Info("Created Discord role '{0}' ({1})", name, created);
+            _audit.Record(Actor.System, auditAction, "role", created.ToString(), name);
 
             return created;
         }
 
-        // Puts back the given overwrites (by target) on an existing channel, keeping any others.
-        private async Task EnsureOverwrites(ulong channelId, IEnumerable<PermissionOverwrite> wanted)
-        {
-            var overwrites = (await _gateway.GetChannelOverwritesAsync(channelId)).ToList();
-            var missing = wanted.Where(w => !overwrites.Contains(w)).ToList();
-
-            if (missing.Count == 0)
-            {
-                return;
-            }
-
-            overwrites.RemoveAll(o => missing.Any(m => m.TargetId == o.TargetId));
-            overwrites.AddRange(missing);
-            await _gateway.SetChannelOverwritesAsync(channelId, overwrites);
-        }
-
-        // Adds the admin role to an admin-only channel or category that lacks it (keeps everything else).
-        private async Task EnsureAdminAccess(ulong channelId, ulong adminRoleId)
+        // Makes a channel's permissions exactly these (a channel that follows its group, or one Requestarr owns).
+        private async Task SyncOverwrites(ulong channelId, IReadOnlyList<PermissionOverwrite> wanted)
         {
             var overwrites = await _gateway.GetChannelOverwritesAsync(channelId);
 
-            if (overwrites.Any(o => o.TargetId == adminRoleId))
+            if (overwrites.Count != wanted.Count || wanted.Any(w => !overwrites.Contains(w)))
             {
-                return;
+                await _gateway.SetChannelOverwritesAsync(channelId, wanted);
             }
-
-            var updated = overwrites.ToList();
-            const ChannelPermissions readWrite = ChannelPermissions.ViewChannel | ChannelPermissions.SendMessages | ChannelPermissions.ReadMessageHistory;
-            updated.Add(new PermissionOverwrite(adminRoleId, OverwriteTarget.Role, readWrite, ChannelPermissions.None));
-            await _gateway.SetChannelOverwritesAsync(channelId, updated);
         }
 
         private async Task<ulong?> ExistingOrNull(ulong? channelId)

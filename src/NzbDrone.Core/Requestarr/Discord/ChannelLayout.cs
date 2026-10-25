@@ -12,14 +12,31 @@ namespace Requestarr.Core.Discord
         public const string AdminChannelName = "requestarr-admin";
         public const string FeedChannelName = "requestarr-feed";
         public const string AnnouncementsChannelName = "requestarr-announcements";
+
+        // Prefixed so it can't clash with a server's own welcome channel.
+        public const string WelcomeChannelName = "requestarr-welcome";
+        public const string BlockedChannelName = "requestarr-access-blocked";
         public const string MembersRoleName = "Requestarr Members";
-        public const string RequestCategoryName = "Requestarr Requests";
+        public const string BlockedRoleName = "Requestarr Blocked";
+
+        // Admin channel and feed; then the welcome, announcements and blocked channels and every member's private
+        // channel, spilling into "Requestarr Users 2", "3" and on. Before task 4e the users groups were the request
+        // groups, holding only the private channels; they are renamed in place, so nothing moves or loses messages.
+        public const string AdminCategoryName = "Requestarr Admin";
+        public const string UsersCategoryName = "Requestarr Users";
+        public const string OldRequestCategoryName = "Requestarr Requests";
         public const string UserChannelPrefix = "requests-";
         public const string UserRolePrefix = "requestarr-";
         public const string ArchivedPrefix = "archived-";
 
         private const ChannelPermissions ReadWrite = ChannelPermissions.ViewChannel | ChannelPermissions.SendMessages | ChannelPermissions.ReadMessageHistory;
+        private const ChannelPermissions ReadOnly = ChannelPermissions.ViewChannel | ChannelPermissions.ReadMessageHistory;
+        private const ChannelPermissions NoPosting = ChannelPermissions.SendMessages | ChannelPermissions.Threads;
         private const ChannelPermissions Bot = ReadWrite | ChannelPermissions.EmbedLinks;
+
+        // Both groups: only the admin role and the bot see them. The admin channel and the feed are exactly this
+        // (they follow the group); the users groups' channels add their own permissions on top.
+        public static IReadOnlyList<PermissionOverwrite> Group(ulong guildId, ulong botUserId, ulong? adminRoleId) => AdminOnly(guildId, botUserId, adminRoleId);
 
         public static IReadOnlyList<PermissionOverwrite> AdminOnly(ulong guildId, ulong botUserId, ulong? adminRoleId)
         {
@@ -47,6 +64,42 @@ namespace Requestarr.Core.Discord
             return overwrites;
         }
 
+        // Everyone in the server reads it; nobody but the bot posts or starts threads. Hidden from the blocked role.
+        public static IReadOnlyList<PermissionOverwrite> Welcome(ulong guildId, ulong botUserId, ulong? adminRoleId, ulong blockedRoleId)
+        {
+            var overwrites = new List<PermissionOverwrite>
+            {
+                new(guildId, OverwriteTarget.Role, ReadOnly, NoPosting),
+                new(botUserId, OverwriteTarget.Member, Bot, ChannelPermissions.None),
+                new(blockedRoleId, OverwriteTarget.Role, ChannelPermissions.None, ChannelPermissions.ViewChannel)
+            };
+
+            if (adminRoleId.HasValue)
+            {
+                overwrites.Add(new PermissionOverwrite(adminRoleId.Value, OverwriteTarget.Role, ReadOnly, NoPosting));
+            }
+
+            return overwrites;
+        }
+
+        // Only the blocked role (and the admins) read it; nobody but the bot posts.
+        public static IReadOnlyList<PermissionOverwrite> Blocked(ulong guildId, ulong botUserId, ulong? adminRoleId, ulong blockedRoleId)
+        {
+            var overwrites = new List<PermissionOverwrite>
+            {
+                new(guildId, OverwriteTarget.Role, ChannelPermissions.None, ChannelPermissions.ViewChannel),
+                new(botUserId, OverwriteTarget.Member, Bot, ChannelPermissions.None),
+                new(blockedRoleId, OverwriteTarget.Role, ReadOnly, NoPosting)
+            };
+
+            if (adminRoleId.HasValue)
+            {
+                overwrites.Add(new PermissionOverwrite(adminRoleId.Value, OverwriteTarget.Role, ReadOnly, NoPosting));
+            }
+
+            return overwrites;
+        }
+
         // Visible only to the user's role, the admin role (the server owner always sees everything), and the bot.
         // A locked channel stays readable for the user but they cannot post.
         public static IReadOnlyList<PermissionOverwrite> UserChannel(ulong guildId, ulong botUserId, ulong? adminRoleId, ulong userRoleId, bool locked)
@@ -66,7 +119,7 @@ namespace Requestarr.Core.Discord
 
         public static string ArchivedName(string channelName) => Truncate(ArchivedPrefix + channelName, DiscordLimits.ChannelNameLength);
 
-        public static string CategoryName(int index) => index <= 1 ? RequestCategoryName : $"{RequestCategoryName} {index}";
+        public static string CategoryName(int index) => index <= 1 ? UsersCategoryName : $"{UsersCategoryName} {index}";
 
         public static string Slug(string username)
         {

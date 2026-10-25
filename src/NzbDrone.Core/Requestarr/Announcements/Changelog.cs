@@ -1,20 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 
 namespace Requestarr.Core.Announcements
 {
-    // One "## x.y.z" section of CHANGELOG.md. Users: posted to members in these exact words, and to the admin
-    // channel with Admins. A version with nothing for either posts nothing anywhere.
-    public record ChangelogVersion(Version Version, IReadOnlyList<string> Users, IReadOnlyList<string> Admins)
+    // One "## x.y.z (YYYY-MM-DD)" section of CHANGELOG.md. Users: posted to members in these exact words, and to the
+    // admin channel with Admins. A version with nothing for either posts nothing anywhere. Date: the day it was made.
+    public record ChangelogVersion(Version Version, IReadOnlyList<string> Users, IReadOnlyList<string> Admins, DateTime? Date = null)
     {
         public bool HasNews => Users.Count + Admins.Count > 0;
     }
 
     // CHANGELOG.md at the repo root is the source of truth for what changed; it is embedded in the build.
-    // Format: "## x.y.z", then "### For users" and "### For admins", each a list of "- " lines; a section with
+    // Format: "## x.y.z (YYYY-MM-DD)", then "### For users" and "### For admins", each a list of "- " lines; a section with
     // nothing in it is left out, heading included. Any other section is ignored here (CI's changelog check refuses it).
     public static class Changelog
     {
@@ -39,6 +40,7 @@ namespace Requestarr.Core.Announcements
         {
             var versions = new List<ChangelogVersion>();
             Version version = null;
+            DateTime? date = null;
             List<string> current = null;
             var sections = new Dictionary<string, List<string>>();
 
@@ -46,7 +48,7 @@ namespace Requestarr.Core.Announcements
             {
                 if (version != null)
                 {
-                    versions.Add(new ChangelogVersion(version, Get(UsersHeading), Get(AdminsHeading)));
+                    versions.Add(new ChangelogVersion(version, Get(UsersHeading), Get(AdminsHeading), date));
                 }
 
                 sections = new Dictionary<string, List<string>>();
@@ -62,7 +64,11 @@ namespace Requestarr.Core.Announcements
                 if (line.StartsWith("## "))
                 {
                     Flush();
-                    version = Version.TryParse(line.Substring(3).Trim(), out var parsed) ? parsed : null;
+                    var heading = line.Substring(3).Trim().Split(' ', 2);
+                    version = Version.TryParse(heading[0], out var parsed) ? parsed : null;
+                    date = heading.Length > 1 && DateTime.TryParseExact(heading[1].Trim('(', ')'), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
+                        ? day
+                        : null;
                 }
                 else if (line.StartsWith("### ") && version != null)
                 {

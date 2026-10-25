@@ -17,6 +17,14 @@ namespace NzbDrone.Core.Configuration
         int RemovalVoteDays { get; set; }
         int RemovalRequesterTimeoutDays { get; set; }
         int RemovalReminderDay { get; set; }
+        int AccessDenialCooldownDays { get; set; }
+        int AccessSpamWindowMinutes { get; set; }
+        int AccessShortCooldownClicks { get; set; }
+        int AccessShortCooldownMinutes { get; set; }
+        int AccessLongCooldownClicks { get; set; }
+        int AccessLongCooldownHours { get; set; }
+        int AccessBlockClicks { get; set; }
+        int AccessBlockWithinHours { get; set; }
 
         //UI
         int FirstDayOfWeek { get; set; }

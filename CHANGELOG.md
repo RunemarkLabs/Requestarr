@@ -3,17 +3,18 @@
 What changed in each version, for the people who use Requestarr. Every pull request adds its entry here (see
 "Changelog" in docs/development.md). Two sections only, **For users** and **For admins**, in plain words; a section
 with nothing in it is left out, and a version with nothing for either has only its heading. Requestarr posts these
-in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word.
+in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
+version heading carries the day it was made, which its card in Discord shows.
 
-## 0.3.4
+## 0.3.4 (2026-10-24)
 
-## 0.3.3
+## 0.3.3 (2026-10-24)
 
-## 0.3.2
+## 0.3.2 (2026-10-24)
 
-## 0.3.1
+## 0.3.1 (2026-10-24)
 
-## 0.3.0
+## 0.3.0 (2026-10-24)
 
 ### For users
 - **What's new history:** the announcements channel keeps a post for every version, so you can scroll back through everything that has changed.
@@ -23,15 +24,15 @@ in Discord: both sections in the admin channel, and **For users** in the announc
 - **Clearer what's new posts:** each post shows only the sections that have something in them, and a version with nothing for you or your members posts nothing at all.
 - **Published container image:** Requestarr is now published on GitHub's container registry for x86-64 and ARM servers, so you can pull it instead of building it yourself.
 
-## 0.2.4
+## 0.2.4 (2026-10-24)
 
-## 0.2.3
+## 0.2.3 (2026-10-24)
 
-## 0.2.2
+## 0.2.2 (2026-10-24)
 
-## 0.2.1
+## 0.2.1 (2026-10-24)
 
-## 0.2.0
+## 0.2.0 (2026-10-22)
 
 ### For users
 - **Remove what you're done with:** press **Remove…** on a request's message to put the title to a vote.
@@ -46,9 +47,9 @@ in Discord: both sections in the admin channel, and **For users** in the announc
 - **Removal timing:** votes run 7 days, requesters have 7 days to answer and are reminded on day 5; all three can be changed in your provisioning settings, ready for the admin web portal.
 - **Nothing loaded from outside:** the TMDB logo and the feed card spacer are built into Requestarr and sent with each message, instead of being loaded from GitHub.
 
-## 0.1.1
+## 0.1.1 (2026-10-21)
 
-## 0.1.0
+## 0.1.0 (2026-10-21)
 
 ### For users
 - **Request movies and TV:** type /request, pick a type, type a title, and press **Request** on the one you want.

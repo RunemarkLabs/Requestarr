@@ -104,6 +104,7 @@ namespace Requestarr.Core.Test.AdminRequests
                 new Lazy<IUserManagementService>(() => users),
                 new Lazy<IPanelService>(() => panels),
                 new Lazy<IRequestFeed>(() => feed),
+                new Lazy<Requestarr.Core.Access.IAccessRequestService>(() => null),
                 Mocker.Resolve<IEventAggregator>(),
                 LogManager.GetLogger("LiveDiscord"));
 

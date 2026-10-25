@@ -23,6 +23,9 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Edits only: leave the message's embeds as they are.
         public bool KeepEmbeds { get; init; }
+
+        // Posts only: no mention pings anyone and no notification is sent (a panel moved to the bottom again).
+        public bool Quiet { get; init; }
     }
 
     // Text: the menu's own options. User: Discord's member picker (values are user IDs).

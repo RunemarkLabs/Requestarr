@@ -48,7 +48,7 @@ namespace Requestarr.Core.Test.Discord
             Log($"[commands] registered on the server: {string.Join(", ", commands.Select(c => "/" + c.Name))}; global: {global.Count}");
 
             var channels = await guild.GetTextChannelsAsync();
-            var categories = (await guild.GetCategoryChannelsAsync()).Where(c => c.Name.StartsWith(ChannelLayout.RequestCategoryName)).Select(c => c.Id).ToHashSet();
+            var categories = (await guild.GetCategoryChannelsAsync()).Where(c => c.Name.StartsWith(ChannelLayout.UsersCategoryName)).Select(c => c.Id).ToHashSet();
             var admin = channels.Single(c => c.Name == ChannelLayout.AdminChannelName);
             var userChannels = channels.Where(c => c.CategoryId.HasValue && categories.Contains(c.CategoryId.Value) && c.Name.StartsWith(ChannelLayout.UserChannelPrefix)).ToList();
 
