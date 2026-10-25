@@ -71,7 +71,13 @@ namespace Requestarr.Core.Test.Welcome
                     .And.NotContain("#7048e8", "the placeholder purple is gone");
             }
 
-            login.Should().Contain("/Content/Images/Icons/__ICON_THEME__/__ICON_SET__/__HEADER_LOGO__");
+            // The sign-in panel header is dark gray in both themes, so its logo is always the dark set's.
+            login.Should().Contain("src=\"/Content/Images/Icons/dark/__ICON_SET__/__HEADER_LOGO__\"")
+                 .And.NotContain("Icons/__ICON_THEME__/__ICON_SET__/__HEADER_LOGO__");
+
+            // While the app loads it shows the header's logo; nothing of the old placeholder is left.
+            var loading = File.ReadAllText(Item4To6Fixture.RepoFile("frontend", "src", "Components", "Page", "LoadingPage.js"));
+            loading.Should().Contain("<HeaderLogo").And.NotContain("data:image");
 
             foreach (var theme in new[] { "light", "dark" })
             {
