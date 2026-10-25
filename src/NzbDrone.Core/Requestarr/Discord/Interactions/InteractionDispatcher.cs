@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using NLog;
 
@@ -23,8 +24,16 @@ namespace Requestarr.Core.Discord.Interactions
         public const string UnknownInteractionMessage = "That command isn't available.";
         public const string FailedInteractionMessage = "Something went wrong handling that. The admin can check the Requestarr logs.";
 
+        // Discord lets a bot remove its private replies for 15 minutes after the press.
+        public static readonly TimeSpan PrivateReplyLifetime = TimeSpan.FromMinutes(15);
+
         private readonly Dictionary<(InteractionKind, string), IInteractionHandler> _routes;
         private readonly Logger _logger;
+
+        // The last press of each button, per person, that answered privately: pressing it again replaces that copy.
+        private readonly Dictionary<(ulong User, string CustomId), (IInteractionResponder Responder, DateTime At)> _privateCopies = new();
+
+        public Func<DateTime> Now { get; set; } = () => DateTime.UtcNow;
 
         public InteractionDispatcher(IEnumerable<IInteractionHandler> handlers, Logger logger)
         {
@@ -60,6 +69,7 @@ namespace Requestarr.Core.Discord.Interactions
             try
             {
                 await handler.HandleAsync(interaction, responder);
+                await ReplaceEarlierCopyAsync(interaction, responder);
 
                 return DispatchOutcome.Handled;
             }
@@ -69,6 +79,50 @@ namespace Requestarr.Core.Discord.Interactions
                 await Reply(interaction.Kind == InteractionKind.Autocomplete ? null : responder, FailedInteractionMessage);
 
                 return DispatchOutcome.Failed;
+            }
+        }
+
+        // A button that answers privately shows one copy per person: the copy from their previous press of the same button
+        // goes once the new one is posted, so pressing Help or Read changes again doesn't stack another.
+        private async Task ReplaceEarlierCopyAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            if (interaction.Kind != InteractionKind.Button || interaction.CustomId == null || !responder.HasPrivateReplies)
+            {
+                return;
+            }
+
+            var now = Now();
+            var key = (interaction.UserId, interaction.CustomId);
+            IInteractionResponder earlier = null;
+
+            lock (_privateCopies)
+            {
+                foreach (var gone in _privateCopies.Where(c => now - c.Value.At >= PrivateReplyLifetime).Select(c => c.Key).ToList())
+                {
+                    _privateCopies.Remove(gone);
+                }
+
+                if (_privateCopies.TryGetValue(key, out var copy))
+                {
+                    earlier = copy.Responder;
+                }
+
+                _privateCopies[key] = (responder, now);
+            }
+
+            if (earlier == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await earlier.DeletePrivateRepliesAsync();
+            }
+            catch (Exception ex)
+            {
+                // Already dismissed, or too old for Discord: it goes when the person reloads Discord.
+                _logger.Debug(ex, "Could not remove the earlier private reply to '{0}' for user {1}", interaction.CustomId, interaction.UserId);
             }
         }
 

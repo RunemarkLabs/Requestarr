@@ -13,6 +13,10 @@ namespace Requestarr.Core.Discord.Gateway
     {
         private readonly SocketInteraction _interaction;
 
+        // How to remove each private message this interaction posted. A component's deferred response is the
+        // pressed message itself, so only a private response or private follow-up is ever listed here.
+        private readonly List<Func<Task>> _privateReplies = new();
+
         public DiscordNetResponder(SocketInteraction interaction)
         {
             _interaction = interaction;
@@ -36,6 +40,11 @@ namespace Requestarr.Core.Discord.Gateway
                 {
                     await _interaction.RespondWithFilesAsync(files, reply.Content, embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None);
                 }
+
+                if (reply.Ephemeral)
+                {
+                    _privateReplies.Add(() => _interaction.DeleteOriginalResponseAsync());
+                }
             }
             finally
             {
@@ -49,19 +58,31 @@ namespace Requestarr.Core.Discord.Gateway
 
             try
             {
-                if (files.Count == 0)
+                var sent = files.Count == 0
+                    ? await _interaction.FollowupAsync(Text(reply), embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None, flags: Flags(reply))
+                    : await _interaction.FollowupWithFilesAsync(files, reply.Content, embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None);
+
+                if (reply.Ephemeral && sent != null)
                 {
-                    await _interaction.FollowupAsync(Text(reply), embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None, flags: Flags(reply));
-                }
-                else
-                {
-                    await _interaction.FollowupWithFilesAsync(files, reply.Content, embeds: Embeds(reply), ephemeral: reply.Ephemeral, components: Components(reply), allowedMentions: AllowedMentions.None);
+                    _privateReplies.Add(() => sent.DeleteAsync());
                 }
             }
             finally
             {
                 files.ForEach(f => f.Dispose());
             }
+        }
+
+        public bool HasPrivateReplies => _privateReplies.Count > 0;
+
+        public async Task DeletePrivateRepliesAsync()
+        {
+            foreach (var delete in _privateReplies.ToList())
+            {
+                await delete();
+            }
+
+            _privateReplies.Clear();
         }
 
         // The images the reply's embeds point to (attachment://...), sent with it (DiscordAssets).

@@ -6,6 +6,14 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.2 (2026-10-25)
+
+### For users
+- **No more stacked copies:** pressing a button that answers only you, like Help, My requests or Read changes, again now replaces your earlier answer instead of adding another copy under it.
+
+### For admins
+- **Tidier admin channel:** pressing Pending queue, Users, Help or Read changes again replaces your earlier private answer instead of stacking copies.
+
 ## 0.4.1 (2026-10-25)
 
 ### For users

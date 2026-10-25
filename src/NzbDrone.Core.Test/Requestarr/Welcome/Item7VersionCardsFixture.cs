@@ -77,6 +77,16 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
+        public async Task pressing_read_changes_again_replaces_the_earlier_copy()
+        {
+            var first = await Harness.SendAsync(AsAdmin(FakeInteraction.Button("whatsnew:a:0.2.0")));
+            var second = await Harness.SendAsync(AsAdmin(FakeInteraction.Button("whatsnew:a:0.2.0")));
+
+            first.Responder.PrivateRepliesDeleted.Should().BeTrue();
+            second.Responder.PrivateRepliesDeleted.Should().BeFalse();
+        }
+
+        [Test]
         public async Task members_read_only_their_section()
         {
             await AddUser(Alice);
