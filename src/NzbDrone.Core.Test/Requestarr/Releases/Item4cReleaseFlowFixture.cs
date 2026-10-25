@@ -33,7 +33,9 @@ namespace Requestarr.Core.Test.Releases
             foreach (var script in new[] { Read("docker", "dev.ps1"), Read("docker", "dev.sh") })
             {
                 script.Should().Contain("DEV_DISCORD_BOT_TOKEN").And.Contain("DEV_DISCORD_GUILD_ID");
-                script.Should().Contain("19797").And.Contain("28989").And.Contain("27878", "the dev stack's own ports");
+                script.Should().Contain("39797").And.Contain("38989").And.Contain("37878", "the dev stack's own ports");
+                script.Should().Contain("29797").And.Contain("28989").And.Contain("27878", "the QA stack's own ports");
+                script.Should().NotContain("'9797'").And.NotContain(":-9797}").And.NotContain("19797").And.NotContain("18989").And.NotContain("17878", "no stack keeps an old port");
                 script.Should().Contain("reset-uat", "the old name still works");
                 script.Should().Contain("archive --format=tar", "a stack runs exactly its branch's commit, never uncommitted files");
             }

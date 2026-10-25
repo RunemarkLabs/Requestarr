@@ -17,9 +17,9 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public static ulong GuildId => ulong.Parse(Environment.GetEnvironmentVariable("DEV_DISCORD_GUILD_ID"));
 
-        public static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("DEV_RADARR_TEST_PORT") ?? "27878"}";
+        public static string RadarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("DEV_RADARR_TEST_PORT") ?? "37878"}";
 
-        public static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("DEV_SONARR_TEST_PORT") ?? "28989"}";
+        public static string SonarrUrl => $"http://localhost:{Environment.GetEnvironmentVariable("DEV_SONARR_TEST_PORT") ?? "38989"}";
 
         public static string RadarrKey => Environment.GetEnvironmentVariable("RADARR_TEST_API_KEY");
 

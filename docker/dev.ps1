@@ -143,9 +143,9 @@ function Get-StackInfo([string]$which) {
                 Name = 'QA'; Project = 'requestarr-qa'; Secrets = $s
                 Env = @{
                     REQUESTARR_STACK = 'qa'
-                    STACK_REQUESTARR_PORT = (Value $s 'REQUESTARR_PORT' '9797')
-                    STACK_SONARR_TEST_PORT = (Value $s 'SONARR_TEST_PORT' '18989')
-                    STACK_RADARR_TEST_PORT = (Value $s 'RADARR_TEST_PORT' '17878')
+                    STACK_REQUESTARR_PORT = (Value $s 'REQUESTARR_PORT' '29797')
+                    STACK_SONARR_TEST_PORT = (Value $s 'SONARR_TEST_PORT' '28989')
+                    STACK_RADARR_TEST_PORT = (Value $s 'RADARR_TEST_PORT' '27878')
                     STACK_DISCORD_BOT_TOKEN = $s['DISCORD_BOT_TOKEN']
                     STACK_DISCORD_APPLICATION_ID = $s['DISCORD_APPLICATION_ID']
                     STACK_DISCORD_GUILD_ID = $s['DISCORD_TEST_GUILD_ID']
@@ -160,9 +160,9 @@ function Get-StackInfo([string]$which) {
                 Name = 'Dev'; Project = 'requestarr-dev'; Secrets = $s
                 Env = @{
                     REQUESTARR_STACK = 'dev'
-                    STACK_REQUESTARR_PORT = (Value $s 'DEV_REQUESTARR_PORT' '19797')
-                    STACK_SONARR_TEST_PORT = (Value $s 'DEV_SONARR_TEST_PORT' '28989')
-                    STACK_RADARR_TEST_PORT = (Value $s 'DEV_RADARR_TEST_PORT' '27878')
+                    STACK_REQUESTARR_PORT = (Value $s 'DEV_REQUESTARR_PORT' '39797')
+                    STACK_SONARR_TEST_PORT = (Value $s 'DEV_SONARR_TEST_PORT' '38989')
+                    STACK_RADARR_TEST_PORT = (Value $s 'DEV_RADARR_TEST_PORT' '37878')
                     STACK_DISCORD_BOT_TOKEN = $s['DEV_DISCORD_BOT_TOKEN']
                     STACK_DISCORD_APPLICATION_ID = $s['DEV_DISCORD_APPLICATION_ID']
                     STACK_DISCORD_GUILD_ID = $s['DEV_DISCORD_GUILD_ID']
