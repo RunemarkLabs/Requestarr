@@ -26,6 +26,12 @@ namespace NzbDrone.Core.Configuration
         int AccessBlockClicks { get; set; }
         int AccessBlockWithinHours { get; set; }
 
+        // Requestarr's bot picture and banner; read through Requestarr.Core.Discord.BotProfileSettings
+        bool BotProfileKeepUpToDate { get; set; }
+        bool BotProfileTakeOver { get; set; }
+        string BotProfileAvatarSet { get; set; }
+        string BotProfileBannerSet { get; set; }
+
         //UI
         int FirstDayOfWeek { get; set; }
         string CalendarWeekColumnHeader { get; set; }

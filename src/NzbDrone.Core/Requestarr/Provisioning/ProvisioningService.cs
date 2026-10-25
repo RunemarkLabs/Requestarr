@@ -32,6 +32,7 @@ namespace Requestarr.Core.Provisioning
         private readonly Requestarr.Core.Availability.IAvailabilitySettingsStore _availability;
         private readonly Requestarr.Core.Removals.IRemovalSettings _removal;
         private readonly Requestarr.Core.Access.IAccessSettings _access;
+        private readonly Requestarr.Core.Discord.IBotProfileSettings _botProfile;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -44,6 +45,7 @@ namespace Requestarr.Core.Provisioning
                                    Requestarr.Core.Availability.IAvailabilitySettingsStore availability,
                                    Requestarr.Core.Removals.IRemovalSettings removal,
                                    Requestarr.Core.Access.IAccessSettings access,
+                                   Requestarr.Core.Discord.IBotProfileSettings botProfile,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -56,6 +58,7 @@ namespace Requestarr.Core.Provisioning
             _availability = availability;
             _removal = removal;
             _access = access;
+            _botProfile = botProfile;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -199,6 +202,11 @@ namespace Requestarr.Core.Provisioning
             _access.Apply(document.AccessRequests);
             applied.Add($"access requests (ask again {_access.DenialCooldownDays} days after a denial; spam guard: {_access.ShortCooldownClicks} clicks in {_access.SpamWindowMinutes} min wait {_access.ShortCooldownMinutes} min, " +
                         $"{_access.LongCooldownClicks} wait {_access.LongCooldownHours} h, {_access.BlockClicks} more within {_access.BlockWithinHours} h block)");
+
+            _botProfile.Apply(document.BotProfile);
+            applied.Add(_botProfile.KeepUpToDate
+                ? $"bot picture and banner kept up to date{(_botProfile.TakeOver ? " (replacing ones chosen by hand)" : string.Empty)}"
+                : "bot picture and banner left as they are");
 
             _backends.SyncFromProvisioning(document.Backends);
 

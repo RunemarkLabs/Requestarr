@@ -15,6 +15,10 @@ It is never more prominent than Requestarr's own branding.
 
 Requestarr uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. The logo is TMDB's trademark and is used under TMDB's API terms of use; it is not covered by this repository's GPL-3.0 licence.
 
+## requestarr-avatar.png and requestarr-banner-*.png
+
+The bot's own Discord picture (the plain R, the same in every environment) and banner (`teal` for production and anything that isn't a test environment, `dev`, `qa`, and `beta` for staging). Requestarr sets them on the bot when it starts, only when they differ, and never over a picture someone chose by hand (`BotProfileService`, setup guide 5.13). A new picture or banner reaches Discord with the release that contains it.
+
 ## feed-card-width.png
 
 A fully transparent 800×1 image. Every card in the admin feed (`#requestarr-feed`) uses it as its embed image, because Discord sizes an embed to its content: with it, all cards are drawn the same width, whatever their text. It shows nothing.

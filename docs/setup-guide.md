@@ -20,7 +20,7 @@ Every Requestarr install uses its own bot. Discord's official reference is https
 3. **Installation:** set Installation Contexts to **Guild Install** only, set **Install Link** to **None**, and save.
    Do this before step 4. Discord refuses to make a bot private while an install link is set ("Private application cannot have a default authorization link").
 4. **Bot:**
-   - Set the bot username.
+   - Set the bot username. Leave its icon and banner empty: Requestarr sets them itself (5.13).
    - Turn **Public Bot** off, so nobody else can add your bot.
    - Under Privileged Gateway Intents, turn **Server Members Intent** on. Requestarr needs it to detect members leaving. Leave Presence and Message Content off.
    - Ignore the Bot Permissions grid on this page. It is only a calculator and saves nothing.
@@ -696,6 +696,23 @@ accessRequests:
     longCooldownHours: 24
     blockClicks: 5            # this many more within blockWithinHours: blocked
     blockWithinHours: 24
+```
+
+### 5.13 The bot's picture and banner
+
+Requestarr gives its bot the Requestarr picture and a banner, and updates them when a new release changes them, so you never upload them by hand. The picture is the same everywhere. The banner is the teal one, or the dev, QA or beta one on those test servers.
+
+- It happens when the bot starts, and only when something differs. An unchanged picture is never uploaded again, so it stays well inside Discord's limit on how often a bot can change its picture. If Discord refuses anyway, the log says so and Requestarr tries again on a later start. The bot runs normally either way.
+- It needs no permission and no change to the invite link: a bot changes its own picture and banner.
+- **Your own picture stays.** Requestarr only replaces a picture or banner it set itself, or puts one in when the bot has none. It remembers Discord's id for each one it sets. If the id changes, someone changed it by hand, and Requestarr leaves it alone from then on. A picture the bot already had before Requestarr managed it counts as your choice too.
+- **To let Requestarr replace your own,** set `takeOver: true`: Requestarr's picture and banner then always win, and one changed by hand is replaced on the next start.
+
+Settings, under `botProfile:` in `provisioning.yml` (each optional), stored so the admin web portal can change them later:
+
+```yaml
+botProfile:
+  keepUpToDate: true   # false: Requestarr never touches the bot's picture or banner
+  takeOver: false      # true: replace one chosen by hand too (Requestarr's always wins)
 ```
 
 ## 6. Connect Plex (optional)

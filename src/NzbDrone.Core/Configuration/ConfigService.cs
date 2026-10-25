@@ -147,6 +147,30 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("AccessBlockWithinHours", value); }
         }
 
+        public bool BotProfileKeepUpToDate
+        {
+            get { return GetValueBoolean("BotProfileKeepUpToDate", true); }
+            set { SetValue("BotProfileKeepUpToDate", value); }
+        }
+
+        public bool BotProfileTakeOver
+        {
+            get { return GetValueBoolean("BotProfileTakeOver", false); }
+            set { SetValue("BotProfileTakeOver", value); }
+        }
+
+        public string BotProfileAvatarSet
+        {
+            get { return GetValue("BotProfileAvatarSet"); }
+            set { SetValue("BotProfileAvatarSet", value ?? string.Empty); }
+        }
+
+        public string BotProfileBannerSet
+        {
+            get { return GetValue("BotProfileBannerSet"); }
+            set { SetValue("BotProfileBannerSet", value ?? string.Empty); }
+        }
+
         public bool LogIndexerResponse
         {
             get { return GetValueBoolean("LogIndexerResponse", false); }
