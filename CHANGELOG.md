@@ -6,6 +6,12 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.13 (2026-10-25)
+
+### For admins
+- **Readable sign-in logo:** the logo on the web app's sign-in page now uses its light arrow in both themes, so it stands out against the dark gray box behind it.
+- **Real logo while loading:** while the web app starts, it now shows your environment's logo, the same one as the header, instead of the old purple square with an R.
+
 ## 0.4.12 (2026-10-25)
 
 ### For admins
