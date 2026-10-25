@@ -185,9 +185,11 @@ namespace Requestarr.Core.Test.Welcome
 
                 var welcomeRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(welcomeChannel);
                 var welcome = await welcomeRest.GetMessageAsync(ulong.Parse(guildSetup.GetConfig().WelcomeMessageId));
-                Log($"[welcome] message: \"{welcome.Content.Replace("\n", " | ")}\"");
+                Log($"[welcome] card: {CardsOf(welcome)}");
                 Log($"[welcome] buttons: [{string.Join("] [", Buttons(welcome))}] (no media server is connected)");
                 Buttons(welcome).Should().Equal(DiscordText.RequestAccessLabel);
+                welcome.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2).Should().BeTrue("a card, at a message's text size");
+                CardsOf(welcome).Should().Contain("# Welcome to Requestarr");
 
                 // 3. An access request, denied; refused within the cooldown.
                 Task<InteractionRun> Press(string customId = WelcomeRoutes.Request) =>
@@ -272,7 +274,8 @@ namespace Requestarr.Core.Test.Welcome
                 var notice = (await adminRest.GetMessagesAsync(10).FlattenAsync()).First(m => m.Content.StartsWith("🚫"));
                 Log($"[block] admin notice: \"{notice.Content}\" buttons [{string.Join("] [", Buttons(notice))}]");
                 var blockedMessage = await ((IMessageChannel)await host.Client.Rest.GetChannelAsync(blockedChannel)).GetMessageAsync(ulong.Parse(guildSetup.GetConfig().BlockedMessageId));
-                Log($"[block] #{ChannelLayout.BlockedChannelName}: \"{blockedMessage.Content.Replace("\n", " | ")}\"");
+                Log($"[block] #{ChannelLayout.BlockedChannelName}: {CardsOf(blockedMessage)}");
+                CardsOf(blockedMessage).Should().Contain("## " + DiscordText.BlockedTitle);
 
                 var card2 = (await Send(dispatcher, AsOwner(FakeInteraction.SlashCommand("admin user").WithOption("member", member.Id)))).LastReply;
                 Log($"[block] member card buttons: [{string.Join("] [", card2.Buttons.Select(b => b.Label))}]");
@@ -321,8 +324,15 @@ namespace Requestarr.Core.Test.Welcome
 
                 cards.Should().NotBeEmpty();
                 var read = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{VersionCardRoutes.ReadChanges}:a:{Changelog.Release(NzbDrone.Common.EnvironmentInfo.BuildInfo.Version)}")));
-                Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): \"{read.LastReply.Embeds.FirstOrDefault()?.Title}\", {read.LastReply.Embeds.Count} section(s)");
+                Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): {read.LastReply.Cards.Count} card(s), first \"{read.LastReply.Cards.FirstOrDefault()?.Text.Split('\n')[0]}\"");
                 read.LastReply.Ephemeral.Should().BeTrue();
+
+                // Discord takes the full card's layout: posted once for real, read back, and removed.
+                var fullPosted = await gateway.SendMessageAsync(adminChannel, new InteractionReply { Cards = read.LastReply.Cards });
+                var fullBack = await adminRest.GetMessageAsync(fullPosted);
+                Log($"[cards] Read changes as Discord shows it: {CardsOf(fullBack)}");
+                CardsOf(fullBack).Should().Contain("\"## Requestarr ");
+                await gateway.DeleteMessageAsync(adminChannel, fullPosted);
 
                 // 8. The version card sits right above the one admin panel.
                 await Task.Delay(TimeSpan.FromSeconds(4));
@@ -402,7 +412,20 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         private static List<string> Buttons(IMessage message) =>
-            message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
+            All(message.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
+
+        // A card message's text and colour, on one line.
+        private static string CardsOf(IMessage message) =>
+            string.Join(" / ", message.Components.OfType<ContainerComponent>().Select(c =>
+                $"[colour {c.AccentColor?.RawValue:X6}] \"{string.Join(" ", All(c.Components).OfType<TextDisplayComponent>().Select(t => t.Content)).Replace("\n", " | ")}\""));
+
+        private static IEnumerable<IMessageComponent> All(IEnumerable<IMessageComponent> components) =>
+            components.SelectMany(c => new[] { c }.Concat(All(c switch
+            {
+                ActionRowComponent row => row.Components,
+                ContainerComponent container => container.Components,
+                _ => Enumerable.Empty<IMessageComponent>()
+            })));
 
         private static async Task<InteractionRun> Send(InteractionDispatcher dispatcher, FakeInteraction interaction)
         {

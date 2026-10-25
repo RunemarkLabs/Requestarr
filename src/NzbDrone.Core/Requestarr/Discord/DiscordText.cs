@@ -1059,23 +1059,30 @@ namespace Requestarr.Core.Discord
                 ? string.Empty
                 : $"\nTo watch on {string.Join(" or ", mediaServers)}, press its button and give your username; you can ask for that on its own or with Requestarr access.";
 
-            return "**Welcome to Requestarr**\n" +
-                   $"Requestarr lets members of this server ask for {what}. You search for a title, request it, and once it's ready to watch you get a message here in Discord.\n" +
+            // A card: a big heading, then normal-size text.
+            return "# Welcome to Requestarr\n" +
+                   $"Requestarr lets members of this server ask for {what}. You search for a title, request it, and once it's ready to watch you get a message here in Discord.\n\n" +
                    "Each member has a private channel for their requests that only they and the admins can see.\n" +
-                   $"**New here?** Press **{RequestAccessLabel}** and the admin will take a look; the answer comes as a private message. " +
-                   $"**Already a member?** Your channel is in the **{ChannelLayout.UsersCategoryName}** group." + media;
+                   "### New here?\n" +
+                   $"Press **{RequestAccessLabel}** and the admin will take a look; the answer comes as a private message.\n" +
+                   "### Already a member?\n" +
+                   $"Your channel is in the **{ChannelLayout.UsersCategoryName}** group." + media;
         }
 
-        // The blocked channel's one message; only someone holding the blocked role sees it.
+        // The blocked channel's one message, a card; only someone holding the blocked role sees it.
+        public const string BlockedTitle = "You can't request access through Requestarr any more";
+
         public const string BlockedMessage =
-            "**You can't request access through Requestarr any more**\n" +
-            "The buttons in the welcome channel were pressed many times in a row, so Requestarr has stopped taking requests from you.\n" +
+            "## " + BlockedTitle + "\n" +
+            "The buttons in the welcome channel were pressed many times in a row, so Requestarr has stopped taking requests from you.\n\n" +
             "If you think this is a mistake, message the server admin directly.";
+
+        public const uint WelcomeColor = 0x1BB3A6;
+        public const uint BlockedColor = 0xD9534F;
 
         // Answers to a welcome button click, privately.
         public const string WelcomeBlocked = "Requestarr isn't taking access requests from you any more. If you think that's a mistake, message the server admin directly.";
         public const string WelcomeBlockedNow = "That's a lot of clicks, so Requestarr has stopped taking access requests from you. If you think that's a mistake, message the server admin directly.";
-        public const string WelcomeAdmin = "You're an admin, so there's nothing to ask for. Add people from the admin panel in the admin channel.";
         public const string WelcomeSuspended = "Your Requestarr access is paused right now. If you think that's a mistake, message the server admin.";
 
         public static string WelcomeAlreadyIn(string channelId) => $"You're already in: your request channel is <#{channelId}>.";
@@ -1110,10 +1117,19 @@ namespace Requestarr.Core.Discord
 
         public static string MediaFormTitle(MediaServerProvider provider) => $"Request {provider} access";
 
+        // Admins ask like everyone, and get their channel straight away.
+        public static string AdminChannelReady(string channelId) =>
+            $"Your request channel is ready: <#{channelId}>. As an admin, what you request there is approved automatically.";
+
+        public static string AdminRequestsInOwnChannel(string channelId) => channelId != null
+            ? $"This channel is for admin actions. Make your requests in your own channel: <#{channelId}>."
+            : $"This channel is for admin actions. Press **{RequestAccessLabel}** in #{ChannelLayout.WelcomeChannelName} to get your own request channel; as an admin it's ready straight away.";
+
         public const string AccessRequestSentToAdmin = "Thanks! Your request was sent to the admin. You'll get a private message with the answer.";
 
         // The card in the admin channel and in /admin requests.
         public const string ApproveAccessLabel = "Approve…";
+        public const string AutomaticForAdmins = "Requestarr (automatic for admins)";
         public const string DenyAccessReasonLabel = "Reason they'll see (optional)";
         public const string AddWithAccessLabel = "Add with this access";
 

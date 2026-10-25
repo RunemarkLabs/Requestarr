@@ -58,7 +58,8 @@ namespace Requestarr.Core.Access
         // A click on a welcome button. Clicks that can't do anything count towards the spam guard.
         Task<WelcomeAnswer> ClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media = null);
 
-        Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername);
+        // An admin's request is approved straight away: their channel, the types they picked on auto-approve, the rest off.
+        Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername, bool isAdmin = false);
         Task<ServiceResult> SubmitMediaAsync(ulong discordUserId, string username, string displayName, MediaServerProvider provider, string mediaUsername);
 
         Task<ServiceResult> ApproveAsync(int requestId, IDictionary<ContentType, AccessState> levels, Actor admin, string adminName);
@@ -159,11 +160,6 @@ namespace Requestarr.Core.Access
                 return WelcomeAnswer.Say(DiscordText.WelcomeBlocked);
             }
 
-            if (isAdmin && media == null)
-            {
-                return WelcomeAnswer.Say(DiscordText.WelcomeAdmin);
-            }
-
             // A spam cooldown: every click is answered with the time left and does nothing else.
             if (SpamRules.CooldownLeft(guard, now) is { } left)
             {
@@ -175,7 +171,7 @@ namespace Requestarr.Core.Access
             return status == null ? WelcomeAnswer.Form() : await CountAsync(discordUserId, guard, now, status, status);
         }
 
-        public async Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername)
+        public async Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername, bool isAdmin = false)
         {
             // Checked again: the form may have stayed open while something changed.
             if (IsBlocked(discordUserId))
@@ -205,6 +201,15 @@ namespace Requestarr.Core.Access
                 Status = AccessRequestState.Pending,
                 Requested = Clock()
             });
+
+            if (isAdmin)
+            {
+                var levels = ContentTypes.Offered.ToDictionary(t => t, t => request.ContentTypes.Contains(t) ? AccessState.AutoApprove : AccessState.Off);
+                var admin = _users.EnsureAdminUser(discordUserId, username, displayName);
+                var result = await ApproveAsync(request.Id, levels, Actor.Discord(discordUserId, username, admin.Id), DiscordText.AutomaticForAdmins, tellMember: false);
+
+                return result.Success ? ServiceResult.Ok(DiscordText.AdminChannelReady(_users.FindByDiscordId(discordUserId)?.PrivateChannelId)) : result;
+            }
 
             if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
             {
@@ -250,7 +255,10 @@ namespace Requestarr.Core.Access
             return await _users.RequestMediaServerAccessAsync(user, discordUserId, provider, mediaUsername);
         }
 
-        public async Task<ServiceResult> ApproveAsync(int requestId, IDictionary<ContentType, AccessState> levels, Actor admin, string adminName)
+        public Task<ServiceResult> ApproveAsync(int requestId, IDictionary<ContentType, AccessState> levels, Actor admin, string adminName) =>
+            ApproveAsync(requestId, levels, admin, adminName, tellMember: true);
+
+        private async Task<ServiceResult> ApproveAsync(int requestId, IDictionary<ContentType, AccessState> levels, Actor admin, string adminName, bool tellMember)
         {
             var request = _requests.Find(requestId);
 
@@ -294,7 +302,10 @@ namespace Requestarr.Core.Access
 
             var outcome = DiscordText.AccessRequestApprovedCard(request, adminName, user?.PrivateChannelId);
             await CloseCardAsync(request, outcome);
-            await TellAsync(discordId, DiscordText.AccessRequestApprovedMember(user?.PrivateChannelId));
+            if (tellMember)
+            {
+                await TellAsync(discordId, DiscordText.AccessRequestApprovedMember(user?.PrivateChannelId));
+            }
 
             _audit.Record(admin, "access.approve", "access-request", request.Id.ToString(), alreadyIn ? "already a member" : string.Join(", ", levels.Select(l => $"{l.Key}={l.Value}")));
             _events.PublishEvent(new AdminQueueChangedEvent());

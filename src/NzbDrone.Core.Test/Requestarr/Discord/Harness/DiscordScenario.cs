@@ -372,7 +372,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             PanelIdIn(channel) is { } id ? channel.Messages[channel.MessageIds.IndexOf(id)] : null;
 
         // Every message in a channel that is a panel of this kind (counted to show there's only one).
-        protected int PanelsIn(FakeDiscordGuild.FakeChannel channel, string route) => channel.Messages.Count(m => m.Buttons.Any(b => b.CustomId == route));
+        protected int PanelsIn(FakeDiscordGuild.FakeChannel channel, string route) => channel.Messages.Count(m => m.Buttons.Concat(m.Cards.SelectMany(c => c.Buttons)).Any(b => b.CustomId == route));
 
         protected PermissionOverwrite OverwriteFor(FakeDiscordGuild.FakeChannel channel, ulong target) => channel.Overwrites.SingleOrDefault(o => o.TargetId == target);
 

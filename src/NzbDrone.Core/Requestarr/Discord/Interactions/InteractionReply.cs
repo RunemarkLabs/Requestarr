@@ -26,6 +26,20 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Posts only: no mention pings anyone and no notification is sent (a panel moved to the bottom again).
         public bool Quiet { get; init; }
+
+        // Cards instead of Content and Embeds: coloured boxes of normal-size text (headings allowed) with their buttons.
+        // Discord shows embed text smaller than a message; cards read like a message, with a colour. At most 4,000
+        // characters of text in all of a message's cards.
+        public List<InteractionCard> Cards { get; init; } = new();
+
+        public bool IsCards => Cards != null && Cards.Count > 0;
+    }
+
+    public class InteractionCard
+    {
+        public uint? Color { get; init; }
+        public string Text { get; init; }
+        public List<InteractionButton> Buttons { get; init; } = new();
     }
 
     // Text: the menu's own options. User: Discord's member picker (values are user IDs).

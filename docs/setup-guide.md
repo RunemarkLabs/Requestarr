@@ -480,7 +480,7 @@ On first start, Requestarr creates these, or reuses them if they already exist. 
 
 A server set up before this version is moved over on the next start: the "Requestarr Requests" group becomes "Requestarr Users" (renamed in place, so the private channels don't move), the admin channel, feed and announcements move into their groups, and nothing loses its messages.
 
-- **`#requestarr-admin`:** run `/admin` here, and use the admin panel. Approval cards for requests, access requests (5.12) and media server access also appear here, and so do account events: new users, access changes, suspensions (including a member leaving the server), blocks and Plex link requests. Only the Requestarr Admin role, the owner, and the bot can see it. Admins can also make their own requests here; those go straight through.
+- **`#requestarr-admin`:** run `/admin` here, and use the admin panel. Approval cards for requests, access requests (5.12) and media server access also appear here, and so do account events: new users, access changes, suspensions (including a member leaving the server), blocks and Plex link requests. Only the Requestarr Admin role, the owner, and the bot can see it. It's for admin actions only: admins make their own requests from their own request channel, like everyone (see 5.12).
 - **`#requestarr-feed`:** the admin feed, next to the admin channel and just as private. It has one small card per request: thumbnail, title, type, who asked, the instance, the state and, for TV, the seasons and who follows it. Every change deletes the card and posts a fresh one at the bottom, so the newest activity is always last. If you delete the channel, Requestarr recreates it on the next start. The first time a feed channel exists, it's filled with cards for requests that are still waiting or in progress, not finished ones.
 - **`#requestarr-announcements`** and the **Requestarr Members** role: news for every member, read-only for them (5.8).
 You can rename the channels. Requestarr tracks them by ID, and puts a channel back in its group on the next start if it was moved out.
@@ -654,7 +654,7 @@ Every action in this section, whether an admin or Requestarr did it, is recorded
 
 ### 5.12 The welcome channel and access requests
 
-`#requestarr-welcome` is open to everyone in the server, and only Requestarr posts there (nobody can post or start threads). Its one message, kept current, says what Requestarr is and how it works, with a **Request access** button. It's named with the `requestarr-` prefix so it can't clash with your server's own welcome channel.
+`#requestarr-welcome` is open to everyone in the server, and only Requestarr posts there (nobody can post or start threads). Its one message, a coloured card with a large heading and kept current, says what Requestarr is and how it works, with a **Request access** button. It's named with the `requestarr-` prefix so it can't clash with your server's own welcome channel.
 
 **Request access** opens a short private form: what they'd like (only the types with a Sonarr or Radarr that has connected) and, after **Continue**, an optional note. Sending it:
 
@@ -669,6 +669,7 @@ Rules for the button:
 - One open request per person. Pressing it again while one is open answers privately with its status and creates nothing.
 - After a denial, they can ask again only after a cooldown (7 days by default, `accessRequests.denialCooldownDays`).
 - Members who are already in are told where their channel is.
+- Admins (the owner and anyone with the Requestarr Admin role) ask the same way and get their own request channel straight away: no card for you to decide, the types they picked on automatic approval and the rest off. Change their access later on their member card like anyone's.
 
 **Media server buttons.** Next to **Request access** there's one button per media server you've connected (Plex, Jellyfin), and only those: with none connected, there are none. Someone can ask for media server access on its own, or tick it together with Requestarr access in the form; either way it reaches you exactly like a Link Plex request. Connecting a media server comes with Plex sharing in a later release, so for now there are no media server buttons.
 
