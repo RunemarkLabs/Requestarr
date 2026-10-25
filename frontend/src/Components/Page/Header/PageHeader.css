@@ -33,8 +33,9 @@
   height: 40px;
 }
 
+/* The environment's logo is wider than tall (its branch bar beside the R), so it's sized by height. */
 .logo {
-  width: 40px;
+  width: auto;
   height: 40px;
   border-radius: 4px;
 }
@@ -60,7 +61,7 @@
 
 @media only screen and (max-width: $breakpointSmall) {
   .logoContainer {
-    flex: 0 0 60px;
+    flex: 0 0 80px;
   }
 
   .sidebarToggleContainer {
