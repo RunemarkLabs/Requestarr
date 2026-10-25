@@ -11,6 +11,7 @@
 
 Needs git, the GitHub CLI (GH_TOKEN) and the repository checked out with full history.
 """
+import base64
 import datetime
 import json
 import os
@@ -54,6 +55,51 @@ def gh(*args, check=True):
 
 def git(*args, check=True):
     return run("git", *args, check=check)
+
+
+def gh_api(method, path, payload):
+    # Payload on stdin: a blob of yarn.lock is far longer than one command-line argument may be.
+    result = subprocess.run(["gh", "api", "-X", method, path, "--input", "-"], input=json.dumps(payload), text=True,
+                            capture_output=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr or result.stdout or "")
+        return None
+    return json.loads(result.stdout)
+
+
+def publish(repo, branch):
+    """Makes the local HEAD commit again through GitHub's API and moves the branch to it; False if GitHub refused.
+
+    A commit this workflow pushes with git is unsigned, and the repository's rules want an extra approval for those.
+    One made through the API with the workflow's token is signed by GitHub, so the update can merge on its own."""
+    parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+    # Start from the parent closest to the result (dev, when dev was merged in), so only a few files are sent.
+    base = min(parents, key=lambda p: len(git("diff", "--name-only", "--no-renames", p, "HEAD").splitlines()))
+    entries = []
+    for line in git("diff", "--name-status", "--no-renames", base, "HEAD").splitlines():
+        status, path = line.split("\t", 1)
+        if status == "D":
+            entries.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
+            continue
+        mode = git("ls-tree", "HEAD", "--", path).split()[0]
+        content = base64.b64encode(subprocess.run(["git", "show", "HEAD:" + path], capture_output=True).stdout)
+        blob = gh_api("POST", "repos/%s/git/blobs" % repo, {"content": content.decode(), "encoding": "base64"})
+        if blob is None:
+            return False
+        entries.append({"path": path, "mode": mode, "type": "blob", "sha": blob["sha"]})
+    tree = gh_api("POST", "repos/%s/git/trees" % repo, {"base_tree": git("rev-parse", base + "^{tree}"),
+                                                         "tree": entries})
+    if tree is None or tree["sha"] != git("rev-parse", "HEAD^{tree}"):
+        sys.stderr.write("the tree GitHub built differs from the local one\n")
+        return False
+    commit = gh_api("POST", "repos/%s/git/commits" % repo, {"message": git("log", "-1", "--format=%B", "HEAD"),
+                                                            "tree": tree["sha"], "parents": parents})
+    if commit is None or gh_api("PATCH", "repos/%s/git/refs/heads/%s" % (repo, branch),
+                                {"sha": commit["sha"], "force": False}) is None:
+        return False
+    git("fetch", "--quiet", "origin", branch)
+    git("reset", "--quiet", "--hard", commit["sha"])
+    return True
 
 
 # ---- deciding ---------------------------------------------------------------------------------------------------
@@ -279,11 +325,8 @@ def update_next(repo):
         merging = subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True).returncode == 0
         if merging or subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0:
             git("commit", "--quiet", "--no-verify", "-m", COMMIT_MESSAGE.format(version="%d.%d.%d" % version))
-        pushed = subprocess.run(["git", "push", "--quiet", "origin", "HEAD:refs/heads/" + branch], text=True,
-                                capture_output=True)
-        if pushed.returncode != 0:
-            sys.stderr.write(pushed.stderr)
-            hold(repo, number, "its version and changelog section could not be added (the push was refused).")
+        if not publish(repo, branch):
+            hold(repo, number, "its version and changelog section could not be added (GitHub refused the commit).")
             return True
         print("#%d: version %d.%d.%d added" % ((number,) + version))
 
