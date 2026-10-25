@@ -12,6 +12,10 @@ namespace Requestarr.Core.Test.Discord
     [TestFixture]
     public class Item7MediaServerFixture : DiscordScenario
     {
+        // These cover Link Plex, which shows only while a Plex server is connected (task 4e).
+        [SetUp]
+        public void ConnectPlex() => ConnectedMediaServers.Servers.Add(Requestarr.Core.MediaServers.MediaServerProvider.Plex);
+
         [SetUp]
         public async Task AddAlice()
         {

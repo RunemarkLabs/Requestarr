@@ -19,6 +19,10 @@ namespace Requestarr.Core.Test.CommandSurface
     [TestFixture]
     public class Item4AdminPrefixFixture : RequestScenario
     {
+        // These cover Link Plex, which shows only while a Plex server is connected (task 4e).
+        [SetUp]
+        public void ConnectPlex() => ConnectedMediaServers.Servers.Add(Requestarr.Core.MediaServers.MediaServerProvider.Plex);
+
         [Test]
         public void exactly_request_and_admin_are_registered()
         {
