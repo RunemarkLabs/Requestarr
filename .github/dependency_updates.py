@@ -58,14 +58,18 @@ def git(*args, check=True):
     return run("git", *args, check=check)
 
 
-def gh_api(method, path, payload):
-    # Payload on stdin: a blob of yarn.lock is far longer than one command-line argument may be.
-    result = subprocess.run(["gh", "api", "-X", method, path, "--input", "-"], input=json.dumps(payload), text=True,
-                            capture_output=True)
-    if result.returncode != 0:
+def gh_api(method, path, payload, tries=4):
+    # Payload on stdin: a blob of yarn.lock is far longer than one command-line argument may be. Tried again after a
+    # pause, because GitHub's API can take a few seconds to know a commit that just reached dev ("not a valid tree").
+    for attempt in range(tries):
+        result = subprocess.run(["gh", "api", "-X", method, path, "--input", "-"], input=json.dumps(payload),
+                                text=True, capture_output=True)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
         sys.stderr.write(result.stderr or result.stdout or "")
-        return None
-    return json.loads(result.stdout)
+        if attempt + 1 < tries:
+            time.sleep(15)
+    return None
 
 
 def publish(repo, branch):
