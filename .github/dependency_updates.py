@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""Dependabot's pull requests into dev (docs/development.md#dependency-updates). The Dependency updates workflow runs it.
+
+  sort      a new or changed update: label it "automatic update" (patch or minor) or "needs review" (major, or a
+            change Dependabot can't size), plus "security" for a security fix and "for admins" when that fix is in
+            something Requestarr ships (the backend, the base images, or a web app package the built app contains).
+  update    the oldest open "automatic update": bring it up to date with dev, give it the next version and its
+            changelog section, run build on that commit and let GitHub merge it once build passes. One at a time, so
+            two updates never take the same version; the next one goes when this one has merged.
+  --self-test  checks the parts that decide, against built-in samples.
+
+Needs git, the GitHub CLI (GH_TOKEN) and the repository checked out with full history.
+"""
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+
+AUTOMATIC = "automatic update"
+REVIEW = "needs review"
+SECURITY = "security"
+FOR_ADMINS = "for admins"
+LABELS = {
+    AUTOMATIC: ("0e8a16", "Patch or minor dependency update: merges into dev on its own once build passes"),
+    REVIEW: ("d93f0b", "Major dependency update, or one that failed: waits for Claude Code to review"),
+    SECURITY: ("b60205", "Fixes a published security problem"),
+    FOR_ADMINS: ("5319e7", "Security fix in something Requestarr ships: its changelog tells admins"),
+}
+
+# Dependabot's own names for a grouped security update when the repository groups them (before dependabot.yml did).
+DEFAULT_SECURITY_GROUPS = {"npm_and_yarn", "nuget", "github_actions", "docker"}
+
+SECURITY_LINE = ("- **Security update:** parts Requestarr is built from were updated to fix known security problems, "
+                 "so update when you can.")
+
+COMMIT_MESSAGE = "Version {version} and its changelog section for this dependency update"
+
+
+def run(*args, check=True, capture=True):
+    result = subprocess.run(args, check=False, text=True, capture_output=capture)
+    if check and result.returncode != 0:
+        sys.stderr.write(result.stderr or "")
+        raise SystemExit("%s failed (exit %d)" % (" ".join(args), result.returncode))
+    return (result.stdout or "").strip()
+
+
+def gh(*args, check=True):
+    return run("gh", *args, check=check)
+
+
+def git(*args, check=True):
+    return run("git", *args, check=check)
+
+
+# ---- deciding ---------------------------------------------------------------------------------------------------
+
+def automatic(update_type):
+    return update_type in ("version-update:semver-patch", "version-update:semver-minor")
+
+
+def is_security(group):
+    return bool(group) and (group.endswith("security") or group in DEFAULT_SECURITY_GROUPS)
+
+
+def parse_yarn_lock(text):
+    """{"name@range": (name, {dependency name: range})} for a yarn 1 lock file."""
+    entries, keys, deps, in_deps = {}, None, None, False
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        if not line.startswith(" "):
+            keys = [k.strip().strip('"') for k in line.rstrip(":").split(",")]
+            deps, in_deps = {}, False
+            for key in keys:
+                entries[key] = (key.rsplit("@", 1)[0], deps)
+            continue
+        stripped = line.strip()
+        if line.startswith("  ") and not line.startswith("    "):
+            in_deps = stripped in ("dependencies:", "optionalDependencies:")
+            continue
+        if in_deps and line.startswith("    "):
+            name, _, wanted = stripped.partition(" ")
+            deps[name.strip('"')] = wanted.strip().strip('"')
+    return entries
+
+
+def shipped_npm_packages(package_json, yarn_lock):
+    """Every package the built web app can contain: the dependencies (not devDependencies) and all they pull in."""
+    entries = parse_yarn_lock(yarn_lock)
+    todo = ["%s@%s" % (n, r) for n, r in json.loads(package_json).get("dependencies", {}).items()]
+    seen, names = set(), set()
+    while todo:
+        key = todo.pop()
+        if key in seen or key not in entries:
+            continue
+        seen.add(key)
+        name, deps = entries[key]
+        names.add(name)
+        todo.extend("%s@%s" % d for d in deps.items())
+    return names
+
+
+def ships(ecosystem, dependency_names, package_json="", yarn_lock=""):
+    """Whether an update changes something Requestarr ships: the backend, the image, or the built web app."""
+    if ecosystem in ("nuget", "docker", "docker_compose"):
+        return True
+    if ecosystem in ("npm_and_yarn", "npm"):
+        shipped = shipped_npm_packages(package_json, yarn_lock)
+        return any(name in shipped for name in dependency_names)
+    return False
+
+
+# ---- versions ---------------------------------------------------------------------------------------------------
+
+def top_version(changelog):
+    match = re.search(r"^## (\d+)\.(\d+)\.(\d+)", changelog, re.MULTILINE)
+    return tuple(int(x) for x in match.groups()) if match else (0, 0, 0)
+
+
+def next_version(*changelogs):
+    major, minor, patch = max(top_version(c) for c in changelogs)
+    return (major, minor, patch + 1)
+
+
+def with_section(changelog, version, day, security_line):
+    """The changelog with a new version section on top (above the first "## x.y.z")."""
+    heading = "## %d.%d.%d (%s)\n" % (version + (day,))
+    body = "\n### For admins\n%s\n" % security_line if security_line else ""
+    match = re.search(r"^## \d+\.\d+\.\d+", changelog, re.MULTILINE)
+    at = match.start() if match else len(changelog)
+    return changelog[:at] + heading + body + "\n" + changelog[at:]
+
+
+def with_assembly_version(props, version):
+    return re.sub(r"<AssemblyVersion>[^<]*</AssemblyVersion>", "<AssemblyVersion>%d.%d.%d.*</AssemblyVersion>" % version,
+                  props, count=1)
+
+
+# ---- GitHub -----------------------------------------------------------------------------------------------------
+
+def ensure_labels(repo):
+    existing = {l["name"] for l in json.loads(gh("label", "list", "--repo", repo, "--limit", "200", "--json", "name"))}
+    for name, (color, description) in LABELS.items():
+        if name not in existing:
+            gh("label", "create", name, "--repo", repo, "--color", color, "--description", description)
+
+
+def comment_once(repo, number, marker, text):
+    bodies = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", "comments"))["comments"]
+    if not any(marker in c["body"] for c in bodies):
+        gh("pr", "comment", str(number), "--repo", repo, "--body", "%s\n\n<!-- %s -->" % (text, marker))
+
+
+def hold(repo, number, why):
+    gh("pr", "edit", str(number), "--repo", repo, "--add-label", REVIEW, "--remove-label", AUTOMATIC, check=False)
+    gh("pr", "merge", str(number), "--repo", repo, "--disable-auto", check=False)
+    comment_once(repo, number, "dependency-updates:hold", "Held for review: %s Claude Code reviews it, fixes what "
+                 "breaks and merges it in a normal task (docs/development.md#dependency-updates)." % why)
+
+
+def sort():
+    repo, number = os.environ["REPO"], os.environ["PR"]
+    update_type, group = os.environ.get("UPDATE_TYPE", ""), os.environ.get("GROUP", "")
+    ecosystem = os.environ.get("ECOSYSTEM", "")
+    names = [d["dependencyName"] for d in json.loads(os.environ.get("DEPENDENCIES") or "[]")]
+    ensure_labels(repo)
+
+    labels = []
+    if is_security(group):
+        labels.append(SECURITY)
+        package_json = open("package.json", encoding="utf-8").read() if os.path.exists("package.json") else "{}"
+        yarn_lock = open("yarn.lock", encoding="utf-8").read() if os.path.exists("yarn.lock") else ""
+        if ships(ecosystem, names, package_json, yarn_lock):
+            labels.append(FOR_ADMINS)
+
+    current = {l["name"] for l in json.loads(gh("pr", "view", number, "--repo", repo, "--json", "labels"))["labels"]}
+    if REVIEW in current:
+        print("#%s is already held for review" % number)
+    elif automatic(update_type):
+        labels.append(AUTOMATIC)
+    else:
+        labels.append(REVIEW)
+
+    if labels:
+        gh("pr", "edit", number, "--repo", repo, "--add-label", ",".join(labels))
+    if REVIEW in labels:
+        hold(repo, number, "a %s update (%s)." % (update_type.replace("version-update:semver-", "") or "differently "
+                                                   "versioned", ", ".join(names) or "see the description"))
+    print("#%s: %s %s, group %s, %s -> %s" % (number, ecosystem, update_type, group or "none", ", ".join(names), labels))
+
+
+def build_runs(repo, sha):
+    return json.loads(gh("run", "list", "--repo", repo, "--workflow", "build.yml", "--commit", sha,
+                         "--json", "status,conclusion,event,databaseId"))
+
+
+def update():
+    repo = os.environ["REPO"]
+    ensure_labels(repo)
+    waiting = json.loads(gh("pr", "list", "--repo", repo, "--base", "dev", "--state", "open", "--label", AUTOMATIC,
+                            "--json", "number,headRefName,labels,author,createdAt,isDraft"))
+    waiting = [p for p in waiting if p["author"]["login"] in ("app/dependabot", "dependabot[bot]", "dependabot")
+               and REVIEW not in {l["name"] for l in p["labels"]}]
+    if not waiting:
+        print("No automatic update is waiting.")
+        return
+    pr = sorted(waiting, key=lambda p: p["createdAt"])[0]
+    number, branch = pr["number"], pr["headRefName"]
+    labels = {l["name"] for l in pr["labels"]}
+    print("Next automatic update: #%d (%s); %d waiting" % (number, branch, len(waiting)))
+
+    git("fetch", "--quiet", "origin", "dev", "qa", "staging", branch)
+    git("checkout", "--quiet", "-B", "update", "origin/" + branch)
+    tops = {b: git("show", "origin/%s:CHANGELOG.md" % b) for b in ("dev", "qa", "staging")}
+    current = open("CHANGELOG.md", encoding="utf-8").read()
+    up_to_date = run("git", "merge-base", "--is-ancestor", "origin/dev", "HEAD", check=False) is not None and \
+        subprocess.run(["git", "merge-base", "--is-ancestor", "origin/dev", "HEAD"]).returncode == 0
+    versioned = top_version(current) > max(top_version(t) for t in tops.values())
+
+    if not (up_to_date and versioned):
+        if not up_to_date:
+            merged = subprocess.run(["git", "merge", "--no-edit", "--quiet", "origin/dev"], text=True, capture_output=True)
+            if merged.returncode != 0:
+                conflicted = git("diff", "--name-only", "--diff-filter=U").splitlines()
+                others = [f for f in conflicted if f not in ("CHANGELOG.md", "src/Directory.Build.props")]
+                if others:
+                    git("merge", "--abort", check=False)
+                    hold(repo, number, "it conflicts with dev in %s." % ", ".join(others))
+                    return
+        # Dependabot never changes these two: start from dev's and add this update's version on top.
+        git("checkout", "origin/dev", "--", "CHANGELOG.md", "src/Directory.Build.props")
+        version = next_version(*tops.values())
+        day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        line = SECURITY_LINE if FOR_ADMINS in labels else ""
+        changelog = with_section(open("CHANGELOG.md", encoding="utf-8").read(), version, day, line)
+        open("CHANGELOG.md", "w", encoding="utf-8", newline="\n").write(changelog)
+        props = open("src/Directory.Build.props", encoding="utf-8").read()
+        open("src/Directory.Build.props", "w", encoding="utf-8", newline="").write(with_assembly_version(props, version))
+        git("add", "CHANGELOG.md", "src/Directory.Build.props")
+        merging = subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True).returncode == 0
+        if merging or subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0:
+            git("commit", "--quiet", "--no-verify", "-m", COMMIT_MESSAGE.format(version="%d.%d.%d" % version))
+        pushed = subprocess.run(["git", "push", "--quiet", "origin", "HEAD:refs/heads/" + branch], text=True,
+                                capture_output=True)
+        if pushed.returncode != 0:
+            sys.stderr.write(pushed.stderr)
+            hold(repo, number, "its version and changelog section could not be added (the push was refused).")
+            return
+        print("#%d: version %d.%d.%d added" % ((number,) + version))
+
+    sha = git("rev-parse", "HEAD")
+    runs = build_runs(repo, sha)
+    if any(r["status"] == "completed" and r["conclusion"] not in ("success", "cancelled", "skipped") for r in runs) \
+            and not any(r["conclusion"] == "success" for r in runs):
+        hold(repo, number, "build failed on it.")
+        return
+    if not any(r["status"] != "completed" or r["conclusion"] == "success" for r in runs):
+        # Commits pushed by this workflow don't start workflows, so build is started here on this commit.
+        gh("workflow", "run", "build.yml", "--repo", repo, "--ref", branch, "-f", "base=dev")
+        print("#%d: build started on %s" % (number, sha[:7]))
+    gh("pr", "merge", str(number), "--repo", repo, "--auto", "--merge")
+    print("#%d: merges on its own once build passes" % number)
+
+
+# ---- self-test --------------------------------------------------------------------------------------------------
+
+LOCK = '''# yarn lockfile v1
+
+
+"app-dep@^1.0.0":
+  version "1.2.0"
+  dependencies:
+    deep-dep "^2.0.0"
+
+deep-dep@^2.0.0, deep-dep@^2.1.0:
+  version "2.1.0"
+
+tool@3.0.0:
+  version "3.0.0"
+  dependencies:
+    tool-dep "~1.0.0"
+
+tool-dep@~1.0.0:
+  version "1.0.4"
+'''
+
+
+def self_test():
+    package = json.dumps({"dependencies": {"app-dep": "^1.0.0"}, "devDependencies": {"tool": "3.0.0"}})
+    checks = [
+        (automatic("version-update:semver-patch") and automatic("version-update:semver-minor"), "patch and minor merge"),
+        (not automatic("version-update:semver-major") and not automatic(""), "major and unsized updates wait"),
+        (is_security("frontend-security") and is_security("npm_and_yarn") and not is_security("frontend"),
+         "security groups are recognised"),
+        (shipped_npm_packages(package, LOCK) == {"app-dep", "deep-dep"}, "the web app's packages, followed through"),
+        (ships("npm_and_yarn", ["deep-dep"], package, LOCK), "a package the app pulls in ships"),
+        (not ships("npm_and_yarn", ["tool-dep"], package, LOCK), "a build tool's package doesn't ship"),
+        (ships("nuget", ["NLog"]) and ships("docker", ["dotnet/aspnet"]) and not ships("github_actions", ["x"]),
+         "backend and images ship, workflow actions don't"),
+        (next_version("## 0.4.2 (x)", "## 0.3.4 (x)", "## 0.5.0 (x)") == (0, 5, 1), "next version is above all three"),
+        (with_section("# Changelog\n\nintro\n\n## 0.4.2 (2026-10-25)\n", (0, 4, 3), "2026-10-26", "")
+         == "# Changelog\n\nintro\n\n## 0.4.3 (2026-10-26)\n\n## 0.4.2 (2026-10-25)\n", "a heading-only version"),
+        ("### For admins\n- **Security update:**" in with_section("## 0.1.0 (x)\n", (0, 1, 1), "d", SECURITY_LINE),
+         "a security fix that ships tells admins"),
+        (with_assembly_version("<AssemblyVersion>0.4.2.*</AssemblyVersion>", (0, 4, 3))
+         == "<AssemblyVersion>0.4.3.*</AssemblyVersion>", "the assembly version follows"),
+    ]
+    failed = [what for ok, what in checks if not ok]
+    for what in failed:
+        print("self-test failed: " + what)
+    print("self-test: %d of %d passed" % (len(checks) - len(failed), len(checks)))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "--self-test":
+        sys.exit(self_test())
+    if command == "sort":
+        sort()
+    elif command == "update":
+        update()
+    else:
+        print(__doc__)
+        sys.exit(1)

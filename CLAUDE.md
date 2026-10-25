@@ -17,6 +17,8 @@ Code workspace.
 - Namespaces: copied Servarr foundation keeps `NzbDrone.*`; all new code is `Requestarr.*`.
 - Changelog (every pull request): bump `<AssemblyVersion>` in `src/Directory.Build.props` and add a `## x.y.z (YYYY-MM-DD)` section (the day it was made) at the top of `CHANGELOG.md` with only **For users** and **For admins**, in plain words with a bold lead per line, no code-style text, no placeholders, empty sections left out (work neither sees is not listed). Requestarr posts it in Discord as a lasting record. CI's Changelog job (`.github/changelog_check.py`) and a unit test enforce it. Details: `docs/development.md#changelog`.
 
+- Dependency updates: Dependabot's pull requests go into `dev` (the default branch); patch and minor merge on their own, major ones are labelled "needs review" and wait for a normal task (`docs/development.md#dependency-updates`). At the end of every task, list security fixes merged into `dev` that `qa` doesn't have yet (`gh pr list --base dev --state merged --label security`) and name them in the banner's "Needs you" line, so the owner can promote sooner; mention open "needs review" updates in the reply comm.
+
 ## Gotchas
 
 - License is GPL-3.0 because Servarr code is GPL-3.0. Keep Servarr copyright headers on copied files; do not add code under incompatible licenses.

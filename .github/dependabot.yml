@@ -1,0 +1,96 @@
+# Dependency updates (docs/development.md#dependency-updates). Everything goes to dev, the default branch, and moves up
+# to qa, staging and main like any other change. Each kind of dependency gets at most three pull requests a week, every
+# Monday: its patch and minor updates together, its major updates together, and its security fixes together (those
+# arrive as soon as GitHub publishes the advisory, not on the schedule). Patch and minor merge on their own once build
+# passes; major ones wait for review (.github/workflows/dependency-updates.yml). Group names ending in "-security" are
+# how that workflow tells a security fix from an ordinary update.
+version: 2
+
+updates:
+  # Backend: the NuGet packages of every project in src/Requestarr.sln.
+  - package-ecosystem: nuget
+    directory: /src
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "Backend packages"
+    groups:
+      backend:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      backend-major:
+        applies-to: version-updates
+        update-types: [major]
+      backend-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # Web app: package.json and yarn.lock.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "Web app packages"
+    groups:
+      frontend:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      frontend-major:
+        applies-to: version-updates
+        update-types: [major]
+      frontend-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # The actions the workflows in .github/workflows use.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "GitHub Actions"
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      actions-major:
+        applies-to: version-updates
+        update-types: [major]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # The base images in docker/Dockerfile (Node for the web build, the .NET SDK and runtime).
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "Base images"
+    groups:
+      images:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      images-major:
+        applies-to: version-updates
+        update-types: [major]
+      images-security:
+        applies-to: security-updates
+        patterns: ["*"]

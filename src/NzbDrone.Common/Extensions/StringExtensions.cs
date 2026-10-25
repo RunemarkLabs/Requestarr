@@ -13,6 +13,12 @@ namespace NzbDrone.Common.Extensions
     {
         private static readonly Regex CamelCaseRegex = new Regex("(?<!^)[A-Z]", RegexOptions.Compiled);
 
+        // Text from a request (a path, a user name) as one log line: a line break in it can't start a fake entry.
+        public static string ForLog(this string text)
+        {
+            return text?.Replace("\r", "\\r").Replace("\n", "\\n");
+        }
+
         public static string NullSafe(this string target)
         {
             return ((object)target).NullSafe().ToString();

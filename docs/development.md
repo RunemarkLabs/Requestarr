@@ -87,9 +87,9 @@ Four branches, each with its own environment.
 | `dev` | Every pull request merges here once the `build` check passes. Claude Code's automated and live testing. | The dev stack, on the dev Discord server and bot (`DEV_DISCORD_*`). |
 | `qa` | The owner's manual QA of a version picked from `dev`. Moves only on the owner's word ("promote to QA"). | The QA stack, on the QA Discord server and bot (`DISCORD_*`). Never touched by automated testing. |
 | `staging` | Early access testers, on a version the owner passed in QA. Moves only on "QA passed". | The beta stack on the owner's server (`deploy/staging`), the Requestarr Beta server and bot, with its own Sonarr and Radarr that really download. Runs the published `staging` image. |
-| `main` | Production: the default branch; only released code. Moves only on the owner's "ship it". | Published as `latest` and version tags. |
+| `main` | Production: only released code. Moves only on the owner's "ship it". | Published as `latest` and version tags. |
 
-All four branches have the same rules on GitHub (one ruleset): a pull request is required, `build` must pass, no force push, no deletion, nobody bypasses.
+`dev` is the repository's default branch, so Dependabot's pull requests (security fixes included) land there and move up like any other change (see [Dependency updates](#dependency-updates)). All four branches have the same rules on GitHub (one ruleset): a pull request is required, `build` must pass, no force push, no deletion, nobody bypasses.
 
 **A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Bump the version above `dev`'s, `qa`'s and `staging`'s (the Changelog check says so if it isn't).
 
@@ -151,6 +151,35 @@ The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-a
 | dev | only the version running now; a new version replaces the previous post | |
 
 On every start QA and dev make the channels match: cards for versions that no longer apply are deleted, a card whose words changed is edited in place, and from the first card out of order onward everything is posted again, so the list always reads oldest to newest. Requestarr finds its own cards by their title (`Requestarr x.y.z · 6 changes for admins, 4 for users`, `Requestarr x.y.z · 4 new things for you`) among the newest 1,000 messages of each channel. Text posts from before cards (`📋 **Requestarr x.y.z: what's new**`, `✨ **What's new in Requestarr x.y.z**`) are found too and replaced by cards: on QA and dev on every start, on production and staging once, keeping the whole history. Everything else in the channels is left alone.
+
+## Dependency updates
+
+`dev` is the repository's default branch, so Dependabot's pull requests, version updates and security fixes alike, go into `dev` and move up through `qa`, `staging` and `main` like any other change. `main` stays production with the same rules as before.
+
+**What arrives, and when** (`.github/dependabot.yml`). Four kinds of dependency, each checked every Monday:
+
+| Kind | Where | Groups |
+|---|---|---|
+| Backend packages (NuGet) | every project in `src/Requestarr.sln` | `backend` (patch and minor), `backend-major`, `backend-security` |
+| Web app packages (npm, yarn) | `package.json`, `yarn.lock` | `frontend`, `frontend-major`, `frontend-security` |
+| GitHub Actions | `.github/workflows` | `actions`, `actions-major`, `actions-security` |
+| Base images (Docker) | `docker/Dockerfile` | `images`, `images-major`, `images-security` |
+
+So each kind sends at most one pull request a week for its patch and minor updates and one for its major updates. Security fixes come as soon as GitHub publishes the advisory, also one pull request per kind.
+
+**What happens to them** (`.github/workflows/dependency-updates.yml`, `.github/dependency_updates.py`):
+
+- A new update is sorted. Patch and minor get the **automatic update** label. Major updates, and updates Dependabot can't size, get **needs review** and a comment, and wait. A security fix follows the same rule by size, and also gets **security**. It gets **for admins** too when the fix is in something Requestarr ships: the backend, the base images, or a web app package the built app contains (followed through `yarn.lock` from `dependencies`, not `devDependencies`).
+- Automatic updates go one at a time, oldest first. The workflow brings the update up to date with `dev`, adds the next version above `dev`'s, `qa`'s and `staging`'s to `src/Directory.Build.props` and `CHANGELOG.md`, starts `build` on that commit, and turns on GitHub's auto-merge. GitHub merges it once `build` passes (the full build: backend tests on Linux and Windows, the web app, the image, the secret scan and the Changelog check).
+- The changelog section is the version heading only, which the changelog rule allows for a change nobody would notice. A security fix labelled **for admins** gets one line under For admins: "**Security update:** parts Requestarr is built from were updated to fix known security problems, so update when you can."
+- If an automatic update conflicts with `dev` (other than the version and changelog, which it rewrites), can't be pushed, or fails `build`, it is moved to **needs review** with a comment.
+- The workflow runs when an update opens or changes, when `dev` moves, and every hour. The hourly run matters: a merge made through auto-merge that this workflow turned on doesn't start other workflows, so the next update waits for it.
+
+**Major updates and held updates** are Claude Code's: review the changes, fix what breaks, and merge in a normal task (a pull request into `dev` with its own version and changelog, or the held one finished and merged by hand).
+
+**Security fixes reach the owner** three ways: the pull request carries the **security** label; a fix in something Requestarr ships puts a "Security update" line in the version's For admins section, so it shows in the admin channel's version post; and Claude Code checks for security fixes merged into `dev` that `qa` doesn't have yet at the end of every task and names them in the completion banner's "Needs you" line, so the owner can promote sooner than usual.
+
+Repository settings this relies on: default branch `dev`, auto-merge allowed, Dependabot security updates on.
 
 ## Docker stack
 
