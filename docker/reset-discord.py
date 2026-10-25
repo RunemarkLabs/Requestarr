@@ -21,7 +21,8 @@ import urllib.error
 import urllib.request
 
 API = "https://discord.com/api/v10"
-ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-announcements", "requestarr-welcome", "requestarr-access-blocked")
+ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-qa-checklist", "requestarr-announcements", "requestarr-welcome",
+                  "requestarr-access-blocked", "requestarr-bug-reports")
 CATEGORIES = ("Requestarr Admin", "Requestarr Users", "Requestarr Requests")
 USER_ROLE_PREFIX = "requestarr-"
 SHARED_ROLES = ("Requestarr Members", "Requestarr Blocked")

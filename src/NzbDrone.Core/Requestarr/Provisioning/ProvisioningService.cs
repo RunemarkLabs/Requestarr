@@ -33,6 +33,7 @@ namespace Requestarr.Core.Provisioning
         private readonly Requestarr.Core.Removals.IRemovalSettings _removal;
         private readonly Requestarr.Core.Access.IAccessSettings _access;
         private readonly Requestarr.Core.Discord.IBotProfileSettings _botProfile;
+        private readonly Requestarr.Core.Qa.IBugReportSettings _bugReports;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -46,6 +47,7 @@ namespace Requestarr.Core.Provisioning
                                    Requestarr.Core.Removals.IRemovalSettings removal,
                                    Requestarr.Core.Access.IAccessSettings access,
                                    Requestarr.Core.Discord.IBotProfileSettings botProfile,
+                                   Requestarr.Core.Qa.IBugReportSettings bugReports,
                                    IEventAggregator eventAggregator,
                                    Logger logger)
         {
@@ -59,6 +61,7 @@ namespace Requestarr.Core.Provisioning
             _removal = removal;
             _access = access;
             _botProfile = botProfile;
+            _bugReports = bugReports;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -207,6 +210,11 @@ namespace Requestarr.Core.Provisioning
             applied.Add(_botProfile.KeepUpToDate
                 ? $"bot picture and banner kept up to date{(_botProfile.TakeOver ? " (replacing ones chosen by hand)" : string.Empty)}"
                 : "bot picture and banner left as they are");
+
+            _bugReports.Apply(document.BugReports);
+            applied.Add(!_bugReports.FileIssues
+                ? $"bug reports (posted and kept; not filed on GitHub; {_bugReports.ReportsPerDay} a day, {_bugReports.MinutesBetween} min apart per person)"
+                : $"bug reports (filed on GitHub in {_bugReports.Repository}{(_bugReports.Token == null ? ", but there's no githubToken, so none are filed" : string.Empty)}; {_bugReports.ReportsPerDay} a day, {_bugReports.MinutesBetween} min apart per person)");
 
             _backends.SyncFromProvisioning(document.Backends);
 

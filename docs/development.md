@@ -78,6 +78,27 @@ Not run in CI:
 
 **The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; a version heading without its day; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also be higher than the other two branches', unless the pull request already contains that branch, so a fix made in QA or staging never shares a number with `dev`. A merge-back keeps every version from both branches instead of adding one. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
 
+## QA checklist
+
+`QA-CHECKLIST.md` at the repo root says what admins on the QA server test, by hand, before a version goes to staging. Requestarr is built with it and posts it in the QA server's `#requestarr-qa-checklist` channel (admins only): a summary card, then one card per item with **Passes** and **Failing**, for every version QA has that staging doesn't. The dev server shows the running version's items, so the checklist can be tried out there; other servers have none.
+
+**Every pull request adds its version's items**, the way it adds its changelog entry, at the top of `QA-CHECKLIST.md`, with the same `## x.y.z (YYYY-MM-DD)` heading as the changelog:
+
+```markdown
+## 0.4.15 (2026-10-25)
+- **Report a problem:** In the bug reports channel, press Report a problem, pick a part and send a short test report. You should see a card for your report in the channel.
+```
+
+Each item says what to do and, after "You should see", what a pass looks like, in plain words an admin can follow in Discord: no code-style text, the same as the changelog. A version nobody can test by hand (build and CI work, tooling, dependency updates) has **only its heading**: that's how "nothing to test here" is marked, the same escape as a heading-only changelog entry. The automatic dependency updates add their heading themselves.
+
+**The checks.** `./release.sh check-changelog` (CI's Changelog job) fails a pull request that doesn't change `QA-CHECKLIST.md`, or whose checklist doesn't match the changelog from 0.4.3 on (same versions, dates and order), or has an item without a bold name, without "You should see", named twice in a version, or with code-style text. `.github/checklist_check.py` does the checking (with a self-test); run it with `python3 .github/checklist_check.py QA-CHECKLIST.md CHANGELOG.md`. A unit test checks the file is embedded and its top version matches the build.
+
+**In Discord.** Pressing **Passes** records who and when; **Failing** opens a bug report (below) linked to the item, and the card shows it. The record is Requestarr's (the portal will show it later); the cards show it. The checklist is complete when every item has passed. A new promotion to QA while a checklist is half done keeps every pass and failure already recorded, adds the new versions' items as not tested yet, and drops the versions staging now has.
+
+**The gate before staging.** `./release.sh qa-gate` (or `.\docker\dev.ps1 qa-gate`) reads the QA stack's checklist (`GET /api/v1/qa/checklist` with the API key) and lists the open GitHub issues labelled `env: qa` with one of the checklist's versions. It's clear when the checklist is complete, nothing is failing and no such issue is open, whether or not the issue came from a checklist item. `promote-staging` refuses otherwise, unless the owner overrides it in so many words (`--owner-override "<their words>"`), which the promotion pull request records. At the start of every goal, Claude Code runs the gate; when it's clear, it promotes QA to staging first (repo `CLAUDE.md`).
+
+**Bug reports.** Every server has `#requestarr-bug-reports` in the Requestarr Users group: members and admins read it, nobody types in it, and its **Report a problem** button opens a menu of Requestarr's parts (one list, `BugReportComponents`, so it grows with the app) and a short form. Requestarr adds the environment, version, time and the reporter's Discord name, keeps the report, posts it as a card and, when the install files reports, opens a GitHub issue labelled `bug report`, `env: …`, `version: …` and `component: …` (and `test` from the dev server). Each person can send a few a day, a couple of minutes apart. Settings: `bugReports:` in the provisioning file (setup guide, "Bug reports").
+
 ## Release flow
 
 Four branches, each with its own environment.
@@ -101,11 +122,14 @@ Four branches, each with its own environment.
 
 It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`. Work on `dev` carries on meanwhile.
 
-**Promote to staging** (only when the owner says "QA passed", or names a version). First run the full suite and every live check, and report them ("Testing scope" in the workspace rules: nothing reaches staging without this). Then:
+**Promote to staging** (when the QA gate is clear, checked at the start of every goal, or when the owner says so). First run the full suite and every live check, and report them ("Testing scope" in the workspace rules: nothing reaches staging without this). Then:
 
 ```bash
-./release.sh promote-staging 0.3.0 'the owner: "QA passed"'
+./release.sh promote-staging 0.3.0 'the QA checklist, completed by <admin>'
+./release.sh promote-staging 0.3.0 'the owner: "promote it anyway"' --owner-override 'the owner: "promote it anyway"'
 ```
+
+Without `--owner-override`, it runs the QA gate ([QA checklist](#qa-checklist)) and refuses unless it's clear; the pull request records the checklist and who completed it, or the owner's override.
 
 The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:`, then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/runemarklabs/requestarr:staging` and `:0.3.0`. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
 

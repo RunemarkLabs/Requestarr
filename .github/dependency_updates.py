@@ -324,21 +324,24 @@ def update_next(repo):
             merged = subprocess.run(["git", "merge", "--no-edit", "--quiet", "origin/dev"], text=True, capture_output=True)
             if merged.returncode != 0:
                 conflicted = git("diff", "--name-only", "--diff-filter=U").splitlines()
-                others = [f for f in conflicted if f not in ("CHANGELOG.md", "src/Directory.Build.props")]
+                others = [f for f in conflicted if f not in ("CHANGELOG.md", "QA-CHECKLIST.md", "src/Directory.Build.props")]
                 if others:
                     git("merge", "--abort", check=False)
                     hold(repo, number, "it conflicts with dev in %s." % ", ".join(others))
                     return True
-        # Dependabot never changes these two: start from dev's and add this update's version on top.
-        git("checkout", "origin/dev", "--", "CHANGELOG.md", "src/Directory.Build.props")
+        # Dependabot never changes these three: start from dev's and add this update's version on top. Nobody can test a
+        # dependency update by hand, so its QA checklist section is the heading only.
+        git("checkout", "origin/dev", "--", "CHANGELOG.md", "QA-CHECKLIST.md", "src/Directory.Build.props")
         version = next_version(*tops.values())
         day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         line = SECURITY_LINE if FOR_ADMINS in labels else ""
         changelog = with_section(open("CHANGELOG.md", encoding="utf-8").read(), version, day, line)
         open("CHANGELOG.md", "w", encoding="utf-8", newline="\n").write(changelog)
+        checklist = with_section(open("QA-CHECKLIST.md", encoding="utf-8").read(), version, day, "")
+        open("QA-CHECKLIST.md", "w", encoding="utf-8", newline="\n").write(checklist)
         props = open("src/Directory.Build.props", encoding="utf-8").read()
         open("src/Directory.Build.props", "w", encoding="utf-8", newline="").write(with_assembly_version(props, version))
-        git("add", "CHANGELOG.md", "src/Directory.Build.props")
+        git("add", "CHANGELOG.md", "QA-CHECKLIST.md", "src/Directory.Build.props")
         merging = subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True).returncode == 0
         if merging or subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0:
             git("commit", "--quiet", "--no-verify", "-m", COMMIT_MESSAGE.format(version="%d.%d.%d" % version))

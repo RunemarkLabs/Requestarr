@@ -146,8 +146,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Checker self-test (every rule must catch its sample)
-        run: python3 .github/changelog_check.py --self-test
+      - name: Checker self-tests (every rule must catch its sample)
+        run: |
+          python3 .github/changelog_check.py --self-test
+          python3 .github/checklist_check.py --self-test
       - name: CHANGELOG.md has a new version for this change, written to the rule
         env:
           EVENT: ${{ github.event_name }}
@@ -163,6 +165,7 @@ jobs:
           fi
           if [ "$EVENT" != "pull_request" ]; then
             python3 .github/changelog_check.py CHANGELOG.md
+            python3 .github/checklist_check.py QA-CHECKLIST.md CHANGELOG.md
             exit 0
           fi
           ./release.sh check-changelog "$BASE_SHA" HEAD "$BASE_REF" "$HEAD_SHA" "$HEAD_REF"

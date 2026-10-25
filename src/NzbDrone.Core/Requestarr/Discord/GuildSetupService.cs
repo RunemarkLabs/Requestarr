@@ -34,10 +34,12 @@ namespace Requestarr.Core.Discord
         private readonly IDiscordGuildConfigRepository _repository;
         private readonly Users.IRequestarrUserRepository _users;
         private readonly IAuditService _audit;
+        private readonly Announcements.IReleaseEnvironment _environment;
         private readonly Logger _logger;
 
-        public GuildSetupService(IDiscordGuildGateway gateway, IDiscordSettingsStore settings, IDiscordGuildConfigRepository repository, Users.IRequestarrUserRepository users, IAuditService audit, Logger logger)
+        public GuildSetupService(IDiscordGuildGateway gateway, IDiscordSettingsStore settings, IDiscordGuildConfigRepository repository, Users.IRequestarrUserRepository users, IAuditService audit, Announcements.IReleaseEnvironment environment, Logger logger)
         {
+            _environment = environment;
             _gateway = gateway;
             _settings = settings;
             _repository = repository;
@@ -116,6 +118,27 @@ namespace Requestarr.Core.Discord
                 config.FeedSeeded = false;
             }
 
+            // QA and dev only: the QA checklist, admin-only, next to the feed. A new (or different) one is posted again.
+            if (Qa.QaChecklist.HasChecklist(_environment))
+            {
+                var checklist = await ExistingOrNull(Parse(config.QaChecklistChannelId)) ?? await _gateway.FindTextChannelAsync(Qa.QaText.ChecklistChannelName);
+
+                if (checklist == null)
+                {
+                    checklist = await _gateway.CreateTextChannelAsync(Qa.QaText.ChecklistChannelName, adminGroup, Qa.QaText.ChecklistChannelTopic, group);
+                    _logger.Info("Created Discord QA checklist channel {0}", checklist);
+                    _audit.Record(Actor.System, "discord.qa-checklist-channel.create", "channel", checklist.ToString());
+                }
+
+                await PlaceAsync(checklist.Value, adminGroup.Value, group);
+
+                if (config.QaChecklistChannelId != checklist.ToString())
+                {
+                    config.QaChecklistChannelId = checklist.ToString();
+                    config.QaChecklistSummaryMessageId = null;
+                }
+            }
+
             // One shared role for every member (it costs one of the server's 250 roles, not one each) reads the
             // announcements channel; only admins and the bot post there. Another hides the welcome channel from
             // someone blocked for spamming its buttons.
@@ -136,6 +159,9 @@ namespace Requestarr.Core.Discord
             config.WelcomeChannelId = (await EnsureUsersChannelAsync(usersGroup, config.WelcomeChannelId, ChannelLayout.WelcomeChannelName, DiscordText.WelcomeChannelTopic, welcome, "discord.welcome-channel.create")).ToString();
             config.AnnouncementsChannelId = (await EnsureUsersChannelAsync(usersGroup, config.AnnouncementsChannelId, ChannelLayout.AnnouncementsChannelName, DiscordText.AnnouncementsChannelTopic, announcements, "discord.announcements-channel.create")).ToString();
             config.BlockedChannelId = (await EnsureUsersChannelAsync(usersGroup, config.BlockedChannelId, ChannelLayout.BlockedChannelName, DiscordText.BlockedChannelTopic, blocked, "discord.blocked-channel.create")).ToString();
+
+            // Bug reports: members and admins read it and press Report a problem; nobody types in it.
+            config.BugReportsChannelId = (await EnsureUsersChannelAsync(usersGroup, config.BugReportsChannelId, Qa.QaText.BugReportsChannelName, Qa.QaText.BugReportsChannelTopic, announcements, "discord.bug-reports-channel.create")).ToString();
 
             config.RequestCategoryIds = GetConfig()?.RequestCategoryIds ?? config.RequestCategoryIds;
             _repository.Upsert(config);

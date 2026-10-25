@@ -149,12 +149,12 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
-        public async Task a_full_users_group_spills_into_the_next_and_keeps_its_three_channels()
+        public async Task a_full_users_group_spills_into_the_next_and_keeps_its_four_channels()
         {
             var first = ulong.Parse(Config.RequestCategoryIds.Single());
-            Discord.ChannelsIn(first).Should().HaveCount(3, "welcome, announcements and blocked");
+            Discord.ChannelsIn(first).Should().HaveCount(4, "welcome, announcements, blocked and bug reports");
 
-            for (var i = 3; i < 50; i++)
+            for (var i = 4; i < 50; i++)
             {
                 await Discord.CreateTextChannelAsync($"filler-{i}", first, null, System.Array.Empty<PermissionOverwrite>());
             }

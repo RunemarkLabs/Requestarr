@@ -29,6 +29,26 @@ namespace Requestarr.Core.Provisioning
 
         // Optional: the bot's own Discord picture and banner. Stored as settings the admin portal can change.
         public BotProfileProvisioning BotProfile { get; set; }
+
+        // Optional: bug reports from the Report a problem button. Stored as settings the admin portal can change; the
+        // GitHub access key is kept in memory only.
+        public BugReportsProvisioning BugReports { get; set; }
+    }
+
+    public class BugReportsProvisioning
+    {
+        // File each report as a public GitHub issue (default false; reports are only posted and kept then).
+        public bool? FileIssues { get; set; }
+
+        // A GitHub access key that can only read and write issues on the repository; use a ${VAR} reference.
+        public string GithubToken { get; set; }
+
+        // owner/name (default RunemarkLabs/Requestarr).
+        public string Repository { get; set; }
+
+        // At most this many reports per person in a day (default 5), and this many minutes between two (default 2).
+        public int? ReportsPerDay { get; set; }
+        public int? MinutesBetween { get; set; }
     }
 
     public class BotProfileProvisioning

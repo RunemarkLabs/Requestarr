@@ -6,9 +6,13 @@
 #   ./release.sh drift [<dev ref> <qa ref> [<staging ref>]]
 #         fails if qa has a commit dev doesn't, or staging one qa doesn't (default: origin/dev, origin/qa, origin/staging)
 #   ./release.sh promote-qa <version | commit> "<who asked, and their words>"
-#   ./release.sh promote-staging <version | commit> "<who asked, and their words>"
+#   ./release.sh promote-staging <version | commit> "<who asked, and their words>" [--owner-override "<the owner's words>"]
 #         moves qa (or staging) to exactly that point of dev (or qa): a pull request that records who asked, the build
 #         check, then a fast-forward to that commit (nothing newer, no merge commit). Staging's push publishes its image.
+#         Staging only moves when the QA gate is clear (qa-gate below), unless the owner overrides it in so many words.
+#   ./release.sh qa-gate [--json]
+#         is QA's test checklist complete, with no item failing and no bug report from QA still open? Read from the QA
+#         stack on this machine (docker/qa-gate.py); exit 0 when clear
 #   ./release.sh merge-back
 #         after a fix merged into staging or qa: pull requests that merge staging into qa and qa into dev, each merged
 #         once the build check passes
@@ -113,7 +117,19 @@ check_changelog() {
     file=$(mktemp)
     git show "$head:CHANGELOG.md" >"$file"
     python "$here/.github/changelog_check.py" "$file" || { rm -f "$file"; return 1; }
-    rm -f "$file"
+
+    # What to test: QA-CHECKLIST.md has this version's items, or just its heading when nothing can be tested by hand
+    # (.github/checklist_check.py says what it checks).
+    if ! git diff --name-only "$base" "$head" | grep -qx 'QA-CHECKLIST.md'; then
+        echo "::error::Add this version's test items (or just its heading, when nothing can be tested by hand) at the top of QA-CHECKLIST.md (see docs/development.md#qa-checklist)."
+        rm -f "$file"
+        return 1
+    fi
+    local checklist
+    checklist=$(mktemp)
+    git show "$head:QA-CHECKLIST.md" >"$checklist"
+    python "$here/.github/checklist_check.py" "$checklist" "$file" || { rm -f "$file" "$checklist"; return 1; }
+    rm -f "$file" "$checklist"
 
     local new old
     new=$(top_version "$head")
@@ -216,6 +232,22 @@ promote() {
     git merge-base --is-ancestor "origin/$to" "$target" \
         || die "$to has commits that $what doesn't (an older version, or drift: ./release.sh drift), so $to can't move to it"
 
+    # Staging: only with QA's test checklist complete and no bug report from QA open, or on the owner's explicit word.
+    local gate=""
+    if [ "$to" = staging ]; then
+        if [ "${5:-}" = "--owner-override" ]; then
+            [ -n "${6:-}" ] || die "--owner-override needs the owner's words"
+            gate="Owner override: ${6} (the QA gate was not checked or not clear)"
+        else
+            local verdict
+            verdict=$("$here/docker/dev.sh" qa-gate --json) || {
+                "$here/docker/dev.sh" qa-gate || true
+                die "promotion to staging is blocked: QA's test checklist isn't complete, an item is failing, or a bug report from QA is still open. Only the owner can override it: promote-staging <version> \"<who>\" --owner-override \"<the owner's words>\""
+            }
+            gate=$(printf '%s' "$verdict" | python -c 'import json,sys; v=json.load(sys.stdin); print("QA checklist: complete for %s (%d items), the last item passed by %s at %s; no bug report from QA open." % (", ".join(v["versions"]), v["total"], v["completedBy"], v["completedAt"]))')
+        fi
+    fi
+
     local version short branch commits versions
     version=$(top_version "$target")
     short=$(git rev-parse --short "$target")
@@ -231,7 +263,9 @@ promote() {
 Moves \`$to\` to \`$from\` @ \`$short\` (version $version): exactly these commits, nothing newer. Merged as a fast-forward of \`$to\` once the build check passes.
 
 Requested by: $who
-
+${gate:+
+$gate
+}
 ### Versions now in $name
 $versions
 
@@ -306,9 +340,10 @@ case "${1:-}" in
     check-changelog) shift; check_changelog "$@" ;;
     promote-qa) shift; promote dev qa "$@" ;;
     promote-staging) shift; promote qa staging "$@" ;;
+    qa-gate) shift; "$here/docker/dev.sh" qa-gate "$@" ;;
     merge-back) merge_back ;;
     *)
-        sed -n '2,19p' "$0"
+        sed -n '2,21p' "$0"
         exit 1
         ;;
 esac

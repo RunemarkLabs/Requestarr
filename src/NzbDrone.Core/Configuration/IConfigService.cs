@@ -32,6 +32,12 @@ namespace NzbDrone.Core.Configuration
         string BotProfileAvatarSet { get; set; }
         string BotProfileBannerSet { get; set; }
 
+        // Requestarr's bug reports; read through Requestarr.Core.Qa.BugReportSettings
+        bool BugReportsFileIssues { get; set; }
+        string BugReportsRepository { get; set; }
+        int BugReportsPerDay { get; set; }
+        int BugReportsMinutesBetween { get; set; }
+
         //UI
         int FirstDayOfWeek { get; set; }
         string CalendarWeekColumnHeader { get; set; }

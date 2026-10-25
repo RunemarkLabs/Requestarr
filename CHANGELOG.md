@@ -6,6 +6,15 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.15 (2026-10-25)
+
+### For users
+- **Report a problem:** a new bug reports channel has a Report a problem button. Pick the part of Requestarr, say what happened and what you expected, and it reaches the people who build Requestarr. Reports are public, so the form tells you that before you send.
+
+### For admins
+- **Test checklist on the QA server:** every version on its way to staging comes with a list of things to test, posted in Discord. Admins mark each one as passing or failing, and a failing one opens a bug report linked to it.
+- **Bug reports become issues:** reports can be filed on GitHub automatically, with the version, the part of Requestarr and who reported it. It's off unless you turn it on with your own access key, and each person can only send a few reports in a row.
+
 ## 0.4.14 (2026-10-25)
 
 ## 0.4.13 (2026-10-25)

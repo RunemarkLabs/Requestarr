@@ -19,6 +19,7 @@
 #   docker/dev.sh fake-download movie "<title>"   make a title in the test Radarr look downloaded, like a real import
 #   docker/dev.sh fake-download tv "<title>" <n>  the same for season n in the test Sonarr
 #   docker/dev.sh fast-votes on|off|status        test timings for removal votes (vote 5 min, answer 5, reminder at 3)
+#   docker/dev.sh qa-gate [--json]                 is the QA checklist complete with no bug report from QA open? (exit 0: clear)
 #
 # On Windows, docker/dev.ps1 does the same from PowerShell. Secret values are read from docker/secrets.env
 # and never printed.
@@ -338,8 +339,13 @@ case "${1:-}" in
             python -I "$DIR/fake-download.py" "$@"
         ;;
     fast-votes) prepare; fast_votes "${2:-}" ;;
+    qa-gate)
+        shift
+        prepare
+        QA_GATE_URL="http://localhost:$STACK_REQUESTARR_PORT" python -I "$DIR/qa-gate.py" "$@"
+        ;;
     *)
-        sed -n '2,24p' "$0"
+        sed -n '2,25p' "$0"
         exit 1
         ;;
 esac
