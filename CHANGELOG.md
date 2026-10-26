@@ -6,6 +6,18 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.16 (2026-10-26)
+
+### For users
+- **A tidier bug reports channel:** reports now stay in the order they were sent with the Report a problem button below them, and sending one no longer leaves a private reply pointing at a deleted message. Your report's card in the channel is the confirmation.
+
+### For admins
+- **Fixed: Passes on the QA checklist:** pressing Passes no longer answers "Something went wrong"; the card shows who passed it, as before.
+- **Failing several checklist items in a row:** admins working through the checklist are no longer told to wait between reports. Members still are.
+- **Every test server report reaches GitHub:** on the dev, QA and beta servers each bug report is filed on GitHub. A report that couldn't be filed says exactly why on its card, and is filed on its own once it can be, with the card updated to show the link.
+- **The QA checklist has its own group:** its channel now sits in an admin-only Requestarr QA group, moved there with its cards, so testing stays apart from running the server.
+- **No more "edited" on panels:** the admin panel, the welcome message and the Report a problem message are no longer marked edited each time they move below a new post.
+
 ## 0.4.15 (2026-10-25)
 
 ### For users

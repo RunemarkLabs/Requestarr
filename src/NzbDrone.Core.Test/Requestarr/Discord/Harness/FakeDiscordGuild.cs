@@ -29,6 +29,9 @@ namespace Requestarr.Core.Test.Discord.Harness
             public List<ulong> MessageIds { get; } = new();
             public HashSet<ulong> Pinned { get; } = new();
 
+            // Each message edit, by message ID (Discord marks an edited message "edited").
+            public List<ulong> Edited { get; } = new();
+
             public InteractionReply PinnedMessage => Pinned.Count == 1 ? Messages[MessageIds.IndexOf(Pinned.Single())] : null;
         }
 
@@ -225,6 +228,7 @@ namespace Requestarr.Core.Test.Discord.Harness
                 return Task.FromResult(false);
             }
 
+            channel.Edited.Add(messageId);
             channel.Messages[index] = message.KeepEmbeds
                 ? new InteractionReply { Content = message.Content, Buttons = message.Buttons, SelectMenu = message.SelectMenu, MoreMenus = message.MoreMenus, Ephemeral = message.Ephemeral, Embeds = channel.Messages[index].Embeds }
                 : message;

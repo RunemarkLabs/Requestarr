@@ -109,6 +109,8 @@ services:
       DISCORD_APPLICATION_ID: ${BETA_DISCORD_APPLICATION_ID:?set BETA_DISCORD_APPLICATION_ID in .env}
       DISCORD_GUILD_ID: ${BETA_DISCORD_GUILD_ID:?set BETA_DISCORD_GUILD_ID in .env}
       DISCORD_ADMIN_ROLE_ID: ${BETA_DISCORD_ADMIN_ROLE_ID:-}
+      # Every bug report from beta becomes a GitHub issue; without the key it waits on the server until one is set.
+      REQUESTARR_GITHUB_ISSUES_TOKEN: ${GITHUB_ISSUES_TOKEN:-}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       SONARR_API_KEY: ${BETA_SONARR_API_KEY}
       RADARR_API_KEY: ${BETA_RADARR_API_KEY}

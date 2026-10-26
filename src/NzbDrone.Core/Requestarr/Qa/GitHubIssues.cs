@@ -14,10 +14,13 @@ namespace Requestarr.Core.Qa
 {
     public record FiledIssue(int Number, string Url);
 
+    // The new issue, or why there's none, in words an admin can act on (never the key).
+    public record IssueResult(FiledIssue Issue, string Problem);
+
     public interface IGitHubIssues
     {
-        // The new issue, or null when GitHub refused or couldn't be reached (logged without the key).
-        Task<FiledIssue> CreateAsync(string repository, string token, string title, string body, IReadOnlyList<string> labels, CancellationToken cancellationToken);
+        // The new issue, or why GitHub refused it or couldn't be reached (logged without the key).
+        Task<IssueResult> CreateAsync(string repository, string token, string title, string body, IReadOnlyList<string> labels, CancellationToken cancellationToken);
     }
 
     // Files issues on GitHub with the install's own access key. Uses its own HttpClient so requests, which carry the key,
@@ -37,7 +40,7 @@ namespace Requestarr.Core.Qa
         // Swapped in tests; the live transport is the shared HttpClient.
         public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> Transport { get; set; } = (request, token) => Http.SendAsync(request, token);
 
-        public async Task<FiledIssue> CreateAsync(string repository, string token, string title, string body, IReadOnlyList<string> labels, CancellationToken cancellationToken)
+        public async Task<IssueResult> CreateAsync(string repository, string token, string title, string body, IReadOnlyList<string> labels, CancellationToken cancellationToken)
         {
             try
             {
@@ -60,19 +63,30 @@ namespace Requestarr.Core.Qa
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Warn("GitHub refused the bug report issue (HTTP {0})", (int)response.StatusCode);
-                    return null;
+                    return new IssueResult(null, Refused(response.StatusCode, repository));
                 }
 
                 var json = JObject.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
 
-                return new FiledIssue((int)json["number"], (string)json["html_url"]);
+                return new IssueResult(new FiledIssue((int)json["number"], (string)json["html_url"]), null);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 _logger.Warn("Filing the bug report on GitHub failed ({0})", ex.GetType().Name);
-                return null;
+                return new IssueResult(null, $"GitHub couldn't be reached ({ex.GetType().Name})");
             }
         }
+
+        // What GitHub's answer means for whoever fixes it.
+        public static string Refused(HttpStatusCode status, string repository) => (int)status switch
+        {
+            401 => "GitHub refused the access key (HTTP 401): it's wrong, revoked or expired",
+            403 => $"the access key isn't allowed to create issues on {repository} (HTTP 403)",
+            404 => $"GitHub can't find {repository}, or the access key can't see it (HTTP 404)",
+            410 => $"issues are turned off on {repository} (HTTP 410)",
+            422 => "GitHub rejected the issue's contents (HTTP 422)",
+            _ => $"GitHub answered HTTP {(int)status}"
+        };
 
         public static HttpRequestMessage Build(HttpMethod method, string path, string token, object payload)
         {

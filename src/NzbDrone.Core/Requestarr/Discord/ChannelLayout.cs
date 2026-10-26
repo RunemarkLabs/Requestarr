@@ -25,6 +25,9 @@ namespace Requestarr.Core.Discord
         public const string AdminCategoryName = "Requestarr Admin";
         public const string UsersCategoryName = "Requestarr Users";
         public const string OldRequestCategoryName = "Requestarr Requests";
+
+        // QA and dev only: the QA checklist's own admin-only group.
+        public const string QaCategoryName = "Requestarr QA";
         public const string UserChannelPrefix = "requests-";
         public const string UserRolePrefix = "requestarr-";
         public const string ArchivedPrefix = "archived-";

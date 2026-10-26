@@ -40,7 +40,9 @@ namespace Requestarr.Core.Discord
         public string AnnouncementsChannelId { get; set; }
         public string AnnouncedVersion { get; set; }
 
-        // QA and dev only: the admin-only QA checklist channel and its summary card (the items keep their own).
+        // QA and dev only: the admin-only Requestarr QA group, its QA checklist channel and the checklist's summary
+        // card (the items keep their own).
+        public string QaCategoryId { get; set; }
         public string QaChecklistChannelId { get; set; }
         public string QaChecklistSummaryMessageId { get; set; }
 

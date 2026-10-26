@@ -59,20 +59,22 @@ namespace Requestarr.Core.Discord.Handlers
                         return;
                     }
 
+                    // An admin working through the checklist isn't held to the members' report limit.
                     if (args.ElementAtOrDefault(0) == "fail")
                     {
-                        await OpenReportAsync(interaction, responder, entry);
+                        await OpenReportAsync(interaction, responder, entry, limited: false);
                         return;
                     }
 
-                    await responder.DeferAsync(ephemeral: true);
+                    // The card itself shows the pass (who and when), so the press needs no reply of its own. The card
+                    // can't be edited into a plain message anyway: Discord keeps a card a card.
+                    await responder.DeferAsync();
                     await _checklist.MarkPassedAsync(key, interaction.UserId, interaction.DisplayName);
-                    await responder.EditAsync(new InteractionReply { Content = $"✅ **{entry.Name}** marked as passing.", Ephemeral = true });
                     return;
                 }
 
                 case QaRoutes.Report:
-                    await OpenReportAsync(interaction, responder, null);
+                    await OpenReportAsync(interaction, responder, null, limited: true);
                     return;
 
                 case QaRoutes.Part:
@@ -98,8 +100,21 @@ namespace Requestarr.Core.Discord.Handlers
                     interaction.Fields.TryGetValue(QaRoutes.WhatField, out var what);
                     interaction.Fields.TryGetValue(QaRoutes.ExpectedField, out var expected);
 
-                    await responder.DeferAsync(ephemeral: true);
-                    var result = await _reports.SubmitAsync(interaction.UserId, interaction.DisplayName, args.ElementAtOrDefault(0), what, expected, args.ElementAtOrDefault(1));
+                    var key = args.ElementAtOrDefault(1);
+                    var fromChecklist = key != null && caller.IsAdmin;
+
+                    // The private menu becomes the answer, so no new private message lands above the report's card.
+                    await responder.UpdateMessageAsync(new InteractionReply { Content = QaText.Sending, Ephemeral = true });
+                    var result = await _reports.SubmitAsync(interaction.UserId, interaction.DisplayName, args.ElementAtOrDefault(0), what, expected, key, limited: !fromChecklist);
+
+                    // From the bug reports channel the new card is the answer, and the private menu goes: it replies to
+                    // the Report a problem panel, which moves below the card and would leave it pointing at nothing.
+                    if (result.Report != null && key == null)
+                    {
+                        await responder.DeleteOriginalAsync();
+                        return;
+                    }
+
                     await responder.EditAsync(new InteractionReply { Content = result.Message, Ephemeral = true });
                     return;
                 }
@@ -107,9 +122,9 @@ namespace Requestarr.Core.Discord.Handlers
         }
 
         // The part menu, privately, saying first whether the report becomes public; or how long to wait.
-        private async Task OpenReportAsync(DiscordInteraction interaction, IInteractionResponder responder, QaChecklistEntry item)
+        private async Task OpenReportAsync(DiscordInteraction interaction, IInteractionResponder responder, QaChecklistEntry item, bool limited)
         {
-            if (_reports.WaitLeft(interaction.UserId) is { } wait)
+            if (limited && _reports.WaitLeft(interaction.UserId) is { } wait)
             {
                 await responder.Ephemeral(QaText.Wait(wait));
                 return;

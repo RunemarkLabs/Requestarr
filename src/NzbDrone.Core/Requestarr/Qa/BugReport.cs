@@ -4,6 +4,7 @@ using System.Linq;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
+using Requestarr.Core.Announcements;
 using Requestarr.Core.Provisioning;
 
 namespace Requestarr.Core.Qa
@@ -29,15 +30,21 @@ namespace Requestarr.Core.Qa
         public static bool IsKnown(string key) => All.Any(c => c.Key == key);
     }
 
+    // Anything but Filed is a report not on GitHub yet; Requestarr tries again each time it starts.
     public enum BugReportFiling
     {
-        // Filing is off on this install (the default for other people's installs).
+        // Filing is off on this install (the default for other people's installs; always on for the test servers).
         Off = 0,
         Filed = 1,
+
+        // GitHub refused it or couldn't be reached: FilingProblem says which.
         Failed = 2,
 
         // On, but this install has no access key for GitHub.
-        NoToken = 3
+        NoToken = 3,
+
+        // Posted, and being filed now.
+        Pending = 4
     }
 
     // One report: what the reporter typed, what Requestarr added (environment, version, time, their Discord name), and
@@ -54,6 +61,9 @@ namespace Requestarr.Core.Qa
         public DateTime Created { get; set; }
         public string ChecklistItemKey { get; set; }
         public BugReportFiling Filing { get; set; }
+
+        // Why the last try to file it failed, in words an admin can act on.
+        public string FilingProblem { get; set; }
         public int? IssueNumber { get; set; }
         public string IssueUrl { get; set; }
         public string ChannelId { get; set; }
@@ -125,10 +135,12 @@ namespace Requestarr.Core.Qa
     }
 
     // Bug report settings: kept in Requestarr's settings (the admin web portal reads and changes them there), set by
-    // provisioning when it names them. The GitHub access key is in memory only, never in the database or config.
+    // provisioning when it names them. The GitHub access key is in memory only, never in the database or config: from
+    // provisioning, or else from REQUESTARR_GITHUB_ISSUES_TOKEN.
     public interface IBugReportSettings
     {
-        // File each report as a GitHub issue. Off unless the admin turns it on (reports become public).
+        // File each report as a GitHub issue. Off unless the admin turns it on (reports become public). Always on for
+        // the dev, QA and beta servers: every report from them reaches GitHub, where the gate before staging sees it.
         bool FileIssues { get; }
         string Repository { get; }
         string Token { get; }
@@ -143,19 +155,25 @@ namespace Requestarr.Core.Qa
         public const string DefaultRepository = "RunemarkLabs/Requestarr";
         public const int DefaultReportsPerDay = 5;
         public const int DefaultMinutesBetween = 2;
+        public const string TokenVariable = "REQUESTARR_GITHUB_ISSUES_TOKEN";
 
         private readonly IConfigService _config;
+        private readonly IReleaseEnvironment _environment;
+        private string _token;
 
-        public BugReportSettings(IConfigService config)
+        public BugReportSettings(IConfigService config, IReleaseEnvironment environment)
         {
             _config = config;
+            _environment = environment;
         }
 
-        public bool FileIssues => _config.BugReportsFileIssues;
+        public Func<string, string> Variable { get; set; } = System.Environment.GetEnvironmentVariable;
+
+        public bool FileIssues => _environment.IconSet != "production" || _config.BugReportsFileIssues;
 
         public string Repository => string.IsNullOrWhiteSpace(_config.BugReportsRepository) ? DefaultRepository : _config.BugReportsRepository;
 
-        public string Token { get; private set; }
+        public string Token => _token ?? (string.IsNullOrWhiteSpace(Variable(TokenVariable)) ? null : Variable(TokenVariable).Trim());
 
         public int ReportsPerDay => Math.Max(1, _config.BugReportsPerDay);
 
@@ -163,7 +181,7 @@ namespace Requestarr.Core.Qa
 
         public void Apply(BugReportsProvisioning provisioning)
         {
-            Token = string.IsNullOrWhiteSpace(provisioning?.GithubToken) ? null : provisioning.GithubToken.Trim();
+            _token = string.IsNullOrWhiteSpace(provisioning?.GithubToken) ? null : provisioning.GithubToken.Trim();
 
             if (provisioning?.FileIssues is { } file)
             {

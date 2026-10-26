@@ -38,5 +38,9 @@ namespace Requestarr.Core.Discord.Interactions
 
         // Removes those private messages. Discord allows it for 15 minutes after the interaction.
         Task DeletePrivateRepliesAsync();
+
+        // Components and forms opened from one: removes the private message the component belongs to (a private menu
+        // this flow posted earlier), once it has served its purpose.
+        Task DeleteOriginalAsync();
     }
 }

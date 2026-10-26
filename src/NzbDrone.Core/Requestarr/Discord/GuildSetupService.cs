@@ -118,19 +118,33 @@ namespace Requestarr.Core.Discord
                 config.FeedSeeded = false;
             }
 
-            // QA and dev only: the QA checklist, admin-only, next to the feed. A new (or different) one is posted again.
+            // QA and dev only: the QA checklist, admin-only, in a Requestarr QA group of its own, so testing stays apart
+            // from running the server. An existing checklist channel moves there with its cards; a new (or different)
+            // one is posted again.
             if (Qa.QaChecklist.HasChecklist(_environment))
             {
+                var qaGroup = await ExistingOrNull(Parse(config.QaCategoryId)) ?? await _gateway.FindCategoryAsync(ChannelLayout.QaCategoryName);
+
+                if (qaGroup == null)
+                {
+                    qaGroup = await _gateway.CreateCategoryAsync(ChannelLayout.QaCategoryName, group);
+                    _logger.Info("Created Discord group '{0}' ({1})", ChannelLayout.QaCategoryName, qaGroup);
+                    _audit.Record(Actor.System, "discord.category.create", "channel", qaGroup.ToString(), ChannelLayout.QaCategoryName);
+                }
+
+                await SyncOverwrites(qaGroup.Value, group);
+                config.QaCategoryId = qaGroup.ToString();
+
                 var checklist = await ExistingOrNull(Parse(config.QaChecklistChannelId)) ?? await _gateway.FindTextChannelAsync(Qa.QaText.ChecklistChannelName);
 
                 if (checklist == null)
                 {
-                    checklist = await _gateway.CreateTextChannelAsync(Qa.QaText.ChecklistChannelName, adminGroup, Qa.QaText.ChecklistChannelTopic, group);
+                    checklist = await _gateway.CreateTextChannelAsync(Qa.QaText.ChecklistChannelName, qaGroup, Qa.QaText.ChecklistChannelTopic, group);
                     _logger.Info("Created Discord QA checklist channel {0}", checklist);
                     _audit.Record(Actor.System, "discord.qa-checklist-channel.create", "channel", checklist.ToString());
                 }
 
-                await PlaceAsync(checklist.Value, adminGroup.Value, group);
+                await PlaceAsync(checklist.Value, qaGroup.Value, group);
 
                 if (config.QaChecklistChannelId != checklist.ToString())
                 {

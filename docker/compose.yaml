@@ -32,6 +32,8 @@ services:
       DISCORD_APPLICATION_ID: ${STACK_DISCORD_APPLICATION_ID:-}
       DISCORD_TEST_GUILD_ID: ${STACK_DISCORD_GUILD_ID:-}
       DISCORD_ADMIN_ROLE_ID: ${STACK_DISCORD_ADMIN_ROLE_ID:-}
+      # Files bug reports as GitHub issues (QA: GITHUB_ISSUES_TOKEN, dev: DEV_GITHUB_ISSUES_TOKEN in secrets.env).
+      REQUESTARR_GITHUB_ISSUES_TOKEN: ${STACK_GITHUB_ISSUES_TOKEN:-}
     volumes:
       - requestarr-config:/config
       - ./provisioning.yml:/provisioning/provisioning.yml:ro

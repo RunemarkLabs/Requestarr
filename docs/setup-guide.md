@@ -719,7 +719,11 @@ botProfile:
 
 `#requestarr-bug-reports`, in the Requestarr Users group, lets members and admins tell the people who build Requestarr about a problem. Nobody types in it: **Report a problem** opens a menu of Requestarr's parts, then a short form (what happened, what they expected). Requestarr adds your server's environment, its version, the time and the reporter's Discord name, nothing else from your server, and posts the report as a card in the channel, so you see every report.
 
-**Filing on GitHub is off by default.** Turned on, each report also becomes an issue on Requestarr's public GitHub repository, which anyone can read; the form says so before anything is sent. It needs an access key of your own that can only read and write issues on that repository (GitHub: Settings, Developer settings, Fine-grained tokens, Issues "Read and write", nothing else). Leave it off unless you want your members' reports to be public. Requestarr's own test servers have it on.
+**Filing on GitHub is off by default.** Turned on, each report also becomes an issue on Requestarr's public GitHub repository, which anyone can read; the form says so before anything is sent. It needs an access key of your own that can only read and write issues on that repository (GitHub: Settings, Developer settings, Fine-grained tokens, Issues "Read and write", nothing else). Leave it off unless you want your members' reports to be public. Requestarr's own test servers (dev, QA and beta) always file, whatever the setting.
+
+The access key can also come from the `REQUESTARR_GITHUB_ISSUES_TOKEN` environment variable, when the provisioning file names none.
+
+**Each card says where its report is.** The link to its GitHub issue, or exactly why it isn't there: filing is turned off, the server has no access key, or what GitHub said (the key was refused, it can't create issues there, the repository wasn't found) or that GitHub couldn't be reached. A report that couldn't be filed is filed the next time the bot connects, for example after you add the key and restart, without anyone sending it again, and its card then shows the link.
 
 ```yaml
 bugReports:

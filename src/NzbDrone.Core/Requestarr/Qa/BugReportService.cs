@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Core.Messaging.Events;
 using Requestarr.Core.Announcements;
 using Requestarr.Core.Audit;
 using Requestarr.Core.Discord;
@@ -22,17 +23,26 @@ namespace Requestarr.Core.Qa
 
         bool FilesIssues { get; }
 
-        Task<BugReportResult> SubmitAsync(ulong discordUserId, string reporterName, string component, string whatHappened, string expected, string checklistItemKey);
+        // limited: held to the report limit (members' Report a problem); an admin failing checklist items isn't.
+        Task<BugReportResult> SubmitAsync(ulong discordUserId, string reporterName, string component, string whatHappened, string expected, string checklistItemKey, bool limited = true);
+
+        // Every report not on GitHub yet is filed now if it can be, without its reporter sending it again; each card
+        // (and its checklist item) then says where it is, or exactly why it isn't.
+        Task RetryUnfiledAsync();
     }
 
     // Bug reports from the Report a problem button: kept in Requestarr's record, posted as a card in the bug reports
-    // channel, and filed as a GitHub issue when this install files them (its own access key; off by default). A report
-    // holds only what the reporter typed plus the environment, version, time, part and their Discord name.
-    public class BugReportService : IBugReportService
+    // channel, and filed as a GitHub issue when this install files them (its own access key; off by default, always on
+    // for the test servers). A report holds only what the reporter typed plus the environment, version, time, part and
+    // their Discord name. One that couldn't be filed is tried again each time the bot connects.
+    public class BugReportService : IBugReportService, IHandleAsync<DiscordReadyEvent>
     {
         public const int FieldLength = 1000;
 
         private static readonly ConcurrentDictionary<ulong, SemaphoreSlim> Locks = new();
+
+        // One filing at a time, so a report is never filed twice (a retry while it's being sent, say).
+        private static readonly SemaphoreSlim Filing = new(1, 1);
 
         private readonly IBugReportRepository _reports;
         private readonly IBugReportGuardRepository _guards;
@@ -66,14 +76,26 @@ namespace Requestarr.Core.Qa
         public TimeSpan? WaitLeft(ulong discordUserId) =>
             BugReportLimit.WaitLeft(_guards.Find(discordUserId.ToString())?.Reports() ?? new(), Now(), _settings);
 
-        public async Task<BugReportResult> SubmitAsync(ulong discordUserId, string reporterName, string component, string whatHappened, string expected, string checklistItemKey)
+        public void HandleAsync(DiscordReadyEvent message)
+        {
+            try
+            {
+                RetryUnfiledAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not file the bug reports that aren't on GitHub yet");
+            }
+        }
+
+        public async Task<BugReportResult> SubmitAsync(ulong discordUserId, string reporterName, string component, string whatHappened, string expected, string checklistItemKey, bool limited = true)
         {
             var gate = Locks.GetOrAdd(discordUserId, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync();
 
             try
             {
-                if (WaitLeft(discordUserId) is { } wait)
+                if (limited && WaitLeft(discordUserId) is { } wait)
                 {
                     return new BugReportResult(null, QaText.Wait(wait));
                 }
@@ -84,9 +106,13 @@ namespace Requestarr.Core.Qa
                 }
 
                 var now = Now();
-                var guard = _guards.Find(discordUserId.ToString()) ?? new BugReportGuard { DiscordUserId = discordUserId.ToString() };
-                guard.SetReports(guard.Reports().Where(r => r > now.AddDays(-1)).Append(now));
-                _guards.Upsert(guard);
+
+                if (limited)
+                {
+                    var guard = _guards.Find(discordUserId.ToString()) ?? new BugReportGuard { DiscordUserId = discordUserId.ToString() };
+                    guard.SetReports(guard.Reports().Where(r => r > now.AddDays(-1)).Append(now));
+                    _guards.Upsert(guard);
+                }
 
                 var item = checklistItemKey != null ? _checklist.Find(checklistItemKey) : null;
                 var report = _reports.Insert(new BugReport
@@ -100,7 +126,7 @@ namespace Requestarr.Core.Qa
                     ReporterName = reporterName,
                     Created = now.UtcDateTime,
                     ChecklistItemKey = item?.Key,
-                    Filing = !_settings.FileIssues ? BugReportFiling.Off : _settings.Token == null ? BugReportFiling.NoToken : BugReportFiling.Failed,
+                    Filing = CanFile() ?? BugReportFiling.Pending,
                     ChannelId = channel.ToString()
                 });
 
@@ -115,25 +141,9 @@ namespace Requestarr.Core.Qa
                     await _checklist.MarkFailingAsync(item.Key, discordUserId, reporterName, report);
                 }
 
-                if (_settings.FileIssues && _settings.Token != null)
+                if (report.Filing == BugReportFiling.Pending)
                 {
-                    var issue = await _github.CreateAsync(_settings.Repository, _settings.Token, QaText.IssueTitle(report), QaText.IssueBody(report, item), QaText.IssueLabels(report), CancellationToken.None);
-
-                    if (issue != null)
-                    {
-                        report.Filing = BugReportFiling.Filed;
-                        report.IssueNumber = issue.Number;
-                        report.IssueUrl = issue.Url;
-                        _audit.Record(Actor.System, "bugreport.file", "bug-report", report.Id.ToString(), issue.Url);
-                    }
-
-                    _reports.SetFields(report, r => r.Filing, r => r.IssueNumber, r => r.IssueUrl);
-                    await _gateway.EditMessageAsync(channel, ulong.Parse(report.MessageId), Card(report));
-
-                    if (item != null)
-                    {
-                        await _checklist.RefreshItemAsync(item.Key);
-                    }
+                    report = await FileAsync(report.Id) ?? report;
                 }
 
                 _logger.Info("Bug report {0} ({1}) from {2}: {3}", report.Id, report.Component, reporterName, QaText.Filing(report));
@@ -143,6 +153,89 @@ namespace Requestarr.Core.Qa
             finally
             {
                 gate.Release();
+            }
+        }
+
+        public async Task RetryUnfiledAsync()
+        {
+            foreach (var id in _reports.All().Where(r => r.Filing != BugReportFiling.Filed).OrderBy(r => r.Id).Select(r => r.Id).ToList())
+            {
+                var report = await FileAsync(id);
+
+                if (report?.Filing == BugReportFiling.Filed)
+                {
+                    _logger.Info("Bug report {0} is on GitHub now: {1}", report.Id, report.IssueUrl);
+                }
+            }
+        }
+
+        // Why a report can't be filed now (filing off, or no access key), or null when it can.
+        private BugReportFiling? CanFile() => !_settings.FileIssues ? BugReportFiling.Off : _settings.Token == null ? BugReportFiling.NoToken : null;
+
+        // Files one report if it isn't on GitHub yet, or records why it can't be; its card (and its checklist item)
+        // follow when that changed. Returns the report as it is now.
+        private async Task<BugReport> FileAsync(int id)
+        {
+            await Filing.WaitAsync();
+
+            try
+            {
+                var report = _reports.Find(id);
+
+                if (report == null || report.Filing == BugReportFiling.Filed)
+                {
+                    return report;
+                }
+
+                var before = (report.Filing, report.FilingProblem);
+
+                if (CanFile() is { } cannot)
+                {
+                    report.Filing = cannot;
+                    report.FilingProblem = null;
+                }
+                else
+                {
+                    var item = report.ChecklistItemKey != null ? _checklist.Find(report.ChecklistItemKey) : null;
+                    var result = await _github.CreateAsync(_settings.Repository, _settings.Token, QaText.IssueTitle(report), QaText.IssueBody(report, item), QaText.IssueLabels(report), CancellationToken.None);
+
+                    if (result?.Issue != null)
+                    {
+                        report.Filing = BugReportFiling.Filed;
+                        report.FilingProblem = null;
+                        report.IssueNumber = result.Issue.Number;
+                        report.IssueUrl = result.Issue.Url;
+                        _audit.Record(Actor.System, "bugreport.file", "bug-report", report.Id.ToString(), result.Issue.Url);
+                    }
+                    else
+                    {
+                        report.Filing = BugReportFiling.Failed;
+                        report.FilingProblem = result?.Problem ?? "GitHub gave no answer";
+                    }
+                }
+
+                if ((report.Filing, report.FilingProblem) == before)
+                {
+                    return report;
+                }
+
+                _reports.SetFields(report, r => r.Filing, r => r.FilingProblem, r => r.IssueNumber, r => r.IssueUrl);
+
+                if (ulong.TryParse(report.ChannelId, out var channel) && ulong.TryParse(report.MessageId, out var message))
+                {
+                    await _gateway.EditMessageAsync(channel, message, Card(report));
+                }
+
+                if (report.ChecklistItemKey != null)
+                {
+                    await _checklist.RefreshItemAsync(report.ChecklistItemKey);
+                }
+
+                return report;
+            }
+            finally
+            {
+                Filing.Release();
             }
         }
 

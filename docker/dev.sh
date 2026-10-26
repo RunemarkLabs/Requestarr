@@ -93,6 +93,7 @@ prepare() {
             STACK_DISCORD_APPLICATION_ID="${DISCORD_APPLICATION_ID:-}"
             STACK_DISCORD_GUILD_ID="${DISCORD_TEST_GUILD_ID:-}"
             STACK_DISCORD_ADMIN_ROLE_ID="${DISCORD_ADMIN_ROLE_ID:-}"
+            STACK_GITHUB_ISSUES_TOKEN="${GITHUB_ISSUES_TOKEN:-}"
             ;;
         dev)
             STACK_NAME="Dev"
@@ -103,6 +104,7 @@ prepare() {
             STACK_DISCORD_APPLICATION_ID="${DEV_DISCORD_APPLICATION_ID:-}"
             STACK_DISCORD_GUILD_ID="${DEV_DISCORD_GUILD_ID:-}"
             STACK_DISCORD_ADMIN_ROLE_ID="${DEV_DISCORD_ADMIN_ROLE_ID:-}"
+            STACK_GITHUB_ISSUES_TOKEN="${DEV_GITHUB_ISSUES_TOKEN:-}"
             ;;
         *) die "--stack is qa or dev (got '$STACK')" ;;
     esac
@@ -113,7 +115,7 @@ prepare() {
     REQUESTARR_STAGED_VERSIONS=""
     export REQUESTARR_STACK STACK_REQUESTARR_PORT STACK_SONARR_TEST_PORT STACK_RADARR_TEST_PORT \
         STACK_DISCORD_BOT_TOKEN STACK_DISCORD_APPLICATION_ID STACK_DISCORD_GUILD_ID STACK_DISCORD_ADMIN_ROLE_ID \
-        REQUESTARR_STAGED_VERSIONS
+        STACK_GITHUB_ISSUES_TOKEN REQUESTARR_STAGED_VERSIONS
 }
 
 # QA only: the versions staging has (what was last published for it, staged-versions.py), which QA's what's-new
