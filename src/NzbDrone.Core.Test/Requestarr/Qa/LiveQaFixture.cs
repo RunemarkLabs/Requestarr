@@ -104,6 +104,11 @@ namespace Requestarr.Core.Test.Qa
             panels = Mocker.Resolve<PanelService>();
             Mocker.SetConstant(panels);
             var checklist = Mocker.Resolve<QaChecklistService>();
+
+            // Dev shows only the running version's items; a version with nothing to test by hand has none, so the check
+            // runs as the newest version that has some.
+            var tested = QaChecklist.Parse(checklist.ChecklistText()).Where(v => v.Items.Count > 0).Max(v => v.Version);
+            checklist.CurrentVersion = () => tested;
             Mocker.SetConstant<IQaChecklistService>(checklist);
             var reports = Mocker.Resolve<BugReportService>();
             Mocker.SetConstant<IBugReportService>(reports);

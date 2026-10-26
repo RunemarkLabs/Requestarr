@@ -20,6 +20,8 @@ import subprocess
 import sys
 import time
 
+import version_rules
+
 AUTOMATIC = "automatic update"
 REVIEW = "needs review"
 SECURITY = "security"
@@ -195,9 +197,11 @@ def top_version(changelog):
     return tuple(int(x) for x in match.groups()) if match else (0, 0, 0)
 
 
-def next_version(*changelogs):
-    major, minor, patch = max(top_version(c) for c in changelogs)
-    return (major, minor, patch + 1)
+def next_version(changelogs):
+    """The version for an update into dev, like any pull request into dev (docs/development.md#versions): the next
+    patch on dev's line, or the next minor once QA has that line. changelogs: {"dev": ..., "qa": ..., "staging": ...}."""
+    versions = {b: ["%s.%s.%s" % m.groups() for m in version_rules.HEADING.finditer(c)] for b, c in changelogs.items()}
+    return version_rules.next_version("dev", versions)
 
 
 def with_section(changelog, version, day, security_line):
@@ -317,7 +321,7 @@ def update_next(repo):
     current = open("CHANGELOG.md", encoding="utf-8").read()
     up_to_date = run("git", "merge-base", "--is-ancestor", "origin/dev", "HEAD", check=False) is not None and \
         subprocess.run(["git", "merge-base", "--is-ancestor", "origin/dev", "HEAD"]).returncode == 0
-    versioned = top_version(current) > max(top_version(t) for t in tops.values())
+    versioned = top_version(current) == next_version(tops)
 
     if not (up_to_date and versioned):
         if not up_to_date:
@@ -332,7 +336,7 @@ def update_next(repo):
         # Dependabot never changes these three: start from dev's and add this update's version on top. Nobody can test a
         # dependency update by hand, so its QA checklist section is the heading only.
         git("checkout", "origin/dev", "--", "CHANGELOG.md", "QA-CHECKLIST.md", "src/Directory.Build.props")
-        version = next_version(*tops.values())
+        version = next_version(tops)
         day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         line = SECURITY_LINE if FOR_ADMINS in labels else ""
         changelog = with_section(open("CHANGELOG.md", encoding="utf-8").read(), version, day, line)
@@ -417,7 +421,10 @@ def self_test():
         (not ships("npm_and_yarn", ["tool-dep"], package, LOCK), "a build tool's package doesn't ship"),
         (ships("nuget", ["NLog"]) and ships("docker", ["dotnet/aspnet"]) and not ships("github_actions", ["x"]),
          "backend and images ship, workflow actions don't"),
-        (next_version("## 0.4.2 (x)", "## 0.3.4 (x)", "## 0.5.0 (x)") == (0, 5, 1), "next version is above all three"),
+        (next_version({"dev": "## 0.5.0 (x)\n## 0.4.2 (x)", "qa": "## 0.4.2 (x)", "staging": "## 0.3.4 (x)"}) == (0, 5, 1),
+         "an update takes the next patch on dev's line"),
+        (next_version({"dev": "## 0.5.0 (x)\n## 0.4.2 (x)", "qa": "## 0.5.0 (x)", "staging": "## 0.3.4 (x)"}) == (0, 6, 0),
+         "an update after a promotion to QA starts the next minor"),
         (with_section("# Changelog\n\nintro\n\n## 0.4.2 (2026-10-25)\n", (0, 4, 3), "2026-10-26", "")
          == "# Changelog\n\nintro\n\n## 0.4.3 (2026-10-26)\n\n## 0.4.2 (2026-10-25)\n", "a heading-only version"),
         ("### For admins\n- **Security update:**" in with_section("## 0.1.0 (x)\n", (0, 1, 1), "d", SECURITY_LINE),

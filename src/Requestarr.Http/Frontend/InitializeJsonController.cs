@@ -53,6 +53,7 @@ namespace Requestarr.Http.Frontend
             builder.AppendLine($"  \"apiKey\": \"{_apiKey}\",");
             builder.AppendLine($"  \"release\": \"{BuildInfo.Release}\",");
             builder.AppendLine($"  \"version\": \"{BuildInfo.Version.ToString()}\",");
+            builder.AppendLine($"  \"releaseVersion\": \"{_environment.BetaVersion(BuildInfo.Version) ?? Changelog.Release(BuildInfo.Version).ToString()}\",");
             builder.AppendLine($"  \"instanceName\": \"{_configFileProvider.InstanceName.ToString()}\",");
             builder.AppendLine($"  \"theme\": \"{_configFileProvider.Theme.ToString()}\",");
             builder.AppendLine($"  \"iconSet\": \"{_environment.IconSet}\",");

@@ -36,6 +36,11 @@ COPY LICENSE /app/LICENSE
 # Updates come from new images, never from inside the container.
 ENV REQUESTARR__UPDATE__MECHANISM=Docker
 
+# Staging's beta version (x.y.z-beta.N, docs/development.md#versions), which it shows and posts; the Image workflow
+# sets it for staging only, so other builds show their plain version.
+ARG RELEASE_VERSION=
+ENV REQUESTARR_RELEASE_VERSION=$RELEASE_VERSION
+
 USER app
 VOLUME /config
 EXPOSE 9797

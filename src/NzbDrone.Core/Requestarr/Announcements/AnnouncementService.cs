@@ -171,11 +171,11 @@ namespace Requestarr.Core.Announcements
                 var news = versions.Where(v => v.HasNews && (mode == VersionPostMode.CurrentOnly ? v.Version == current : !staged.Contains(v.Version))).ToList();
                 var users = _guildSetup.AnnouncementsChannelId;
 
-                await KeepExactlyAsync(adminChannel, await FindPostsAsync(adminChannel, VersionAudience.Admins), news.Select(v => VersionCards.Collapsed(v, VersionAudience.Admins)).ToList());
+                await KeepExactlyAsync(adminChannel, await FindPostsAsync(adminChannel, VersionAudience.Admins), news.Select(v => Card(v, VersionAudience.Admins)).ToList());
 
                 if (users.HasValue)
                 {
-                    await KeepExactlyAsync(users.Value, await FindPostsAsync(users.Value, VersionAudience.Users), news.Where(v => v.Users.Count > 0).Select(v => VersionCards.Collapsed(v, VersionAudience.Users)).ToList());
+                    await KeepExactlyAsync(users.Value, await FindPostsAsync(users.Value, VersionAudience.Users), news.Where(v => v.Users.Count > 0).Select(v => Card(v, VersionAudience.Users)).ToList());
                 }
 
                 _logger.Info("What's new ({0}): {1}", mode, news.Count == 0 ? "no versions to show" : string.Join(", ", news.Select(v => v.Version)));
@@ -193,8 +193,12 @@ namespace Requestarr.Core.Announcements
 
             return found == null || !found.HasNews
                 ? new[] { new InteractionReply { Content = DiscordText.VersionNotFound(version), Ephemeral = true } }
-                : VersionCards.Full(found, audience);
+                : VersionCards.Full(found, audience, _environment.BetaVersion(version));
         }
+
+        // On staging, the version running is shown as its beta version.
+        private VersionCard Card(ChangelogVersion version, VersionAudience audience) =>
+            VersionCards.Collapsed(version, audience, _environment.BetaVersion(version.Version));
 
         // Production and staging: each version with something in it gets a card, oldest first, and keeps it. A card
         // already in the channel isn't posted again (a server set up again with its channels kept). Posts from before
@@ -209,11 +213,11 @@ namespace Requestarr.Core.Announcements
             if (inAdmin.Concat(inUsers).Any(p => p.Card == null))
             {
                 var history = versions.Where(v => v.HasNews).ToList();
-                await KeepExactlyAsync(adminChannel, inAdmin, history.Select(v => VersionCards.Collapsed(v, VersionAudience.Admins)).ToList());
+                await KeepExactlyAsync(adminChannel, inAdmin, history.Select(v => Card(v, VersionAudience.Admins)).ToList());
 
                 if (users.HasValue)
                 {
-                    await KeepExactlyAsync(users.Value, inUsers, history.Where(v => v.Users.Count > 0).Select(v => VersionCards.Collapsed(v, VersionAudience.Users)).ToList());
+                    await KeepExactlyAsync(users.Value, inUsers, history.Where(v => v.Users.Count > 0).Select(v => Card(v, VersionAudience.Users)).ToList());
                 }
 
                 _logger.Info("What's new: the history is now shown as cards ({0} versions)", history.Count);
@@ -231,12 +235,12 @@ namespace Requestarr.Core.Announcements
                 {
                     if (!shownAdmin.Contains(version.Version))
                     {
-                        await SendAsync(adminChannel, VersionCards.Collapsed(version, VersionAudience.Admins));
+                        await SendAsync(adminChannel, Card(version, VersionAudience.Admins));
                     }
 
                     if (users.HasValue && version.Users.Count > 0 && !shownUsers.Contains(version.Version))
                     {
-                        await SendAsync(users.Value, VersionCards.Collapsed(version, VersionAudience.Users));
+                        await SendAsync(users.Value, Card(version, VersionAudience.Users));
                     }
 
                     _logger.Info("Announced what's new in {0} ({1} for users, {2} for admins)", version.Version, version.Users.Count, version.Admins.Count);
