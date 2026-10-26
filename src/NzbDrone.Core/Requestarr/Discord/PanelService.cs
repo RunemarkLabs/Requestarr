@@ -334,7 +334,7 @@ namespace Requestarr.Core.Discord
                     copies.Add(keep.Value);
                     keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Cards = reply.Cards, Quiet = true });
                 }
-                else if (keep.HasValue && !moveOnly && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
+                else if (keep.HasValue && !moveOnly && !Shows(own.FirstOrDefault(m => m.Id == keep.Value), reply) && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
                 {
                     // Gone, or an older message that can't take the new layout: a new one replaces it.
                     copies.Add(keep.Value);
@@ -365,6 +365,23 @@ namespace Requestarr.Core.Discord
             {
                 gate.Release();
             }
+        }
+
+        // Whether a panel already shows exactly this (its text, layout, buttons and their labels), so it's left as it is:
+        // an edit would mark it "edited" (on every start) for nothing. Anything else (a menu, a disabled button, an
+        // embed) is edited, as before.
+        public static bool Shows(ChannelMessage message, InteractionReply reply)
+        {
+            if (message?.Labels == null || reply.SelectMenu != null || reply.MoreMenus?.Count > 0 || reply.Embeds?.Count > 0 || message.EmbedTitle != null)
+            {
+                return false;
+            }
+
+            var buttons = reply.IsCards ? reply.Cards.SelectMany(c => c.Buttons).ToList() : reply.Buttons ?? new List<InteractionButton>();
+            var text = reply.IsCards ? string.Join("\n", reply.Cards.Select(c => c.Text)) : reply.Content;
+
+            return message.IsCards == reply.IsCards && message.Content == text && !buttons.Any(b => b.Disabled) &&
+                   (message.CustomIds ?? new List<string>()).SequenceEqual(buttons.Select(b => b.CustomId)) && message.Labels.SequenceEqual(buttons.Select(b => b.Label));
         }
 
         private async Task TryEnsureAsync(ulong channelId)

@@ -16,7 +16,7 @@ version heading carries the day it was made, which its card in Discord shows.
 - **Failing several checklist items in a row:** admins working through the checklist are no longer told to wait between reports. Members still are.
 - **Every test server report reaches GitHub:** on the dev, QA and beta servers each bug report is filed on GitHub. A report that couldn't be filed says exactly why on its card, and is filed on its own once it can be, with the card updated to show the link.
 - **The QA checklist has its own group:** its channel now sits in an admin-only Requestarr QA group, moved there with its cards, so testing stays apart from running the server.
-- **No more "edited" on panels:** the admin panel, the welcome message and the Report a problem message are no longer marked edited each time they move below a new post.
+- **No more "edited" on panels:** the admin panel, the welcome message and the Report a problem message are no longer marked edited each time they move below a new post or Requestarr restarts.
 
 ## 0.4.15 (2026-10-25)
 

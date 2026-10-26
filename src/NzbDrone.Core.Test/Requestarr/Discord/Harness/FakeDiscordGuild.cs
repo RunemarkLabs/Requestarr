@@ -292,10 +292,19 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
         {
             IReadOnlyList<ChannelMessage> messages = Channels.TryGetValue(channelId, out var channel)
-                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.IsCards ? string.Join("\n", m.Cards.Select(c => c.Text)) : m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m))).TakeLast(limit).ToList()
+                ? channel.MessageIds.Zip(channel.Messages, (id, m) => Read(id, m)).TakeLast(limit).ToList()
                 : new List<ChannelMessage>();
             return Task.FromResult(messages);
         }
+
+        private static ChannelMessage Read(ulong id, InteractionReply m) => new(
+            id,
+            m.IsCards ? string.Join("\n", m.Cards.Select(c => c.Text)) : m.Content,
+            m.Embeds.FirstOrDefault()?.Title,
+            m.Embeds.FirstOrDefault()?.Description,
+            CustomIds(m),
+            m.Buttons.Concat(m.Cards.SelectMany(c => c.Buttons)).Select(b => b.Label).ToList(),
+            m.IsCards);
 
         private static List<string> CustomIds(InteractionReply message) =>
             message.Buttons.Concat(message.Cards.SelectMany(c => c.Buttons)).Select(b => b.CustomId).Concat(new[] { message.SelectMenu }.Concat(message.MoreMenus).Where(x => x != null).Select(x => x.CustomId)).ToList();

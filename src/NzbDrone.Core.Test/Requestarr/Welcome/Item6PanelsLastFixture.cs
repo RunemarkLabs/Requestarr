@@ -69,6 +69,25 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
+        public async Task a_start_leaves_a_panel_showing_the_right_thing_alone_and_brings_an_outdated_one_up_to_date()
+        {
+            var welcome = Discord.Channels[WelcomeChannel];
+            welcome.Edited.Clear();
+            AdminRoom.Edited.Clear();
+
+            // The welcome message as an older version wrote it: same buttons, other words.
+            var index = welcome.MessageIds.IndexOf(ulong.Parse(Config.WelcomeMessageId));
+            var current = welcome.Messages[index];
+            welcome.Messages[index] = new InteractionReply { Cards = { new InteractionCard { Text = "Older welcome words", Buttons = current.Cards[0].Buttons } } };
+
+            await Panels.EnsureAllAsync();
+
+            AdminRoom.Edited.Should().BeEmpty("the admin panel already shows what it should");
+            welcome.Edited.Should().Equal(ulong.Parse(Config.WelcomeMessageId));
+            welcome.Messages[index].Cards[0].Text.Should().Be(current.Cards[0].Text);
+        }
+
+        [Test]
         public async Task the_welcome_and_blocked_messages_stay_last_too()
         {
             await Discord.SendMessageAsync(WelcomeChannel, new InteractionReply { Content = "something" });
