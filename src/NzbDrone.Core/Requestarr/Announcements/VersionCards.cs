@@ -20,7 +20,8 @@ namespace Requestarr.Core.Announcements
         public const string ReadChanges = "whatsnew";   // whatsnew:{a|u}:{version}
     }
 
-    // One version's card as posted: its title and description are what a server compares to find and update it.
+    // One version's card as posted: its title and description are what a server compares to find and update it. On
+    // staging the version it runs is shown as its beta version (0.4.17-beta.1); every other version as its number.
     public record VersionCard(Version Version, string Title, string Description, InteractionReply Reply);
 
     // What's new, as cards. In the channels each version is one line with a Read changes button; pressing it shows the
@@ -37,15 +38,17 @@ namespace Requestarr.Core.Announcements
         public const uint UsersColor = 0x2BB3A3;
         public const uint AdminsColor = 0xE0A030;
 
-        private static readonly Regex AdminTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+) · \d+ changes? for (admins|users)");
-        private static readonly Regex UsersTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+) · \d+ new things? for you");
+        private static readonly Regex AdminTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+)(?:-beta\.\d+)? · \d+ changes? for (admins|users)");
+        private static readonly Regex UsersTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+)(?:-beta\.\d+)? · \d+ new things? for you");
         private static readonly Regex BoldLead = new(@"^\*\*(?<lead>[^*]+?):?\*\*");
 
-        public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience)
+        // shown: how the version reads in the title (its beta version on staging), its number when null.
+        public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience, string shown = null)
         {
+            shown ??= version.Version.ToString();
             var title = audience == VersionAudience.Admins
-                ? DiscordText.VersionCardAdminTitle(version.Version, version.Admins.Count, version.Users.Count)
-                : DiscordText.VersionCardUsersTitle(version.Version, version.Users.Count);
+                ? DiscordText.VersionCardAdminTitle(shown, version.Admins.Count, version.Users.Count)
+                : DiscordText.VersionCardUsersTitle(shown, version.Users.Count);
 
             // Members see the main change in a few words, so they know whether to open it.
             var description = audience == VersionAudience.Users ? MainChange(version.Users[0]) : null;
@@ -71,7 +74,7 @@ namespace Requestarr.Core.Announcements
 
         // The full card, private: one coloured card per section (a long section carries on in more cards, split between
         // lines), in as many messages as Discord's limits need. Cards show text at a message's size, with headings.
-        public static IReadOnlyList<InteractionReply> Full(ChangelogVersion version, VersionAudience audience)
+        public static IReadOnlyList<InteractionReply> Full(ChangelogVersion version, VersionAudience audience, string shown = null)
         {
             var sections = new List<(string Heading, IReadOnlyList<string> Lines, uint Color)>();
 
@@ -85,7 +88,7 @@ namespace Requestarr.Core.Announcements
                 sections.Add((Changelog.AdminsHeading, version.Admins, AdminsColor));
             }
 
-            var title = $"## {DiscordText.VersionCardFullTitle(version.Version, version.Date)}\n";
+            var title = $"## {DiscordText.VersionCardFullTitle(shown ?? version.Version.ToString(), version.Date)}\n";
             var cards = new List<InteractionCard>();
 
             foreach (var (heading, lines, color) in sections)

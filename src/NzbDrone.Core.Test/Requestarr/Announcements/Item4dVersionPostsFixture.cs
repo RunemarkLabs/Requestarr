@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using Requestarr.Core.Announcements;
 using Requestarr.Core.Discord.Interactions;
@@ -225,6 +226,50 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             AdminHeaders.Should().Equal(Admin("0.0.9"), Admin("0.1.0"), Admin("0.2.0"), Admin("0.3.0"));
+        }
+
+        [Test]
+        public void the_beta_version_is_the_one_the_image_was_published_as_and_only_for_its_own_version()
+        {
+            string Beta(string variable, string version) =>
+                new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? variable : null }.BetaVersion(new Version(version));
+
+            Beta("0.4.17-beta.1", "0.4.17.11354").Should().Be("0.4.17-beta.1");
+            Beta(" 0.4.18-beta.12 ", "0.4.18").Should().Be("0.4.18-beta.12");
+            Beta("0.4.17-beta.1", "0.4.16").Should().BeNull("an older version keeps its number");
+            Beta(null, "0.4.17").Should().BeNull("QA, dev and production builds have none");
+            Beta(string.Empty, "0.4.17").Should().BeNull();
+            Beta("0.4.17", "0.4.17").Should().BeNull("only a beta version counts");
+            Beta("0.4.17-beta.0", "0.4.17").Should().BeNull();
+            Beta("0.4.17-rc.1", "0.4.17").Should().BeNull();
+        }
+
+        [Test]
+        public async Task staging_shows_the_version_it_runs_as_its_beta_version()
+        {
+            Environment("staging");
+            var environment = new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? "0.3.0-beta.2" : null };
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.BetaVersion(It.IsAny<Version>())).Returns<Version>(environment.BetaVersion);
+
+            await StartOn("0.3.0");
+
+            var titles = Discord.Channels[AdminChannel].Messages.Where(m => m.Embeds.Any()).Select(m => m.Embeds[0].Title).ToList();
+            titles.Should().Equal("Requestarr 0.1.0 · 1 change for users", "Requestarr 0.2.0 · 1 change for admins, 1 for users", "Requestarr 0.3.0-beta.2 · 1 change for admins");
+            AdminHeaders.Should().Equal(new[] { Admin("0.1.0"), Admin("0.2.0"), Admin("0.3.0") }, "a beta title is still found as its version's card");
+            Service.FullCard(VersionAudience.Admins, new Version(0, 3, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.3.0-beta.2\n");
+            Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.2.0\n");
+
+            await StartOn("0.3.0");
+
+            Discord.Channels[AdminChannel].Messages.Count(m => m.Embeds.Any()).Should().Be(3, "a restart posts nothing again");
+        }
+
+        [Test]
+        public void a_beta_title_reads_as_its_version()
+        {
+            VersionCards.Parse("Requestarr 0.4.17-beta.3 · 2 changes for admins", VersionAudience.Admins).Should().Be(new Version(0, 4, 17));
+            VersionCards.Parse("Requestarr 0.4.17-beta.3 · 1 new thing for you", VersionAudience.Users).Should().Be(new Version(0, 4, 17));
+            VersionCards.Parse("Requestarr 0.4.17-rc.3 · 1 new thing for you", VersionAudience.Users).Should().BeNull();
         }
 
         [Test]

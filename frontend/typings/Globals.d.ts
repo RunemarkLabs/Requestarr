@@ -7,6 +7,7 @@ interface Window {
     theme: string;
     urlBase: string;
     iconSet: string;
+    releaseVersion: string;
     applyIconTheme?: (theme: string) => string;
     version: string;
   };

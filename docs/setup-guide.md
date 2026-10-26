@@ -877,7 +877,9 @@ When a new version reaches staging, update with one command in the beta folder:
 
 It pulls the newest `staging` image. If it's newer than what runs, it stops Requestarr, backs up its data to `backups/`, and starts the new version (Sonarr and Radarr are left alone). It prints the old and new versions.
 
-**Check:** it ends with "Requestarr updated: 0.3.0 -> 0.3.1" (your versions), and `#requestarr-admin` gets the new version's "what's new".
+**Check:** it ends with "Requestarr updated: 0.4.17-beta.1 -> 0.4.18-beta.2" (your versions), and `#requestarr-admin` gets the new version's "what's new".
+
+Beta versions are the version being tested with "beta" and a count after it: 0.4.18-beta.2 is the second beta build of the 0.4 releases, here version 0.4.18. The release itself has the plain number. Versions from before 0.5.0 reached the beta with plain numbers (0.3.4).
 
 To go back to the version that ran before the last update, with the data as it was then:
 

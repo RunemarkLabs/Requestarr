@@ -35,10 +35,17 @@ function About() {
     dispatch(fetchStatus());
   }, [dispatch]);
 
+  // Beta shows the beta version it was published as beside the build number.
+  const { releaseVersion } = window.Requestarr;
+  const shownVersion =
+    releaseVersion && releaseVersion.includes('-')
+      ? `${releaseVersion} (${version})`
+      : version;
+
   return (
     <FieldSet legend={translate('About')}>
       <DescriptionList className={styles.descriptionList}>
-        <DescriptionListItem title={translate('Version')} data={version} />
+        <DescriptionListItem title={translate('Version')} data={shownVersion} />
 
         {packageVersion && (
           <DescriptionListItem
