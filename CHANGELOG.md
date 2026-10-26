@@ -6,6 +6,8 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.4.18 (2026-10-26)
+
 ## 0.4.17 (2026-10-26)
 
 ## 0.4.16 (2026-10-26)
