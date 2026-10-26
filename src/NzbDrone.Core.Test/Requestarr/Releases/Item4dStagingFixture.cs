@@ -89,7 +89,9 @@ namespace Requestarr.Core.Test.Releases
             var image = Read(".github", "workflows", "image.yml");
 
             image.Should().Contain("branches: [staging, main]").And.Contain("platforms: linux/amd64,linux/arm64").And.Contain("packages: write");
-            image.Should().Contain("push:staging) tags=\"$IMAGE:staging,$IMAGE:$version\"").And.Contain("push:main) tags=\"$IMAGE:$version,$IMAGE:${version%.*},$IMAGE:latest\"");
+            image.Should().Contain("version_rules.py beta \"$version\" \"$GITHUB_SHA\"").And.Contain("tags=\"$IMAGE:staging,$IMAGE:$release\"").And.Contain("push:main) tags=\"$IMAGE:$version,$IMAGE:${version%.*},$IMAGE:latest\"");
+            image.Should().Contain("RELEASE_VERSION=${{ steps.tags.outputs.beta }}").And.Contain("git push origin \"refs/tags/v$BETA\"", "each staging publish is recorded as a tag the next beta number is counted from");
+            Read("docker", "Dockerfile").Should().Contain($"ENV {ReleaseEnvironment.ReleaseVersionVariable}=$RELEASE_VERSION");
             image.Should().Contain("^test-[a-z0-9.-]+$", "a hand-run publishes only a test tag");
             image.Should().Contain("org.opencontainers.image.source=").And.Contain("secret-looking environment variable").And.Contain("answers /ping");
             Read("docker", "Dockerfile").Should().Contain("FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk").And.Contain("ARG TARGETARCH");
@@ -102,7 +104,9 @@ namespace Requestarr.Core.Test.Releases
             var build = Read(".github", "workflows", "build.yml");
 
             release.Should().Contain("promote-staging) shift; promote qa staging").And.Contain("merge_into staging qa").And.Contain("merge_into qa dev");
-            release.Should().Contain("drift_pair \"$qa\" \"$staging\"").And.Contain("for other in dev qa staging");
+            release.Should().Contain("drift_pair \"$qa\" \"$staging\"").And.Contain("version_rules.py\" check \"$target\" \"$new\"");
+            release.Should().Contain("version_rules.py\" beta").And.Contain("version_rules.py\" merge").And.Contain("--dry-run) dry=1");
+            build.Should().Contain("python3 .github/version_rules.py --self-test");
             build.Should().Contain("pull_request:staging) below=qa ;;").And.Contain("HEAD_REF: ${{ github.event.pull_request.head.ref }}");
             Read(".github", "workflows", "drift.yml").Should().Contain("staging_ref");
         }
