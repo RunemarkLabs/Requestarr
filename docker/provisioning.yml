@@ -26,6 +26,12 @@ discord:
   # (the server owner always is). Optionally use an existing role instead:
   adminRoleId: ${DISCORD_ADMIN_ROLE_ID:-}
 
+# The bots' picture and banner: Requestarr's always win on the test servers, so a picture uploaded by hand before
+# Requestarr managed it is replaced (each environment's banner: dev, QA).
+botProfile:
+  keepUpToDate: true
+  takeOver: true
+
 # Optional: cast from The Movie Database (leave TMDB_API_KEY unset to skip).
 tmdb:
   apiKey: ${TMDB_API_KEY:-}

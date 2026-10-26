@@ -4,6 +4,8 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
+## 0.4.17 (2026-10-26)
+
 ## 0.4.16 (2026-10-26)
 - **Passes without errors:** Press Passes on a checklist item, then press it again. You should see the card show who passed it and when, and no "Something went wrong" message.
 - **Failing in a row:** Press Failing on three items one after another and send a short report for each. You should see a form open every time, each card marked failing with its own report, and never "You've sent a report just now".
