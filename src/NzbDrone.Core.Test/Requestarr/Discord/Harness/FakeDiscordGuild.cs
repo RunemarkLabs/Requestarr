@@ -29,6 +29,9 @@ namespace Requestarr.Core.Test.Discord.Harness
             public List<ulong> MessageIds { get; } = new();
             public HashSet<ulong> Pinned { get; } = new();
 
+            // Each message edit, by message ID (Discord marks an edited message "edited").
+            public List<ulong> Edited { get; } = new();
+
             public InteractionReply PinnedMessage => Pinned.Count == 1 ? Messages[MessageIds.IndexOf(Pinned.Single())] : null;
         }
 
@@ -225,6 +228,7 @@ namespace Requestarr.Core.Test.Discord.Harness
                 return Task.FromResult(false);
             }
 
+            channel.Edited.Add(messageId);
             channel.Messages[index] = message.KeepEmbeds
                 ? new InteractionReply { Content = message.Content, Buttons = message.Buttons, SelectMenu = message.SelectMenu, MoreMenus = message.MoreMenus, Ephemeral = message.Ephemeral, Embeds = channel.Messages[index].Embeds }
                 : message;
@@ -288,10 +292,19 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task<IReadOnlyList<ChannelMessage>> GetOwnMessagesAsync(ulong channelId, int limit)
         {
             IReadOnlyList<ChannelMessage> messages = Channels.TryGetValue(channelId, out var channel)
-                ? channel.MessageIds.Zip(channel.Messages, (id, m) => new ChannelMessage(id, m.IsCards ? string.Join("\n", m.Cards.Select(c => c.Text)) : m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m))).TakeLast(limit).ToList()
+                ? channel.MessageIds.Zip(channel.Messages, (id, m) => Read(id, m)).TakeLast(limit).ToList()
                 : new List<ChannelMessage>();
             return Task.FromResult(messages);
         }
+
+        private static ChannelMessage Read(ulong id, InteractionReply m) => new(
+            id,
+            m.IsCards ? string.Join("\n", m.Cards.Select(c => c.Text)) : m.Content,
+            m.Embeds.FirstOrDefault()?.Title,
+            m.Embeds.FirstOrDefault()?.Description,
+            CustomIds(m),
+            m.Buttons.Concat(m.Cards.SelectMany(c => c.Buttons)).Select(b => b.Label).ToList(),
+            m.IsCards);
 
         private static List<string> CustomIds(InteractionReply message) =>
             message.Buttons.Concat(message.Cards.SelectMany(c => c.Buttons)).Select(b => b.CustomId).Concat(new[] { message.SelectMenu }.Concat(message.MoreMenus).Where(x => x != null).Select(x => x.CustomId)).ToList();

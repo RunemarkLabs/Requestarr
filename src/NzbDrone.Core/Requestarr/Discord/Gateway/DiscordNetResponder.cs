@@ -85,6 +85,8 @@ namespace Requestarr.Core.Discord.Gateway
             _privateReplies.Clear();
         }
 
+        public Task DeleteOriginalAsync() => _interaction.DeleteOriginalResponseAsync();
+
         // The images the reply's embeds point to (attachment://...), sent with it (DiscordAssets).
         public static List<FileAttachment> Files(InteractionReply reply) =>
             DiscordAssets.For(reply).Select(f => new FileAttachment(new System.IO.MemoryStream(f.Bytes), f.Name)).ToList();

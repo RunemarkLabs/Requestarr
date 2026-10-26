@@ -22,13 +22,20 @@ namespace Requestarr.Http.Qa
         public IActionResult Get()
         {
             var state = _checklist.State();
-            var reports = _reports.All()
+            var all = _reports.All().OrderBy(r => r.Id).ToList();
+            var reports = all
                 .Where(r => state.Versions.Contains(r.Version))
-                .OrderBy(r => r.Id)
-                .Select(r => new { r.Id, r.Component, r.Version, r.Environment, r.Created, r.ChecklistItemKey, Filing = r.Filing.ToString(), r.IssueNumber, r.IssueUrl })
+                .Select(r => new { r.Id, r.Component, r.Version, r.Environment, r.Created, r.ChecklistItemKey, Filing = r.Filing.ToString(), r.FilingProblem, r.IssueNumber, r.IssueUrl })
                 .ToList();
 
-            return Json(new { checklist = state, bugReports = reports });
+            // Every report from this server that isn't on GitHub, whatever its version: each is an open bug the gate
+            // can't see on GitHub, so it blocks until it's filed (and then closed there).
+            var unfiled = all
+                .Where(r => r.Filing != BugReportFiling.Filed)
+                .Select(r => new { r.Id, r.Component, r.Version, r.Created, Filing = r.Filing.ToString(), r.FilingProblem, What = r.WhatHappened })
+                .ToList();
+
+            return Json(new { checklist = state, bugReports = reports, unfiledReports = unfiled });
         }
     }
 }

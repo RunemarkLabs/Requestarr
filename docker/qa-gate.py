@@ -7,10 +7,11 @@ Run through the stack scripts, which pass the stack's address and API key (never
 
 Reads the checklist from Requestarr (GET /api/v1/qa/checklist) and the open issues from GitHub (gh): any open issue
 labelled with this server's environment ("env: qa") and a version the checklist covers counts, whether or not it came
-from a checklist item. A report Requestarr couldn't file on GitHub is listed too, so nobody forgets it.
+from a checklist item. A report from the server that isn't on GitHub (filing off, no key, or GitHub refused it) blocks
+too, whatever its version: it's an open QA bug the issue list can't show.
 
 Exit 0: clear (staging may have these versions). 1: blocked. 2: couldn't tell (stack down, gh missing).
---json prints the verdict as JSON for release.sh.
+--json prints the verdict as JSON for release.sh. --self-test checks the verdict rules (CI runs it).
 """
 import json
 import os
@@ -20,6 +21,8 @@ import urllib.error
 import urllib.request
 
 REPOSITORY = os.environ.get("BUG_REPORTS_REPOSITORY", "RunemarkLabs/Requestarr")
+WHY = {"Off": "filing is turned off on the server", "NoToken": "the server has no GitHub access key",
+       "Pending": "it was being filed when the server stopped", "Failed": "GitHub refused it or couldn't be reached"}
 
 
 def checklist():
@@ -40,7 +43,45 @@ def open_issues(environment, versions):
     return [i for i in json.loads(out) if wanted & {label["name"] for label in i["labels"]}]
 
 
+def decide(data, issues):
+    """The verdict from the server's answer and the open issues: clear only when every item passed, none is failing,
+    no issue from this server is open and every report from it is on GitHub."""
+    state = data["checklist"]
+    # Older servers sent only the reports for the checklist's versions.
+    unfiled = data["unfiledReports"] if "unfiledReports" in data else [r for r in data.get("bugReports", []) if r.get("filing") != "Filed"]
+    complete = state["complete"]
+    clear = complete and state["failing"] == 0 and not issues and not unfiled
+    verdict = {
+        "clear": clear, "environment": state["environment"], "versions": state["versions"], "total": state["total"], "passed": state["passed"],
+        "failing": state["failing"], "complete": complete, "completedBy": state.get("completedBy"), "completedAt": state.get("completedAt"),
+        "openIssues": [{"number": i["number"], "title": i["title"], "url": i["url"]} for i in issues],
+        "unfiledReports": [{"id": r["id"], "filing": r.get("filing"), "problem": r.get("filingProblem")} for r in unfiled],
+    }
+    return verdict, unfiled
+
+
+def self_test():
+    state = {"environment": "qa", "versions": ["0.4.16"], "total": 2, "passed": 2, "failing": 0, "complete": True, "items": []}
+    issue = {"number": 9, "title": "t", "url": "u"}
+    kept = {"id": 3, "filing": "NoToken", "filingProblem": None}
+    cases = [
+        ("complete, nothing open", {"checklist": state, "unfiledReports": []}, [], True),
+        ("an open issue", {"checklist": state, "unfiledReports": []}, [issue], False),
+        ("a report not on GitHub", {"checklist": state, "unfiledReports": [kept]}, [], False),
+        ("an older server's unfiled report", {"checklist": state, "bugReports": [dict(kept, filing="Off")]}, [], False),
+        ("an older server's filed report", {"checklist": state, "bugReports": [dict(kept, filing="Filed")]}, [], True),
+        ("a failing item", {"checklist": dict(state, failing=1, passed=1), "unfiledReports": []}, [], False),
+    ]
+    wrong = [name for name, data, issues, clear in cases if decide(data, issues)[0]["clear"] != clear]
+    for name in wrong:
+        print("qa-gate self-test: wrong verdict for %s" % name, file=sys.stderr)
+    print("qa-gate self-test: %d of %d cases right" % (len(cases) - len(wrong), len(cases)))
+    return 1 if wrong else 0
+
+
 def main(argv):
+    if "--self-test" in argv:
+        return self_test()
     as_json = "--json" in argv
     try:
         data = checklist()
@@ -60,15 +101,8 @@ def main(argv):
         print("qa-gate: couldn't list the open issues on GitHub with gh (%s)." % type(error).__name__, file=sys.stderr)
         return 2
 
-    unfiled = [r for r in data.get("bugReports", []) if r.get("filing") != "Filed"]
-    complete = state["complete"]
-    clear = complete and state["failing"] == 0 and not issues
-    verdict = {
-        "clear": clear, "environment": state["environment"], "versions": versions, "total": state["total"], "passed": state["passed"],
-        "failing": state["failing"], "complete": complete, "completedBy": state.get("completedBy"), "completedAt": state.get("completedAt"),
-        "openIssues": [{"number": i["number"], "title": i["title"], "url": i["url"]} for i in issues],
-        "unfiledReports": [r["id"] for r in unfiled],
-    }
+    verdict, unfiled = decide(data, issues)
+    clear, complete = verdict["clear"], verdict["complete"]
 
     if as_json:
         print(json.dumps(verdict))
@@ -83,10 +117,12 @@ def main(argv):
     print("Open bug reports from %s for these versions on GitHub: %d" % (state["environment"], len(issues)))
     for issue in issues:
         print("  #%d %s  %s" % (issue["number"], issue["title"], issue["url"]))
-    if unfiled:
-        print("Reports kept on the server but not on GitHub: %s (check them in the bug reports channel)." % ", ".join("#%d" % r["id"] for r in unfiled))
+    print("Bug reports from %s not on GitHub: %d" % (state["environment"], len(unfiled)))
+    for report in unfiled:
+        print("  #%d %s: %s" % (report["id"], report.get("filing"), report.get("filingProblem") or WHY.get(report.get("filing"), "not filed")))
     print("CLEAR: staging may have %s." % ", ".join(versions) if clear else
-          "BLOCKED: promotion to staging waits until every item has passed and no bug report from QA is open (or the owner overrides).")
+          "BLOCKED: promotion to staging waits until every item has passed and every bug report from QA is on GitHub and closed "
+          "(or the owner overrides).")
     return 0 if clear else 1
 
 

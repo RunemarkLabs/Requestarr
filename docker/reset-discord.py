@@ -1,7 +1,7 @@
 """Remove everything Requestarr created in one local stack's Discord server, for a clean start.
 
-Deletes: Requestarr's channel groups ("Requestarr Admin", "Requestarr Users" and its numbered ones, and the older
-"Requestarr Requests") and every channel in them (including archived ones), #requestarr-admin, #requestarr-feed,
+Deletes: Requestarr's channel groups ("Requestarr Admin", "Requestarr QA", "Requestarr Users" and its numbered ones,
+and the older "Requestarr Requests") and every channel in them (including archived ones), #requestarr-admin, #requestarr-feed,
 #requestarr-announcements, #requestarr-welcome, #requestarr-access-blocked and members' request channels wherever they
 are, the per-user
 "requestarr-*" roles and the shared "Requestarr Members" and "Requestarr Blocked" roles.
@@ -23,7 +23,7 @@ import urllib.request
 API = "https://discord.com/api/v10"
 ADMIN_CHANNELS = ("requestarr-admin", "requestarr-feed", "requestarr-qa-checklist", "requestarr-announcements", "requestarr-welcome",
                   "requestarr-access-blocked", "requestarr-bug-reports")
-CATEGORIES = ("Requestarr Admin", "Requestarr Users", "Requestarr Requests")
+CATEGORIES = ("Requestarr Admin", "Requestarr QA", "Requestarr Users", "Requestarr Requests")
 USER_ROLE_PREFIX = "requestarr-"
 SHARED_ROLES = ("Requestarr Members", "Requestarr Blocked")
 

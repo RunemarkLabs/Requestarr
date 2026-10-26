@@ -102,6 +102,7 @@ namespace Requestarr.Core.Test.Discord.Harness
         public Task UpdateMessageAsync(InteractionReply reply)
         {
             EnsureFirstResponse("update the message");
+            EnsureLayoutKept(reply);
             _responses.Add(new RecordedResponse(ResponseKind.MessageUpdate, reply, false));
             Materialise(reply);
             return Task.CompletedTask;
@@ -113,6 +114,8 @@ namespace Requestarr.Core.Test.Discord.Harness
             {
                 throw new InvalidOperationException("Discord has no original response to edit before the interaction is deferred");
             }
+
+            EnsureLayoutKept(reply);
 
             _responses.Add(new RecordedResponse(ResponseKind.Edit, reply, false));
             Materialise(reply);
@@ -148,6 +151,30 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             PrivateRepliesDeleted = true;
             return Task.CompletedTask;
+        }
+
+        // Set once Requestarr removes the private message the component belongs to.
+        public bool OriginalDeleted { get; private set; }
+
+        public Task DeleteOriginalAsync()
+        {
+            if (!HasResponded)
+            {
+                throw new InvalidOperationException("Discord has no original response to delete before the interaction is answered");
+            }
+
+            OriginalDeleted = true;
+            return Task.CompletedTask;
+        }
+
+        // Discord refuses to turn a message with cards (the newer layout) back into a plain one.
+        private void EnsureLayoutKept(InteractionReply reply)
+        {
+            if (_guild != null && MessageId.HasValue && _guild.Channels.TryGetValue(_channelId, out var channel) &&
+                channel.MessageIds.IndexOf(MessageId.Value) is var index and >= 0 && channel.Messages[index].IsCards && !reply.IsCards)
+            {
+                throw new InvalidOperationException("MESSAGE_CANNOT_REMOVE_COMPONENTS_V2_FLAG: a message with cards can't become a plain message");
+            }
         }
 
         private void EnsureFirstResponse(string action)

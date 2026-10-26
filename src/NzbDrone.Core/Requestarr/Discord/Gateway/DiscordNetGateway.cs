@@ -270,9 +270,18 @@ namespace Requestarr.Core.Discord.Gateway
 
             return messages.Where(m => m.Author.Id == BotUserId && m.Type != MessageType.ChannelPinnedMessage)
                 .OrderBy(m => m.Id)
-                .Select(m => new ChannelMessage(m.Id, string.IsNullOrEmpty(m.Content) ? CardText(m) : m.Content, m.Embeds.FirstOrDefault()?.Title, m.Embeds.FirstOrDefault()?.Description, CustomIds(m)))
+                .Select(Read)
                 .ToList();
         }
+
+        private static ChannelMessage Read(IMessage m) => new(
+            m.Id,
+            string.IsNullOrEmpty(m.Content) ? CardText(m) : m.Content,
+            m.Embeds.FirstOrDefault()?.Title,
+            m.Embeds.FirstOrDefault()?.Description,
+            CustomIds(m),
+            All(m.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList(),
+            m.Flags.GetValueOrDefault().HasFlag(MessageFlags.ComponentsV2));
 
         // The custom IDs of a message's buttons and menus, inside cards too.
         private static List<string> CustomIds(IMessage message) =>

@@ -4,8 +4,16 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
+## 0.4.16 (2026-10-26)
+- **Passes without errors:** Press Passes on a checklist item, then press it again. You should see the card show who passed it and when, and no "Something went wrong" message.
+- **Failing in a row:** Press Failing on three items one after another and send a short report for each. You should see a form open every time, each card marked failing with its own report, and never "You've sent a report just now".
+- **Member limit still holds:** In the bug reports channel, press Report a problem and send a report, then press it again straight away. You should see Requestarr ask you to wait.
+- **Bug reports channel order:** Open the bug reports channel after sending a report, on your phone and on your computer. You should see the reports in the order they were sent, the Report a problem message last, and no reply pointing at a deleted message.
+- **Why a report isn't on GitHub:** Look at the card of a report you sent. You should see either the link to its GitHub issue, or the exact reason it isn't there yet, such as the server having no GitHub access key.
+- **QA group:** Look at the server's channel list. You should see the QA checklist channel in its own Requestarr QA group with all its cards, and a member who isn't an admin shouldn't see that group.
+
 ## 0.4.15 (2026-10-25)
-- **Test checklist:** Open the QA checklist channel in the Requestarr Admin group. You should see a card for each thing to test in the versions QA has that staging doesn't, each with Passes and Failing buttons, and a summary card at the top.
+- **Test checklist:** Open the QA checklist channel in the Requestarr QA group. You should see a card for each thing to test in the versions QA has that staging doesn't, each with Passes and Failing buttons, and a summary card at the top.
 - **Passing an item:** Press Passes on one card. You should see the card say who passed it and when, and the summary count go up by one.
 - **Failing an item:** Press Failing on another card, pick the part of Requestarr, describe what went wrong and send it. You should see the card marked failing with a link to its bug report, and the summary say the checklist can't complete while it fails.
 - **Report a problem:** In the bug reports channel in the Requestarr Users group, press Report a problem, pick a part, read the note that reports are public, and send a short test report. You should see a card for your report in the channel, and the link to its issue on GitHub once it's filed.

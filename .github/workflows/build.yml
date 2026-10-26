@@ -150,6 +150,7 @@ jobs:
         run: |
           python3 .github/changelog_check.py --self-test
           python3 .github/checklist_check.py --self-test
+          python3 docker/qa-gate.py --self-test
       - name: CHANGELOG.md has a new version for this change, written to the rule
         env:
           EVENT: ${{ github.event_name }}

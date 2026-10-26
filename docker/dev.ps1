@@ -151,6 +151,7 @@ function Get-StackInfo([string]$which) {
                     STACK_DISCORD_APPLICATION_ID = $s['DISCORD_APPLICATION_ID']
                     STACK_DISCORD_GUILD_ID = $s['DISCORD_TEST_GUILD_ID']
                     STACK_DISCORD_ADMIN_ROLE_ID = $s['DISCORD_ADMIN_ROLE_ID']
+                    STACK_GITHUB_ISSUES_TOKEN = $s['GITHUB_ISSUES_TOKEN']
                     # Set when the stack is built (Build-Image), the only time Requestarr's container is recreated.
                     REQUESTARR_STAGED_VERSIONS = ''
                 }
@@ -168,6 +169,7 @@ function Get-StackInfo([string]$which) {
                     STACK_DISCORD_APPLICATION_ID = $s['DEV_DISCORD_APPLICATION_ID']
                     STACK_DISCORD_GUILD_ID = $s['DEV_DISCORD_GUILD_ID']
                     STACK_DISCORD_ADMIN_ROLE_ID = $s['DEV_DISCORD_ADMIN_ROLE_ID']
+                    STACK_GITHUB_ISSUES_TOKEN = $s['DEV_GITHUB_ISSUES_TOKEN']
                 }
             }
         }

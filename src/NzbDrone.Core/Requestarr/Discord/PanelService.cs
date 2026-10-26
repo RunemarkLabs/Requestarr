@@ -301,13 +301,15 @@ namespace Requestarr.Core.Discord
             });
         }
 
-        public Task KeepLastAsync(ulong channelId) => EnsurePanelAsync(channelId, moveLast: true, unpin: false);
+        // Only a move: a panel already last is left as it is. The bot's own new panel also arrives as a "bot posted
+        // something" notice, and editing it then would mark it "edited" for nothing.
+        public Task KeepLastAsync(ulong channelId) => EnsurePanelAsync(channelId, moveLast: true, unpin: false, moveOnly: true);
 
         // The one place a panel is posted, edited, moved or removed, one channel at a time. The panel is found by its
         // saved ID, or else by what it is among the bot's newest messages (after a restart with a new database, or
         // a reset); it's edited in place, or posted if there's none; with moveLast it's posted again at the bottom if
         // something else is newer (quietly); and any other copy of it in the channel is removed, so there's exactly one.
-        private async Task EnsurePanelAsync(ulong channelId, bool moveLast, bool unpin)
+        private async Task EnsurePanelAsync(ulong channelId, bool moveLast, bool unpin, bool moveOnly = false)
         {
             var gate = Gate(channelId);
             await gate.WaitAsync();
@@ -325,7 +327,14 @@ namespace Requestarr.Core.Discord
                 var keep = ulong.TryParse(panel.Id, out var stored) && own.Any(m => m.Id == stored) ? stored : copies.Count > 0 ? copies[^1] : (ulong?)null;
                 var reply = panel.Build();
 
-                if (keep.HasValue && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
+                if (keep.HasValue && moveLast && await _gateway.GetLatestMessageIdAsync(channelId) != keep)
+                {
+                    // The new one first, so the channel is never without its panel; it doesn't ping or notify anyone.
+                    // The old one is removed without an edit first, which would only mark it "edited" on the way out.
+                    copies.Add(keep.Value);
+                    keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Cards = reply.Cards, Quiet = true });
+                }
+                else if (keep.HasValue && !moveOnly && !Shows(own.FirstOrDefault(m => m.Id == keep.Value), reply) && !await _gateway.EditMessageAsync(channelId, keep.Value, reply))
                 {
                     // Gone, or an older message that can't take the new layout: a new one replaces it.
                     copies.Add(keep.Value);
@@ -335,13 +344,6 @@ namespace Requestarr.Core.Discord
                 if (!keep.HasValue)
                 {
                     keep = await _gateway.SendMessageAsync(channelId, reply);
-                }
-                else if (moveLast && await _gateway.GetLatestMessageIdAsync(channelId) != keep)
-                {
-                    // The new one first, so the channel is never without its panel; it doesn't ping or notify anyone.
-                    var old = keep.Value;
-                    keep = await _gateway.SendMessageAsync(channelId, new InteractionReply { Content = reply.Content, Embeds = reply.Embeds, Buttons = reply.Buttons, SelectMenu = reply.SelectMenu, Cards = reply.Cards, Quiet = true });
-                    copies.Add(old);
                 }
 
                 if (panel.Id != keep.ToString())
@@ -363,6 +365,23 @@ namespace Requestarr.Core.Discord
             {
                 gate.Release();
             }
+        }
+
+        // Whether a panel already shows exactly this (its text, layout, buttons and their labels), so it's left as it is:
+        // an edit would mark it "edited" (on every start) for nothing. Anything else (a menu, a disabled button, an
+        // embed) is edited, as before.
+        public static bool Shows(ChannelMessage message, InteractionReply reply)
+        {
+            if (message?.Labels == null || reply.SelectMenu != null || reply.MoreMenus?.Count > 0 || reply.Embeds?.Count > 0 || message.EmbedTitle != null)
+            {
+                return false;
+            }
+
+            var buttons = reply.IsCards ? reply.Cards.SelectMany(c => c.Buttons).ToList() : reply.Buttons ?? new List<InteractionButton>();
+            var text = reply.IsCards ? string.Join("\n", reply.Cards.Select(c => c.Text)) : reply.Content;
+
+            return message.IsCards == reply.IsCards && message.Content == text && !buttons.Any(b => b.Disabled) &&
+                   (message.CustomIds ?? new List<string>()).SequenceEqual(buttons.Select(b => b.CustomId)) && message.Labels.SequenceEqual(buttons.Select(b => b.Label));
         }
 
         private async Task TryEnsureAsync(ulong channelId)

@@ -37,6 +37,8 @@ namespace Requestarr.Core.Test.Qa
                 _reports.Add(r);
                 return r;
             });
+            Mocker.GetMock<IBugReportRepository>().Setup(r => r.Find(It.IsAny<int>())).Returns<int>(id => _reports.SingleOrDefault(r => r.Id == id));
+            Mocker.GetMock<IBugReportRepository>().Setup(r => r.All()).Returns(() => _reports);
             Mocker.GetMock<IBugReportGuardRepository>().Setup(r => r.Find("42")).Returns(() => _guard);
             Mocker.GetMock<IBugReportGuardRepository>().Setup(r => r.Upsert(It.IsAny<BugReportGuard>())).Returns<BugReportGuard>(g => _guard = g);
             Mocker.GetMock<IGuildSetupService>().Setup(g => g.GetConfig()).Returns(new DiscordGuildConfig { BugReportsChannelId = "500" });
@@ -54,6 +56,7 @@ namespace Requestarr.Core.Test.Qa
             Mocker.GetMock<IDiscordGuildGateway>().Verify(g => g.SendMessageAsync(500, It.Is<InteractionReply>(m => m.Cards[0].Text.Contains("Bug report #1"))), Times.Once());
             Mocker.GetMock<IGitHubIssues>().VerifyNoOtherCalls();
             result.Message.Should().Contain("<#500>");
+            QaText.ReportCard(result.Report).Should().Contain("filing reports is turned off in this server's settings");
         }
 
         [Test]
@@ -62,7 +65,7 @@ namespace Requestarr.Core.Test.Qa
             Settings(file: true, token: "secret");
             Mocker.GetMock<IGitHubIssues>()
                 .Setup(g => g.CreateAsync("RunemarkLabs/Requestarr", "secret", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new FiledIssue(77, "https://github.com/RunemarkLabs/Requestarr/issues/77"));
+                .ReturnsAsync(new IssueResult(new FiledIssue(77, "https://github.com/RunemarkLabs/Requestarr/issues/77"), null));
 
             var result = await Subject.SubmitAsync(42, "Alex", "web-app", "The logo is missing", null, null);
 
@@ -117,6 +120,82 @@ namespace Requestarr.Core.Test.Qa
             _now = _now.AddMinutes(3);
             Subject.WaitLeft(42).Should().Be(TimeSpan.FromDays(1) - TimeSpan.FromMinutes(15));
             _reports.Should().HaveCount(5);
+        }
+
+        [Test]
+        public async Task an_admin_failing_checklist_items_isnt_held_to_the_limit_and_uses_none_of_it()
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                (await Subject.SubmitAsync(42, "Alex", "admin", "Failing " + i, null, null, limited: false)).Report.Should().NotBeNull();
+            }
+
+            _reports.Should().HaveCount(3);
+            Subject.WaitLeft(42).Should().BeNull("a member's limit is untouched by checklist work");
+        }
+
+        [Test]
+        public async Task a_refused_report_says_exactly_why_and_is_filed_on_the_next_try_without_being_sent_again()
+        {
+            Settings(file: true, token: "secret");
+            var github = Mocker.GetMock<IGitHubIssues>();
+            github.Setup(g => g.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new IssueResult(null, "GitHub refused the access key (HTTP 401): it's wrong, revoked or expired"));
+
+            var report = (await Subject.SubmitAsync(42, "Alex", "requests", "Stuck", null, null)).Report;
+
+            report.Filing.Should().Be(BugReportFiling.Failed);
+            QaText.ReportCard(report).Should().Contain("HTTP 401").And.Contain("tries again");
+
+            github.Setup(g => g.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new IssueResult(new FiledIssue(5, "https://github.com/RunemarkLabs/Requestarr/issues/5"), null));
+            await Subject.RetryUnfiledAsync();
+            await Subject.RetryUnfiledAsync();
+
+            _reports.Should().ContainSingle().Which.Should().BeEquivalentTo(new { Filing = BugReportFiling.Filed, IssueNumber = 5, FilingProblem = (string)null });
+            github.Verify(g => g.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+            Mocker.GetMock<IDiscordGuildGateway>().Verify(g => g.EditMessageAsync(500, 900, It.Is<InteractionReply>(m => m.Cards[0].Text.Contains("issue #5"))), Times.Once());
+        }
+
+        [Test]
+        public async Task a_report_kept_for_want_of_a_key_is_filed_once_the_key_is_there_and_its_checklist_item_follows()
+        {
+            var item = new QaChecklistEntry(new Version(0, 4, 16), "0.4.16/one", "One", "Do it. You should see it.");
+            Mocker.GetMock<IQaChecklistService>().Setup(c => c.Find(item.Key)).Returns(item);
+            Settings(file: true, token: null);
+
+            var report = (await Subject.SubmitAsync(42, "Alex", "admin", "Broken", null, item.Key, limited: false)).Report;
+            report.Filing.Should().Be(BugReportFiling.NoToken);
+
+            Settings(file: true, token: "secret");
+            Mocker.GetMock<IGitHubIssues>()
+                .Setup(g => g.CreateAsync(It.IsAny<string>(), "secret", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new IssueResult(new FiledIssue(6, "https://github.com/RunemarkLabs/Requestarr/issues/6"), null));
+            await Subject.RetryUnfiledAsync();
+
+            report.Filing.Should().Be(BugReportFiling.Filed);
+            Mocker.GetMock<IQaChecklistService>().Verify(c => c.RefreshItemAsync(item.Key), Times.Once());
+        }
+
+        [Test]
+        public void the_test_servers_always_file_and_the_key_can_come_from_the_environment()
+        {
+            var environment = new Mock<IReleaseEnvironment>();
+            var config = new Mock<NzbDrone.Core.Configuration.IConfigService>();
+            var settings = new BugReportSettings(config.Object, environment.Object) { Variable = v => v == BugReportSettings.TokenVariable ? " from-env " : null };
+
+            foreach (var set in new[] { "dev", "qa", "beta" })
+            {
+                environment.SetupGet(e => e.IconSet).Returns(set);
+                settings.FileIssues.Should().BeTrue(set + " files every report");
+            }
+
+            environment.SetupGet(e => e.IconSet).Returns("production");
+            settings.FileIssues.Should().BeFalse("someone else's install files only when its admin turns it on");
+            settings.Token.Should().Be("from-env");
+
+            settings.Apply(new Requestarr.Core.Provisioning.BugReportsProvisioning { GithubToken = "from-provisioning" });
+            settings.Token.Should().Be("from-provisioning");
         }
 
         [Test]

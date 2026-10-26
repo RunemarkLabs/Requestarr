@@ -40,6 +40,7 @@ namespace Requestarr.Core.Qa
         public const string AdminsOnly = "Only admins can mark checklist items.";
         public const string ItemGone = "That item isn't on the checklist any more.";
         public const string NoChannel = "The bug reports channel isn't set up yet. Try again in a minute.";
+        public const string Sending = "Sending your report…";
 
         public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTime? completedAt)
         {
@@ -91,12 +92,14 @@ namespace Requestarr.Core.Qa
             $"-# {EnvironmentName(report.Environment)} · Requestarr {report.Version} · <t:{Unix(report.Created)}:f> · reported by {Plain(report.ReporterName)}\n" +
             Filing(report);
 
+        // Where the report is, or exactly why it isn't on GitHub, so an admin can act on it.
         public static string Filing(BugReport report) => report.Filing switch
         {
             BugReportFiling.Filed => $"🔗 On GitHub as issue #{report.IssueNumber}: {report.IssueUrl}",
-            BugReportFiling.Failed => "Not filed on GitHub: GitHub refused it or couldn't be reached. The admins have it here.",
-            BugReportFiling.NoToken => "Not filed on GitHub: this server has no GitHub access key. The admins have it here.",
-            _ => "Kept here for the admins (this server doesn't file reports on GitHub)."
+            BugReportFiling.Pending => "⏳ Being filed on GitHub…",
+            BugReportFiling.Failed => $"⚠️ Not on GitHub yet: {report.FilingProblem ?? "GitHub refused it or couldn't be reached"}. Requestarr tries again each time it starts.",
+            BugReportFiling.NoToken => "⚠️ Not on GitHub yet: this server has no GitHub access key. It's filed once the key is added and Requestarr restarts.",
+            _ => "Not filed on GitHub: filing reports is turned off in this server's settings. The admins have it here."
         };
 
         public static string IssueTitle(BugReport report)

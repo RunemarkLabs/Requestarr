@@ -34,7 +34,8 @@ namespace Requestarr.Core.Discord.Gateway
 
     // A message as Requestarr reads it back: its text, its first embed's title and description (version cards), and
     // its buttons' and menus' custom IDs (which panel it is).
-    public record ChannelMessage(ulong Id, string Content, string EmbedTitle = null, string EmbedDescription = null, IReadOnlyList<string> CustomIds = null)
+    // Labels: its buttons' labels, in order. IsCards: it uses the newer layout (cards).
+    public record ChannelMessage(ulong Id, string Content, string EmbedTitle = null, string EmbedDescription = null, IReadOnlyList<string> CustomIds = null, IReadOnlyList<string> Labels = null, bool IsCards = false)
     {
         public bool Has(string route) => CustomIds != null && CustomIds.Any(id => id == route || id.StartsWith(route + ":"));
     }
