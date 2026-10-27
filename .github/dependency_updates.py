@@ -233,10 +233,15 @@ def comment_once(repo, number, marker, text):
         gh("pr", "comment", str(number), "--repo", repo, "--body", "%s\n\n<!-- %s -->" % (text, marker))
 
 
+def hold_marker(why):
+    """One comment per reason: an update held again for another reason says so."""
+    return "dependency-updates:hold:" + re.sub(r"[^a-z0-9]+", "-", why.lower()).strip("-")
+
+
 def hold(repo, number, why):
     gh("pr", "edit", str(number), "--repo", repo, "--add-label", REVIEW, "--remove-label", AUTOMATIC, check=False)
     gh("pr", "merge", str(number), "--repo", repo, "--disable-auto", check=False)
-    comment_once(repo, number, "dependency-updates:hold", "Held for review: %s Claude Code reviews it, fixes what "
+    comment_once(repo, number, hold_marker(why), "Held for review: %s Claude Code reviews it, fixes what "
                  "breaks and merges it in a normal task (docs/development.md#dependency-updates)." % why)
 
 
@@ -325,7 +330,10 @@ def update_next(repo):
 
     if not (up_to_date and versioned):
         if not up_to_date:
-            merged = subprocess.run(["git", "merge", "--no-edit", "--quiet", "origin/dev"], text=True, capture_output=True)
+            # Left uncommitted, so the version commit below is the merge itself: publish() remakes only HEAD through
+            # GitHub's API, and a separate local merge commit as its parent is one GitHub has never seen.
+            merged = subprocess.run(["git", "merge", "--no-commit", "--no-ff", "--quiet", "origin/dev"], text=True,
+                                    capture_output=True)
             if merged.returncode != 0:
                 conflicted = git("diff", "--name-only", "--diff-filter=U").splitlines()
                 others = [f for f in conflicted if f not in ("CHANGELOG.md", "QA-CHECKLIST.md", "src/Directory.Build.props")]
@@ -436,6 +444,8 @@ def self_test():
          "an image tag"),
         (size_from_text("nothing to size") == "", "no versions, no size"),
         (group_from_text(GROUPED) == "npm_and_yarn" and group_from_text("Bump x") == "", "the group from the message"),
+        (hold_marker("build failed on it.") != hold_marker("it conflicts with dev in a.cs.")
+         and hold_marker("build failed on it.") == hold_marker("Build failed on it"), "a hold comment per reason"),
         (with_assembly_version("<AssemblyVersion>0.4.2.*</AssemblyVersion>", (0, 4, 3))
          == "<AssemblyVersion>0.4.3.*</AssemblyVersion>", "the assembly version follows"),
     ]
