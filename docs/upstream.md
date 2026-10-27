@@ -51,6 +51,7 @@ Small upstream-file changes worth knowing when merging:
 - `AppFolderFactory.Register` creates the app data folder before the legacy DB migration (it failed on fresh installs)
 - `HealthCheckReason.ProvisioningFailed`
 - `TagService` and `CleanupUnusedTags` only consider the `Backends` table
+- The web app's lint configuration moved from `frontend/.eslintrc.js` to `frontend/eslint.config.js` (2026-10-27), because ESLint 10 dropped the old format and ESLint 8 gets no updates. Upstream's rules are in it unchanged (less `valid-jsdoc` and `require-jsdoc`, which ESLint 9 removed and upstream had off). Apply an upstream change to `.eslintrc.js` to the matching rule in `eslint.config.js` by hand; Requestarr's own checks are in the block at its end.
 
 ## Target framework divergence (.NET 10)
 

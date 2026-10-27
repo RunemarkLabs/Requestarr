@@ -81,6 +81,9 @@ jobs:
         run: yarn tsc --noEmit
       - name: Lint
         run: yarn lint
+      # Unused files, exports and packages in the web app, against the baseline (docs/development.md#clean-code).
+      - name: Unused code
+        run: python3 .github/knip_check.py
       - name: Style lint
         run: yarn stylelint-linux
       - name: Production build
@@ -152,6 +155,8 @@ jobs:
           python3 .github/changelog_check.py --self-test
           python3 .github/checklist_check.py --self-test
           python3 .github/version_rules.py --self-test
+          python3 .github/knip_check.py --self-test
+          python3 .github/suppression_check.py --self-test
           python3 docker/qa-gate.py --self-test
       - name: CHANGELOG.md has a new version for this change, written to the rule
         env:
@@ -172,6 +177,11 @@ jobs:
             exit 0
           fi
           ./release.sh check-changelog "$BASE_SHA" HEAD "$BASE_REF" "$HEAD_SHA" "$HEAD_REF"
+      - name: No check quietly switched off (unexplained suppressions, baselines that grow, rules turned down)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 .github/suppression_check.py "$BASE_SHA" HEAD
 
   # A promotion into qa (dev's commits) or staging (qa's commits) happens only on the owner's word, and the pull
   # request records it (docs/development.md#release-flow).
