@@ -132,17 +132,17 @@ namespace Requestarr.Core.Backends
 
             if (reachable)
             {
-                await ReachableAsync(instance, now);
+                await ApplyReachableAsync(instance, now);
             }
             else
             {
-                await UnreachableAsync(instance, now);
+                await ApplyUnreachableAsync(instance, now);
             }
         }
 
         // A first connection is recorded. After an outage it's over: the admins are told if they were
         // alerted, and the outage record is closed.
-        private async Task ReachableAsync(BackendInstance instance, DateTime now)
+        private async Task ApplyReachableAsync(BackendInstance instance, DateTime now)
         {
             instance.FirstConnected ??= now;
 
@@ -200,7 +200,7 @@ namespace Requestarr.Core.Backends
         }
 
         // Down: alerted once it has lasted AlertAfter, and offered for announcing after AnnounceAfter.
-        private async Task UnreachableAsync(BackendInstance instance, DateTime now)
+        private async Task ApplyUnreachableAsync(BackendInstance instance, DateTime now)
         {
             // Never connected: nothing was lost, and its type is hidden from users anyway.
             if (!instance.FirstConnected.HasValue)
