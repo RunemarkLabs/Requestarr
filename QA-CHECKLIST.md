@@ -4,6 +4,8 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
+## 0.5.1 (2026-10-27)
+
 ## 0.5.0 (2026-10-26)
 - **Version on the logo:** In the web app, point at the logo at the top left and wait a moment. You should see "Requestarr 0.5.0".
 - **Version in Status:** In the web app, open System, then Status. You should see version 0.5.0 followed by its build number, with no "beta" in it.

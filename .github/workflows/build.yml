@@ -133,7 +133,7 @@ jobs:
             range="${{ github.sha }}~1..${{ github.sha }}"
           fi
           echo "Scanning commits $range"
-          docker run --rm -v "$PWD:/repo" --entrypoint sh "$GITLEAKS" -c             "git config --global --add safe.directory /repo && gitleaks git /repo --log-opts='$range' --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --no-banner --redact --verbose"
+          docker run --rm -v "$PWD:/repo" --entrypoint sh "$GITLEAKS" -c             "git config --global --add safe.directory /repo && gitleaks git /repo --log-opts='$range' --config /repo/.github/gitleaks.toml --gitleaks-ignore-path /repo/.github/gitleaksignore --no-banner --redact --verbose"
 
   # Every pull request records its changes in CHANGELOG.md under a new version, written to the changelog rule
   # (docs/development.md#changelog; .github/changelog_check.py says what it checks). Into dev, qa or staging, the
