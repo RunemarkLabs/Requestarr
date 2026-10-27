@@ -4,7 +4,7 @@ Discord-native media request management for Sonarr, Radarr, and Lidarr.
 
 Requestarr gives every user an isolated, private request channel in Discord. Administrators onboard users directly from Discord, control what each user may request, approve or auto-approve requests, and provision matching media server library access. Content removal is governed by a vote among users with access to that content, so titles still in use are not deleted.
 
-> **Status:** early development. Not yet ready for use.
+> **Status:** early access, before version 1.0. Requesting movies and TV in Discord works end to end (private channels, approvals, per-user access, removal votes), and a beta server with early testers is being set up. Version 1.0, the first public release, adds music and the admin web portal. Container images are published only for the beta so far; see the [setup guide](docs/setup-guide.md) to build from source.
 
 ## Features
 
@@ -30,9 +30,9 @@ When a removal is proposed, every user with access to that content type is asked
 
 | Content | Service | Status |
 |---|---|---|
-| Movies | Radarr | Planned (first release) |
-| TV | Sonarr | Planned (first release) |
-| Music | Lidarr | Planned (second release) |
+| Movies | Radarr | Working, in beta testing |
+| TV | Sonarr | Working, in beta testing |
+| Music | Lidarr | Planned for version 1.0 |
 | Comics, books | — | Planned, pending a delivery method |
 
 Multiple instances of each service are supported (for example, a separate 4K Radarr).
@@ -49,7 +49,8 @@ Follow the [setup guide](docs/setup-guide.md) to create your Discord bot and ins
 
 ## Development
 
-- [docs/development.md](docs/development.md): building, tests, the release flow (pull requests into `dev`, promotions to `qa`), the local QA and dev stacks (`.\docker\dev.ps1 up` in PowerShell, or `docker/dev.sh up`) and their helpers for testing by hand, the provisioning file, and the Discord interaction test harness
+- [CHANGELOG.md](CHANGELOG.md): what changed in each version, the same notes Requestarr posts in Discord
+- [docs/development.md](docs/development.md): building, tests, the release flow (`dev`, then QA, then the beta, then a release) and how version numbers follow it, the local QA and dev stacks (`.\docker\dev.ps1 up` in PowerShell, or `docker/dev.sh up`) and their helpers for testing by hand, the provisioning file, and the Discord interaction test harness
 - [docs/upstream.md](docs/upstream.md): which Prowlarr commit the foundation came from, what was removed, and how to pull upstream fixes
 
 ## Background

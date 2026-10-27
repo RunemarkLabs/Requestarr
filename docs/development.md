@@ -17,7 +17,7 @@ The app listens on http://localhost:9797.
 
 ## Tests
 
-The Servarr suites run like `test.sh` does, minus integration and automation tests:
+The Servarr suites, minus integration and automation tests (the same set CI runs):
 
 ```bash
 cd _tests/net10.0
