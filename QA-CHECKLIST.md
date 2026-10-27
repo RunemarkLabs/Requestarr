@@ -4,6 +4,14 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
+## 0.5.6 (2026-10-27)
+
+## 0.5.5 (2026-10-27)
+
+## 0.5.4 (2026-10-27)
+
+## 0.5.3 (2026-10-27)
+
 ## 0.5.2 (2026-10-27)
 
 ## 0.5.1 (2026-10-27)

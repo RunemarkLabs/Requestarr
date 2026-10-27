@@ -83,6 +83,13 @@ namespace Requestarr.Core.Discord.Handlers
 
             var user = asAdmin ? _users.EnsureAdminUser(interaction.UserId, interaction.Username, interaction.DisplayName) : context.User;
             var caller = new RequestCaller(user, asAdmin, HandlerSupport.ActorFor(interaction, context) with { UserId = user.Id }, user.DisplayName);
+
+            await RouteAsync(interaction, responder, caller);
+        }
+
+        // Each step of the request flow, for a caller allowed to take it.
+        private async Task RouteAsync(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
+        {
             var args = interaction.CustomIdArgs;
 
             switch (interaction.Kind, interaction.Route)
@@ -92,36 +99,12 @@ namespace Requestarr.Core.Discord.Handlers
                     break;
 
                 case (InteractionKind.SelectMenu, RequestRoutes.Pick):
-                {
-                    var type = RequestCards.ParseTypeKey(First(args));
-
-                    if (type == null || !int.TryParse(First(interaction.Values), out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.TitleNotFound);
-                        return;
-                    }
-
-                    await responder.DeferAsync();
-                    await ShowDetail(responder, caller, type.Value, id, args.Count > 1 ? string.Join(":", args.Skip(1)) : null);
+                    await HandlePick(interaction, responder, caller);
                     break;
-                }
 
-                // Back to results on an old search just searches again: nothing is changed.
                 case (InteractionKind.Button, RequestRoutes.Results):
-                {
-                    var type = RequestCards.ParseTypeKey(First(args));
-                    var query = args.Count > 1 ? string.Join(":", args.Skip(1)) : null;
-
-                    if (type == null || string.IsNullOrWhiteSpace(query))
-                    {
-                        await responder.Ephemeral(DiscordText.TitleNotFound);
-                        return;
-                    }
-
-                    await responder.DeferAsync();
-                    await ShowResults(responder, caller, type.Value, query);
+                    await HandleBackToResults(interaction, responder, caller);
                     break;
-                }
 
                 // All seasons sends straight away; the final status says exactly what was requested.
                 case (InteractionKind.Button, RequestRoutes.TvAll):
@@ -159,31 +142,66 @@ namespace Requestarr.Core.Discord.Handlers
                     await HandleFollow(interaction, responder, caller);
                     break;
 
-                // Request (movies; also Follow on movie cards from earlier versions).
                 case (InteractionKind.Button, RequestRoutes.Make):
-                {
-                    var type = RequestCards.ParseTypeKey(First(args));
-
-                    if (type == null || args.Count < 2 || !int.TryParse(args[1], out var id))
-                    {
-                        await responder.Ephemeral(DiscordText.TitleNotFound);
-                        return;
-                    }
-
-                    await responder.DeferAsync();
-                    var result = await _requests.RequestAsync(caller, type.Value, id);
-                    await Finish(interaction, responder, type.Value, result, SeasonText(result, null), caller);
+                    await HandleMake(interaction, responder, caller);
                     break;
-                }
             }
         }
 
-        // Sends a TV request, unless the title was requested or added since the card was shown:
-        // then nothing changes and the message shows the title as it is now.
+        // A title picked from the search results: its card.
+        private async Task HandlePick(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
+        {
+            var args = interaction.CustomIdArgs;
+            var type = RequestCards.ParseTypeKey(First(args));
+
+            if (type == null || !int.TryParse(First(interaction.Values), out var id))
+            {
+                await responder.Ephemeral(DiscordText.TitleNotFound);
+                return;
+            }
+
+            await responder.DeferAsync();
+            await ShowDetail(responder, caller, type.Value, id, args.Count > 1 ? string.Join(":", args.Skip(1)) : null);
+        }
+
+        // Back to results on an old search just searches again: nothing is changed.
+        private async Task HandleBackToResults(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
+        {
+            var args = interaction.CustomIdArgs;
+            var type = RequestCards.ParseTypeKey(First(args));
+            var query = args.Count > 1 ? string.Join(":", args.Skip(1)) : null;
+
+            if (type == null || string.IsNullOrWhiteSpace(query))
+            {
+                await responder.Ephemeral(DiscordText.TitleNotFound);
+                return;
+            }
+
+            await responder.DeferAsync();
+            await ShowResults(responder, caller, type.Value, query);
+        }
+
+        // Request (movies; also Follow on movie cards from earlier versions).
+        private async Task HandleMake(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
+        {
+            var args = interaction.CustomIdArgs;
+            var type = RequestCards.ParseTypeKey(First(args));
+
+            if (type == null || args.Count < 2 || !int.TryParse(args[1], out var id))
+            {
+                await responder.Ephemeral(DiscordText.TitleNotFound);
+                return;
+            }
+
+            await responder.DeferAsync();
+            var result = await _requests.RequestAsync(caller, type.Value, id);
+            await Finish(interaction, responder, type.Value, result, SeasonText(result, null), caller);
+        }
+
         private static AnimeLanguage? LanguageAt(IReadOnlyList<string> args, int index) => args.Count > index ? AnimeDefaults.ParseKey(args[index]) : null;
 
-        // Dub or Sub on an anime card. A series nobody has yet goes on to seasons with the language;
-        // one that exists (library or requested) is settled at once by the instance's priority rule.
+        // Dub or Sub on an anime card. A series nobody has yet goes on to seasons with the language.
+        // One that exists (library or requested) is settled at once by the instance's priority rule.
         private async Task HandleLanguage(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller)
         {
             var args = interaction.CustomIdArgs;
@@ -214,6 +232,8 @@ namespace Requestarr.Core.Discord.Handlers
             await responder.EditAsync(RequestCards.LanguageChosen(detail.Value, language.Value));
         }
 
+        // Sends a TV request, unless the title was requested or added since the card was shown:
+        // then nothing changes and the message shows the title as it is now.
         private async Task RequestTv(DiscordInteraction interaction, IInteractionResponder responder, RequestCaller caller, SeasonChoice choice, AnimeLanguage? language = null)
         {
             if (!int.TryParse(First(interaction.CustomIdArgs), out var tvdbId) || choice == null)
@@ -261,10 +281,15 @@ namespace Requestarr.Core.Discord.Handlers
             // Nothing active to follow any more (denied, cancelled, added), or already yours.
             if (state.Active == null || state.CallerOwnsActive || state.CallerFollows || RequestCards.InLibraryAndDone(state))
             {
+                var why = state switch
+                {
+                    _ when RequestCards.InLibraryAndDone(state) => DiscordText.AlreadyThereNote,
+                    { Active: null } => DiscordText.NothingToFollow,
+                    _ => DiscordText.NothingChanged(RequestCards.StateLine(state))
+                };
+
                 await responder.EditAsync(RequestCards.Detail(type.Value, state));
-                await responder.Ephemeral(RequestCards.InLibraryAndDone(state) ? DiscordText.AlreadyThereNote
-                    : state.Active == null ? DiscordText.NothingToFollow
-                    : DiscordText.NothingChanged(RequestCards.StateLine(state)));
+                await responder.Ephemeral(why);
                 return;
             }
 
@@ -356,7 +381,8 @@ namespace Requestarr.Core.Discord.Handlers
             // Pages and menus carry {page}:{picks}; Continue carries just {picks}.
             var review = interaction.Route == RequestRoutes.TvReview;
             var page = !review && args.Count > 1 && int.TryParse(args[1], out var p) ? p : 0;
-            var picks = review ? (args.Count > 1 ? RequestCards.DecodeSeasons(args[1]) : null) : args.Count > 2 ? RequestCards.DecodeSeasons(args[2]) : null;
+            var picksAt = review ? 1 : 2;
+            var picks = args.Count > picksAt ? RequestCards.DecodeSeasons(args[picksAt]) : null;
 
             // The chosen sub/dub rides along: choose {id}:{lang}, review {id}:{picks}:{lang}, page / menu {id}:{page}:{picks}:{lang}.
             var language = interaction.Route switch

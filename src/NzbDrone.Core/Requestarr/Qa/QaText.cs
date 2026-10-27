@@ -44,16 +44,36 @@ namespace Requestarr.Core.Qa
 
         public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTime? completedAt)
         {
-            var which = versions.Count == 0 ? "nothing to test" : versions.Count == 1 ? $"version {versions[0]}" : $"versions {string.Join(", ", versions)}";
-            var status = total == 0
-                ? "Nothing to test by hand in these versions."
-                : failing > 0
-                    ? $"❌ **Can't complete:** {failing} item{(failing == 1 ? " is" : "s are")} failing. Fix, then press Passes once it works."
-                    : passed == total
-                        ? $"✅ **Complete:** every item passed{(completedBy != null ? $", the last by {completedBy} {Stamp(completedAt)}" : string.Empty)}. Staging can have these versions once no bug report from QA is still open."
-                        : $"⏳ **{total - passed} left to test.**";
+            var which = versions.Count switch
+            {
+                0 => "nothing to test",
+                1 => $"version {versions[0]}",
+                _ => $"versions {string.Join(", ", versions)}"
+            };
 
-            return $"{ChecklistTitle}\nWhat to test here before {which} go{(versions.Count == 1 ? "es" : string.Empty)} to staging: **{passed} of {total} passed**{(failing > 0 ? $", {failing} failing" : string.Empty)}.\n{status}";
+            return $"{ChecklistTitle}\nWhat to test here before {which} go{(versions.Count == 1 ? "es" : string.Empty)} to staging: **{passed} of {total} passed**{(failing > 0 ? $", {failing} failing" : string.Empty)}.\n" +
+                   ChecklistStatus(total, passed, failing, completedBy, completedAt);
+        }
+
+        private static string ChecklistStatus(int total, int passed, int failing, string completedBy, DateTime? completedAt)
+        {
+            if (total == 0)
+            {
+                return "Nothing to test by hand in these versions.";
+            }
+
+            if (failing > 0)
+            {
+                return $"❌ **Can't complete:** {failing} item{(failing == 1 ? " is" : "s are")} failing. Fix, then press Passes once it works.";
+            }
+
+            if (passed != total)
+            {
+                return $"⏳ **{total - passed} left to test.**";
+            }
+
+            var last = completedBy != null ? $", the last by {completedBy} {Stamp(completedAt)}" : string.Empty;
+            return $"✅ **Complete:** every item passed{last}. Staging can have these versions once no bug report from QA is still open.";
         }
 
         public static string Item(QaChecklistEntry entry, QaChecklistItem record, BugReport report)
@@ -155,6 +175,11 @@ namespace Requestarr.Core.Qa
         // An @ followed by an invisible space: no Discord mention, and nobody on GitHub is notified.
         private static string NoPings(string text) => (text ?? string.Empty).Replace("@", "@​");
 
-        private static string In(TimeSpan wait) => wait.TotalMinutes < 1 ? "in a moment" : wait.TotalHours < 1 ? $"in {Math.Ceiling(wait.TotalMinutes)} minutes" : $"in {Math.Ceiling(wait.TotalHours)} hours";
+        private static string In(TimeSpan wait) => wait switch
+        {
+            { TotalMinutes: < 1 } => "in a moment",
+            { TotalHours: < 1 } => $"in {Math.Ceiling(wait.TotalMinutes)} minutes",
+            _ => $"in {Math.Ceiling(wait.TotalHours)} hours"
+        };
     }
 }

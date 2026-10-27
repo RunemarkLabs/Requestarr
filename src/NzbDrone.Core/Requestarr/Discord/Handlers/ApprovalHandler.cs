@@ -49,12 +49,8 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            // Which card was clicked: the admin feed, the approval card, or a request card from
-            // /admin request (or the queue). Each is refreshed its own way.
             var current = _requests.Find(requestId);
-            var mode = caller.InFeedChannel ? CardMode.Feed
-                : current != null && interaction.MessageId?.ToString() == current.AdminMessageId ? CardMode.Approval
-                : CardMode.Request;
+            var mode = ClickedCard(interaction, caller, current);
 
             var admin = _users.EnsureAdminUser(interaction.UserId, interaction.Username, interaction.DisplayName);
             var actor = HandlerSupport.ActorFor(interaction, caller) with { UserId = admin.Id };
@@ -171,6 +167,18 @@ namespace Requestarr.Core.Discord.Handlers
             Approval,
             Feed,
             Request
+        }
+
+        // Which card was clicked: the admin feed, the approval card, or a request card from
+        // /admin request (or the queue). Each is refreshed its own way.
+        private static CardMode ClickedCard(DiscordInteraction interaction, CallerContext caller, Request current)
+        {
+            if (caller.InFeedChannel)
+            {
+                return CardMode.Feed;
+            }
+
+            return current != null && interaction.MessageId?.ToString() == current.AdminMessageId ? CardMode.Approval : CardMode.Request;
         }
 
         private static bool TryId(DiscordInteraction interaction, out int id)

@@ -113,49 +113,15 @@ namespace Requestarr.Core.Provisioning
         private ProvisioningResult Apply(string path, ProvisioningDocument document)
         {
             var applied = new List<string>();
-            var deferred = new List<string>();
-            var config = new Dictionary<string, object>(StringComparer.InvariantCultureIgnoreCase);
-
-            var general = document.General;
-
-            if (general != null)
-            {
-                AddIfSet(config, "InstanceName", general.InstanceName);
-                AddIfSet(config, "LogLevel", general.LogLevel?.ToLowerInvariant());
-                AddIfSet(config, "UrlBase", general.UrlBase);
-                AddIfSet(config, "Theme", general.Theme);
-
-                if (general.AnalyticsEnabled.HasValue)
-                {
-                    config["AnalyticsEnabled"] = general.AnalyticsEnabled.Value;
-                }
-
-                if (general.LaunchBrowser.HasValue)
-                {
-                    config["LaunchBrowser"] = general.LaunchBrowser.Value;
-                }
-            }
-
-            var auth = document.Auth;
-
-            if (auth != null)
-            {
-                if (auth.Method.IsNotNullOrWhiteSpace())
-                {
-                    config["AuthenticationMethod"] = Enum.Parse<AuthenticationType>(auth.Method, true);
-                }
-
-                if (auth.Required.IsNotNullOrWhiteSpace())
-                {
-                    config["AuthenticationRequired"] = Enum.Parse<AuthenticationRequiredType>(auth.Required, true);
-                }
-            }
+            var config = ConfigFileSettings(document.General, document.Auth);
 
             if (config.Any())
             {
                 _configFileProvider.SaveConfigDictionary(config);
                 applied.Add("settings: " + string.Join(", ", config.Keys.OrderBy(k => k)));
             }
+
+            var auth = document.Auth;
 
             if (auth != null && auth.Username.IsNotNullOrWhiteSpace())
             {
@@ -169,20 +135,9 @@ namespace Requestarr.Core.Provisioning
                 applied.Add("API key");
             }
 
-            var discord = document.Discord;
+            _discordSettings.Set(DiscordSettingsFrom(document.Discord));
 
-            _discordSettings.Set(discord == null ? null : new DiscordSettings
-            {
-                BotToken = discord.BotToken,
-                ApplicationId = ParseId(discord.ApplicationId) ?? 0,
-                GuildId = ParseId(discord.GuildId) ?? 0,
-                AdminRoleId = ParseId(discord.AdminRoleId),
-                AdminRoleName = string.IsNullOrWhiteSpace(discord.AdminRoleName) ? DiscordSettings.DefaultAdminRoleName : discord.AdminRoleName.Trim(),
-                AdminChannelId = ParseId(discord.AdminChannelId),
-                RequestCategoryId = ParseId(discord.RequestCategoryIds?.FirstOrDefault())
-            });
-
-            if (discord != null)
+            if (document.Discord != null)
             {
                 applied.Add(_discordSettings.Current.IsConfigured ? "discord bot" : "discord (no bot token, bot not started)");
             }
@@ -207,37 +162,132 @@ namespace Requestarr.Core.Provisioning
                         $"{_access.LongCooldownClicks} wait {_access.LongCooldownHours} h, {_access.BlockClicks} more within {_access.BlockWithinHours} h block)");
 
             _botProfile.Apply(document.BotProfile);
-            applied.Add(_botProfile.KeepUpToDate
-                ? $"bot picture and banner kept up to date{(_botProfile.TakeOver ? " (replacing ones chosen by hand)" : string.Empty)}"
-                : "bot picture and banner left as they are");
+            applied.Add(BotProfileSummary());
 
             _bugReports.Apply(document.BugReports);
-            applied.Add(!_bugReports.FileIssues
-                ? $"bug reports (posted and kept; not filed on GitHub; {_bugReports.ReportsPerDay} a day, {_bugReports.MinutesBetween} min apart per person)"
-                : $"bug reports (filed on GitHub in {_bugReports.Repository}{(_bugReports.Token == null ? ", but there's no githubToken, so none are filed" : string.Empty)}; {_bugReports.ReportsPerDay} a day, {_bugReports.MinutesBetween} min apart per person)");
+            applied.Add(BugReportsSummary());
 
             _backends.SyncFromProvisioning(document.Backends);
 
-            if (document.Backends != null)
+            if (BackendsSummary(document.Backends) is { } backends)
             {
-                var counts = new (string Type, int Count)[]
-                    {
-                        ("sonarr", document.Backends.Sonarr.Count),
-                        ("radarr", document.Backends.Radarr.Count)
-                    }
-                    .Where(c => c.Count > 0)
-                    .Select(c => $"{c.Type} x{c.Count}")
-                    .ToList();
+                applied.Add(backends);
+            }
 
-                if (counts.Any())
+            return ProvisioningResult.Succeeded(path, applied, Deferred(document));
+        }
+
+        // The general and auth sections' values for config.xml; keys left out of the file are left out here too.
+        private static Dictionary<string, object> ConfigFileSettings(GeneralProvisioning general, AuthProvisioning auth)
+        {
+            var config = new Dictionary<string, object>(StringComparer.InvariantCultureIgnoreCase);
+
+            if (general != null)
+            {
+                AddIfSet(config, "InstanceName", general.InstanceName);
+                AddIfSet(config, "LogLevel", general.LogLevel?.ToLowerInvariant());
+                AddIfSet(config, "UrlBase", general.UrlBase);
+                AddIfSet(config, "Theme", general.Theme);
+
+                if (general.AnalyticsEnabled.HasValue)
                 {
-                    applied.Add("backends (" + string.Join(", ", counts) + ")");
+                    config["AnalyticsEnabled"] = general.AnalyticsEnabled.Value;
                 }
 
-                if (document.Backends.Lidarr.Any())
+                if (general.LaunchBrowser.HasValue)
                 {
-                    deferred.Add($"backends (lidarr x{document.Backends.Lidarr.Count})");
+                    config["LaunchBrowser"] = general.LaunchBrowser.Value;
                 }
+            }
+
+            if (auth != null)
+            {
+                if (auth.Method.IsNotNullOrWhiteSpace())
+                {
+                    config["AuthenticationMethod"] = Enum.Parse<AuthenticationType>(auth.Method, true);
+                }
+
+                if (auth.Required.IsNotNullOrWhiteSpace())
+                {
+                    config["AuthenticationRequired"] = Enum.Parse<AuthenticationRequiredType>(auth.Required, true);
+                }
+            }
+
+            return config;
+        }
+
+        // No discord section: no settings, so the bot doesn't start.
+        private static DiscordSettings DiscordSettingsFrom(DiscordProvisioning discord)
+        {
+            if (discord == null)
+            {
+                return null;
+            }
+
+            return new DiscordSettings
+            {
+                BotToken = discord.BotToken,
+                ApplicationId = ParseId(discord.ApplicationId) ?? 0,
+                GuildId = ParseId(discord.GuildId) ?? 0,
+                AdminRoleId = ParseId(discord.AdminRoleId),
+                AdminRoleName = string.IsNullOrWhiteSpace(discord.AdminRoleName) ? DiscordSettings.DefaultAdminRoleName : discord.AdminRoleName.Trim(),
+                AdminChannelId = ParseId(discord.AdminChannelId),
+                RequestCategoryId = ParseId(discord.RequestCategoryIds?.FirstOrDefault())
+            };
+        }
+
+        private string BotProfileSummary()
+        {
+            if (!_botProfile.KeepUpToDate)
+            {
+                return "bot picture and banner left as they are";
+            }
+
+            return $"bot picture and banner kept up to date{(_botProfile.TakeOver ? " (replacing ones chosen by hand)" : string.Empty)}";
+        }
+
+        private string BugReportsSummary()
+        {
+            var limits = $"{_bugReports.ReportsPerDay} a day, {_bugReports.MinutesBetween} min apart per person";
+
+            if (!_bugReports.FileIssues)
+            {
+                return $"bug reports (posted and kept; not filed on GitHub; {limits})";
+            }
+
+            var noToken = _bugReports.Token == null ? ", but there's no githubToken, so none are filed" : string.Empty;
+
+            return $"bug reports (filed on GitHub in {_bugReports.Repository}{noToken}; {limits})";
+        }
+
+        // The backends applied now, or null when the file lists none.
+        private static string BackendsSummary(BackendsProvisioning backends)
+        {
+            if (backends == null)
+            {
+                return null;
+            }
+
+            var counts = new (string Type, int Count)[]
+                {
+                    ("sonarr", backends.Sonarr.Count),
+                    ("radarr", backends.Radarr.Count)
+                }
+                .Where(c => c.Count > 0)
+                .Select(c => $"{c.Type} x{c.Count}")
+                .ToList();
+
+            return counts.Any() ? "backends (" + string.Join(", ", counts) + ")" : null;
+        }
+
+        // Sections recognised now and applied in a later release.
+        private static List<string> Deferred(ProvisioningDocument document)
+        {
+            var deferred = new List<string>();
+
+            if (document.Backends != null && document.Backends.Lidarr.Any())
+            {
+                deferred.Add($"backends (lidarr x{document.Backends.Lidarr.Count})");
             }
 
             if (document.MediaServers != null)
@@ -245,7 +295,7 @@ namespace Requestarr.Core.Provisioning
                 deferred.Add("mediaServers");
             }
 
-            return ProvisioningResult.Succeeded(path, applied, deferred);
+            return deferred;
         }
 
         private static ulong? ParseId(string value) => ulong.TryParse(value, out var id) ? id : null;

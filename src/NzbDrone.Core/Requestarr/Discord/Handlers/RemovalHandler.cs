@@ -90,7 +90,7 @@ namespace Requestarr.Core.Discord.Handlers
 
         private async Task HandleUser(DiscordInteraction interaction, IInteractionResponder responder, RequestarrUser user, Audit.Actor actor, IReadOnlyList<string> args)
         {
-            var id = args.Count > 0 && int.TryParse(args[0], out var parsed) ? parsed : 0;
+            var id = IntAt(args, 0);
 
             switch (interaction.Route)
             {
@@ -109,61 +109,13 @@ namespace Requestarr.Core.Discord.Handlers
 
                 case RemovalRoutes.Keep:
                 case RemovalRoutes.Unkeep:
-                {
-                    var keep = interaction.Route == RemovalRoutes.Keep;
-                    var result = await _removals.SetKeepAsync(id, user, actor, keep);
-                    var proposal = _removals.Find(id);
-
-                    if (!result.Success || proposal == null)
-                    {
-                        await responder.Ephemeral(result.Message);
-                        return;
-                    }
-
-                    // The prompt changes in place: their keep is noted (and can be taken back).
-                    await responder.UpdateMessageAsync(new InteractionReply
-                    {
-                        Content = $"<@{interaction.UserId}> {DiscordText.RemovalPrompt(proposal, proposal.WindowClosesAt.Value, keep)}",
-                        KeepEmbeds = true,
-                        Buttons = RemovalService.KeepButtons(proposal, keep)
-                    });
-                    await responder.Ephemeral(result.Message);
+                    await SetKeep(interaction, responder, user, actor, id);
                     return;
-                }
 
                 case RemovalRoutes.User:
                 case RemovalRoutes.UserScope:
-                {
-                    var request = _requests.Find(id);
-
-                    if (request == null || request.OwnerUserId != user.Id)
-                    {
-                        await responder.Ephemeral(DiscordText.RemovalOnlyYours);
-                        return;
-                    }
-
-                    var target = await _removals.TargetForRequestAsync(id);
-
-                    if (target.Error != null)
-                    {
-                        await responder.Ephemeral(target.Error);
-                        return;
-                    }
-
-                    var scope = interaction.Route == RemovalRoutes.UserScope ? FromMenu(interaction.Values) : new List<int>();
-                    var card = UserCard(request, target.Value, scope);
-
-                    if (interaction.Route == RemovalRoutes.User)
-                    {
-                        await responder.RespondAsync(card);
-                    }
-                    else
-                    {
-                        await responder.UpdateMessageAsync(card);
-                    }
-
+                    await ShowUserCard(interaction, responder, user, id);
                     return;
-                }
 
                 case RemovalRoutes.UserGo:
                 {
@@ -174,10 +126,64 @@ namespace Requestarr.Core.Discord.Handlers
             }
         }
 
+        // A voter's Keep it, or taking it back.
+        private async Task SetKeep(DiscordInteraction interaction, IInteractionResponder responder, RequestarrUser user, Audit.Actor actor, int id)
+        {
+            var keep = interaction.Route == RemovalRoutes.Keep;
+            var result = await _removals.SetKeepAsync(id, user, actor, keep);
+            var proposal = _removals.Find(id);
+
+            if (!result.Success || proposal == null)
+            {
+                await responder.Ephemeral(result.Message);
+                return;
+            }
+
+            // The prompt changes in place: their keep is noted (and can be taken back).
+            await responder.UpdateMessageAsync(new InteractionReply
+            {
+                Content = $"<@{interaction.UserId}> {DiscordText.RemovalPrompt(proposal, proposal.WindowClosesAt.Value, keep)}",
+                KeepEmbeds = true,
+                Buttons = RemovalService.KeepButtons(proposal, keep)
+            });
+            await responder.Ephemeral(result.Message);
+        }
+
+        // Remove… on the requester's own request message opens their card; its season menu updates it.
+        private async Task ShowUserCard(DiscordInteraction interaction, IInteractionResponder responder, RequestarrUser user, int requestId)
+        {
+            var request = _requests.Find(requestId);
+
+            if (request == null || request.OwnerUserId != user.Id)
+            {
+                await responder.Ephemeral(DiscordText.RemovalOnlyYours);
+                return;
+            }
+
+            var target = await _removals.TargetForRequestAsync(requestId);
+
+            if (target.Error != null)
+            {
+                await responder.Ephemeral(target.Error);
+                return;
+            }
+
+            var scope = interaction.Route == RemovalRoutes.UserScope ? FromMenu(interaction.Values) : new List<int>();
+            var card = UserCard(request, target.Value, scope);
+
+            if (interaction.Route == RemovalRoutes.User)
+            {
+                await responder.RespondAsync(card);
+            }
+            else
+            {
+                await responder.UpdateMessageAsync(card);
+            }
+        }
+
         private async Task HandleAdmin(DiscordInteraction interaction, IInteractionResponder responder, CallerContext caller, Audit.Actor actor, IReadOnlyList<string> args)
         {
             var adminName = interaction.DisplayName ?? interaction.Username;
-            int Arg(int i) => args.Count > i && int.TryParse(args[i], out var value) ? value : 0;
 
             switch (interaction.Route)
             {
@@ -191,65 +197,19 @@ namespace Requestarr.Core.Discord.Handlers
                     return;
 
                 case RemovalRoutes.SearchForm:
-                {
-                    interaction.Fields.TryGetValue(RemovalRoutes.SearchField, out var term);
-                    var found = await _removals.SearchLibraryAsync(term);
-
-                    if (found.Count == 0)
-                    {
-                        await responder.Ephemeral(DiscordText.RemovalNothingFound);
-                        return;
-                    }
-
-                    await responder.RespondAsync(new InteractionReply
-                    {
-                        Content = DiscordText.RemovalSearchResults(term, found.Count),
-                        Ephemeral = true,
-                        SelectMenu = new InteractionSelectMenu
-                        {
-                            CustomId = RemovalRoutes.Pick,
-                            Placeholder = DiscordText.RemovalPickPlaceholder,
-                            Options = found.Select(t => new InteractionSelectOption(DiscordText.RemovalChoice(t), $"{t.Instance.Id}:{t.Title.Id}")).ToList()
-                        }
-                    });
+                    await ShowSearchResults(interaction, responder);
                     return;
-                }
 
                 case RemovalRoutes.Pick:
                 case RemovalRoutes.Feed:
                 case RemovalRoutes.Admin:
                 case RemovalRoutes.AdminScope:
-                {
-                    var target = interaction.Route switch
-                    {
-                        RemovalRoutes.Pick => await Target(interaction.Values.Count > 0 ? interaction.Values[0] : null),
-                        RemovalRoutes.Feed => await _removals.TargetForRequestAsync(Arg(0)),
-                        _ => await _removals.TargetAsync(Arg(0), Arg(1))
-                    };
-
-                    if (target.Error != null)
-                    {
-                        await responder.Ephemeral(target.Error);
-                        return;
-                    }
-
-                    var card = AdminCard(target.Value, interaction.Route == RemovalRoutes.AdminScope ? FromMenu(interaction.Values) : new List<int>());
-
-                    if (interaction.Route is RemovalRoutes.Feed)
-                    {
-                        await responder.RespondAsync(card);
-                    }
-                    else
-                    {
-                        await responder.UpdateMessageAsync(card);
-                    }
-
+                    await ShowAdminCard(interaction, responder, args);
                     return;
-                }
 
                 case RemovalRoutes.AdminForce:
                 {
-                    var target = await _removals.TargetAsync(Arg(0), Arg(1));
+                    var target = await _removals.TargetAsync(IntAt(args, 0), IntAt(args, 1));
                     var seasons = RemovalRoutes.Decode(args.Count > 2 ? args[2] : null);
 
                     await responder.UpdateMessageAsync(new InteractionReply
@@ -257,8 +217,8 @@ namespace Requestarr.Core.Discord.Handlers
                         Content = DiscordText.RemovalConfirmForce(target.Value?.Label ?? "it", seasons),
                         Buttons = new List<InteractionButton>
                         {
-                            new() { CustomId = $"{RemovalRoutes.AdminForceYes}:{Arg(0)}:{Arg(1)}:{RemovalRoutes.Encode(seasons)}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger },
-                            new() { CustomId = $"{RemovalRoutes.Admin}:{Arg(0)}:{Arg(1)}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
+                            new() { CustomId = $"{RemovalRoutes.AdminForceYes}:{IntAt(args, 0)}:{IntAt(args, 1)}:{RemovalRoutes.Encode(seasons)}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger },
+                            new() { CustomId = $"{RemovalRoutes.Admin}:{IntAt(args, 0)}:{IntAt(args, 1)}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
                         }
                     });
                     return;
@@ -268,43 +228,103 @@ namespace Requestarr.Core.Discord.Handlers
                 case RemovalRoutes.AdminForceYes:
                 {
                     await responder.DeferAsync();
-                    var result = await _removals.StartByAdminAsync(actor, adminName, caller.User?.Id, Arg(0), Arg(1), RemovalRoutes.Decode(args.Count > 2 ? args[2] : null), interaction.Route == RemovalRoutes.AdminForceYes);
+                    var result = await _removals.StartByAdminAsync(actor, adminName, caller.User?.Id, IntAt(args, 0), IntAt(args, 1), RemovalRoutes.Decode(args.Count > 2 ? args[2] : null), interaction.Route == RemovalRoutes.AdminForceYes);
                     await responder.EditAsync(new InteractionReply { Content = result.Message });
                     return;
                 }
 
                 case RemovalRoutes.Force:
-                {
-                    var proposal = _removals.Find(Arg(0));
-
-                    if (proposal == null || !proposal.IsOpen)
-                    {
-                        await responder.Ephemeral(proposal == null ? DiscordText.RemovalNotFound : DiscordText.RemovalAlreadyMoved(proposal));
-                        return;
-                    }
-
-                    await responder.RespondAsync(new InteractionReply
-                    {
-                        Content = DiscordText.RemovalConfirmForce(proposal.Label, proposal.Seasons),
-                        Ephemeral = true,
-                        Buttons = new List<InteractionButton> { new() { CustomId = $"{RemovalRoutes.ForceYes}:{proposal.Id}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger } }
-                    });
+                    await ConfirmForce(responder, IntAt(args, 0));
                     return;
-                }
 
                 case RemovalRoutes.ForceYes:
                 {
                     await responder.DeferAsync();
-                    var result = await _removals.ForceAsync(Arg(0), actor, adminName, caller.User?.Id);
+                    var result = await _removals.ForceAsync(IntAt(args, 0), actor, adminName, caller.User?.Id);
                     await responder.EditAsync(new InteractionReply { Content = result.Message });
                     return;
                 }
 
                 case RemovalRoutes.Drop:
-                    await responder.Reply(await _removals.DropAsync(Arg(0), actor, adminName, caller.User?.Id));
+                    await responder.Reply(await _removals.DropAsync(IntAt(args, 0), actor, adminName, caller.User?.Id));
                     return;
             }
         }
+
+        // Remove a title: the titles in every library matching the search, as a menu.
+        private async Task ShowSearchResults(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            interaction.Fields.TryGetValue(RemovalRoutes.SearchField, out var term);
+            var found = await _removals.SearchLibraryAsync(term);
+
+            if (found.Count == 0)
+            {
+                await responder.Ephemeral(DiscordText.RemovalNothingFound);
+                return;
+            }
+
+            await responder.RespondAsync(new InteractionReply
+            {
+                Content = DiscordText.RemovalSearchResults(term, found.Count),
+                Ephemeral = true,
+                SelectMenu = new InteractionSelectMenu
+                {
+                    CustomId = RemovalRoutes.Pick,
+                    Placeholder = DiscordText.RemovalPickPlaceholder,
+                    Options = found.Select(t => new InteractionSelectOption(DiscordText.RemovalChoice(t), $"{t.Instance.Id}:{t.Title.Id}")).ToList()
+                }
+            });
+        }
+
+        // The admin's removal card for a title: a new private one from a feed card's Delete; anywhere
+        // else (the search menu, the card's season menu, Back) the message is updated in place.
+        private async Task ShowAdminCard(DiscordInteraction interaction, IInteractionResponder responder, IReadOnlyList<string> args)
+        {
+            var target = interaction.Route switch
+            {
+                RemovalRoutes.Pick => await Target(interaction.Values.Count > 0 ? interaction.Values[0] : null),
+                RemovalRoutes.Feed => await _removals.TargetForRequestAsync(IntAt(args, 0)),
+                _ => await _removals.TargetAsync(IntAt(args, 0), IntAt(args, 1))
+            };
+
+            if (target.Error != null)
+            {
+                await responder.Ephemeral(target.Error);
+                return;
+            }
+
+            var card = AdminCard(target.Value, interaction.Route == RemovalRoutes.AdminScope ? FromMenu(interaction.Values) : new List<int>());
+
+            if (interaction.Route is RemovalRoutes.Feed)
+            {
+                await responder.RespondAsync(card);
+            }
+            else
+            {
+                await responder.UpdateMessageAsync(card);
+            }
+        }
+
+        // Force on an open removal: a private confirmation first.
+        private async Task ConfirmForce(IInteractionResponder responder, int proposalId)
+        {
+            var proposal = _removals.Find(proposalId);
+
+            if (proposal == null || !proposal.IsOpen)
+            {
+                await responder.Ephemeral(proposal == null ? DiscordText.RemovalNotFound : DiscordText.RemovalAlreadyMoved(proposal));
+                return;
+            }
+
+            await responder.RespondAsync(new InteractionReply
+            {
+                Content = DiscordText.RemovalConfirmForce(proposal.Label, proposal.Seasons),
+                Ephemeral = true,
+                Buttons = new List<InteractionButton> { new() { CustomId = $"{RemovalRoutes.ForceYes}:{proposal.Id}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger } }
+            });
+        }
+
+        private static int IntAt(IReadOnlyList<string> args, int index) => args.Count > index && int.TryParse(args[index], out var value) ? value : 0;
 
         private Task<LookupOutcome<RemovalTarget>> Target(string value)
         {

@@ -1,0 +1,190 @@
+{
+  "frontend/build/webpack.config.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Error/ErrorBoundaryError.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/FileBrowser/FileBrowserModalContent.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Form/EnhancedSelectInput.js": {
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Form/FormInputGroup.js": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "react-hooks/static-components": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Loading/LoadingMessage.js": {
+    "react-hooks/globals": {
+      "count": 1
+    },
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Markdown/InlineMarkdown.js": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Page/PageConnector.js": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "frontend/src/Components/Page/Sidebar/PageSidebar.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Table/Table.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Table/TableOptions/TableOptionsModal.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Table/TablePager.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Components/Tooltip/Tooltip.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/FirstRun/AuthenticationRequiredModalContent.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Helpers/Hooks/usePrevious.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "frontend/src/Helpers/Hooks/useTheme.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/Development/DevelopmentSettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/General/GeneralSettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/General/HostSettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/General/ProxySettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/General/SecuritySettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/General/UpdateSettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Settings/UI/UISettings.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Store/Actions/Creators/createHandleActions.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/Store/Actions/Creators/createServerSideCollectionHandlers.js": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Backup/Backups.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Backup/RestoreBackupModalContent.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Events/LogsTable.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Logs/Files/LogFiles.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Status/About/About.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Status/About/StartTime.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Tasks/Queued/QueuedTaskRow.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Tasks/Scheduled/ScheduledTaskRow.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "frontend/src/System/Updates/Updates.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  }
+}

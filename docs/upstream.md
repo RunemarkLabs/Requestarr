@@ -34,6 +34,7 @@ The Prowlarr domain:
 - Prowlarr's 44 migrations, replaced by one initial migration (`001_initial_setup.cs`). It holds the Servarr infrastructure tables in their final upstream shape plus the Requestarr data model.
 - calls to Servarr-hosted services: Sentry error reporting (backend and frontend), the update and notification service, the system-time check, and Piwik. Requestarr reports no updates until it has its own release feed.
 - the root packaging scripts `build.sh`, `test.sh` and `docs.sh` (2026-10-27). Requestarr builds with `dotnet` and its Dockerfile, runs tests with `dotnet test`, and publishes Docker images only, so nothing used them; they still targeted older SDKs and a macOS package folder Requestarr doesn't have. An upstream change to them doesn't apply: keep them deleted.
+- inherited code nothing used, whole files only (2026-10-27, the clean-code sweep): 104 web app files left from the removed Prowlarr pages (charts, the filter builder, custom filters, virtual tables, sort and view menus, the page jump bar, provider-settings helpers, unused selectors, hooks and utilities) with their stylesheets, and `preload.js`, which nothing loads; in the backend, `ReleaseUnavailableException` and `SearchFailedException` (indexer search), `RescanAfterRefreshType`, the empty `ResultSet` class and `BackendCommandAttribute`, and the Sentry logging helpers. An upstream change to one of them doesn't apply: keep it deleted. General-purpose code nothing calls today is kept (the EnsureThat checks, extension methods, the path and URL validators, the HTTP exceptions), because upstream fixes touch it and Requestarr's admin portal is likely to use some; so is anything found by reflection or dependency injection. Files Requestarr still uses are never edited just to remove unused members inside them.
 
 ## Renames
 
@@ -51,6 +52,8 @@ Small upstream-file changes worth knowing when merging:
 - `AppFolderFactory.Register` creates the app data folder before the legacy DB migration (it failed on fresh installs)
 - `HealthCheckReason.ProvisioningFailed`
 - `TagService` and `CleanupUnusedTags` only consider the `Backends` table
+- Requestarr's backend analyzer checks are additions only: a block at the end of `.editorconfig` ("Requestarr additions"), the Sonar analyzer and two files (`src/Sonar.globalconfig`, `src/SonarLint.xml`) in `src/Directory.Build.props`. Upstream's `.editorconfig` sections are unchanged; merge upstream changes above the additions.
+- The web app's lint configuration moved from `frontend/.eslintrc.js` to `frontend/eslint.config.js` (2026-10-27), because ESLint 10 dropped the old format and ESLint 8 gets no updates. Upstream's rules are in it unchanged (less `valid-jsdoc` and `require-jsdoc`, which ESLint 9 removed and upstream had off). Apply an upstream change to `.eslintrc.js` to the matching rule in `eslint.config.js` by hand; Requestarr's own checks are in the block at its end.
 
 ## Target framework divergence (.NET 10)
 

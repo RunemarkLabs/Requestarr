@@ -66,7 +66,7 @@ namespace Requestarr.Core.Discord
             $"{name}: {Label(type)} is now {Label(state)}{(instance != null ? $", using {instance}" : string.Empty)}.";
 
         public static string QuotaChanged(string name, ContentType type, int? limit, int days) =>
-            limit.HasValue ? $"{name}: {Label(type)} quota is now {limit} per {days} day{(days == 1 ? string.Empty : "s")}." : $"{name}: {Label(type)} quota removed.";
+            limit.HasValue ? $"{name}: {Label(type)} quota is now {limit} per {Plural(days, "day")}." : $"{name}: {Label(type)} quota removed.";
 
         public static string UserInfo(RequestarrUser user, UserIdentity identity, IEnumerable<UserMediaAccess> access, IEnumerable<MediaServerAccount> accounts)
         {
@@ -126,7 +126,6 @@ namespace Requestarr.Core.Discord
         public const string Specials = "Specials";
         public const string SpecialsHint = "Season 0: extras and one-off episodes";
         public const string AlsoFutureSeasons = "Also new seasons as they air";
-        public const string AlsoFutureSeasonsHint = "Sonarr monitors seasons that haven't aired yet";
         public const string BackLabel = "Back";
         public const string BackToResults = "Back to results";
         public const string InLibraryShort = "In library";
@@ -262,7 +261,7 @@ namespace Requestarr.Core.Discord
 
             if (regular.Any())
             {
-                parts.Add($"{(regular.Count == 1 ? "season" : "seasons")} {Ranges(regular)}");
+                parts.Add(SeasonRanges(regular));
             }
 
             if (!parts.Any())
@@ -296,6 +295,12 @@ namespace Requestarr.Core.Discord
             return ranges.Count <= 1 ? string.Join(string.Empty, ranges) : string.Join(", ", ranges.Take(ranges.Count - 1)) + " and " + ranges.Last();
         }
 
+        // "season 2", "seasons 1–3 and 5"
+        private static string SeasonRanges(IReadOnlyCollection<int> seasons) => $"{(seasons.Count == 1 ? "season" : "seasons")} {Ranges(seasons)}";
+
+        // "1 day", "7 days"
+        private static string Plural(int count, string noun) => $"{count} {noun}{(count == 1 ? string.Empty : "s")}";
+
         public static string Rating(Backends.MediaLookupResult item)
         {
             if (!item.Ratings.Any())
@@ -316,7 +321,13 @@ namespace Requestarr.Core.Discord
 
         public static string Runtime(int minutes, bool perEpisode)
         {
-            var text = minutes >= 60 ? $"{minutes / 60} h{(minutes % 60 > 0 ? $" {minutes % 60} min" : string.Empty)}" : $"{minutes} min";
+            var text = $"{minutes} min";
+
+            if (minutes >= 60)
+            {
+                text = minutes % 60 > 0 ? $"{minutes / 60} h {minutes % 60} min" : $"{minutes / 60} h";
+            }
+
             return perEpisode ? $"{text} per episode" : text;
         }
 
@@ -396,7 +407,7 @@ namespace Requestarr.Core.Discord
         public static string BackendUnavailable(string instance) => $"{instance} isn't reachable right now. Try again later.";
 
         public static string SearchResults(ContentType type, string query, int count) =>
-            BlockHeader(type, $"{count} result{(count == 1 ? string.Empty : "s")} for \"{query}\"") + "\nPick one to see the details.";
+            BlockHeader(type, $"{Plural(count, "result")} for \"{query}\"") + "\nPick one to see the details.";
 
         public static string StateRequested(string owner, RequestStatus status, int id) => $"📌 Already requested by {owner} (#{id}, {Label(status)}). You can follow it to be notified.";
 
@@ -444,10 +455,16 @@ namespace Requestarr.Core.Discord
         public static string RequestLine(Request request, string owner, bool showOwner) =>
             $"#{request.Id} · {Label(request.ContentType)} · {request.Label} · {Label(request.Status)}{(showOwner ? " · " + owner : string.Empty)}";
 
-        public static string QuotaLine(ContentType type, AccessState state, int used, int? limit, int days, DateTime? nextSlot) =>
-            $"• {Label(type)}: {Label(state)}" + (limit.HasValue
-                ? $", {used} of {limit} used in the last {days} days{(used >= limit && nextSlot.HasValue ? $", next slot {DiscordTimestamp(nextSlot.Value)}" : string.Empty)}"
-                : ", no limit");
+        public static string QuotaLine(ContentType type, AccessState state, int used, int? limit, int days, DateTime? nextSlot)
+        {
+            if (!limit.HasValue)
+            {
+                return $"• {Label(type)}: {Label(state)}, no limit";
+            }
+
+            var next = used >= limit && nextSlot.HasValue ? $", next slot {DiscordTimestamp(nextSlot.Value)}" : string.Empty;
+            return $"• {Label(type)}: {Label(state)}, {used} of {limit} used in the last {days} days{next}";
+        }
 
         public static string Label(RequestStatus status) => status.ToString().ToLowerInvariant();
 
@@ -618,7 +635,7 @@ namespace Requestarr.Core.Discord
 
             if (regular.Any())
             {
-                parts.Add($"{(regular.Count == 1 ? "season" : "seasons")} {Ranges(regular)}");
+                parts.Add(SeasonRanges(regular));
             }
 
             return parts.Any() ? string.Join(" and ", parts) : "nothing yet";
@@ -686,8 +703,15 @@ namespace Requestarr.Core.Discord
 
         public static string CannotAddSeasons(RequestStatus status) => $"Seasons can only be added to an open request; this one is {Label(status)}.";
 
-        public static string AddedSeasons(IReadOnlyCollection<int> seasons, bool future) =>
-            seasons.Any() ? $"{PlainSeasons(seasons)}{(future ? ", plus new seasons as they air" : string.Empty)}" : "new seasons as they air";
+        public static string AddedSeasons(IReadOnlyCollection<int> seasons, bool future)
+        {
+            if (!seasons.Any())
+            {
+                return "new seasons as they air";
+            }
+
+            return future ? $"{PlainSeasons(seasons)}, plus new seasons as they air" : PlainSeasons(seasons);
+        }
 
         public static string SeasonsAdded(Request request, string added, bool pending) => pending
             ? $"Added {added} to request #{request.Id}. They go to Sonarr with the request once it's approved."
@@ -765,13 +789,12 @@ namespace Requestarr.Core.Discord
         public const string RemovalKeepNoted = "Noted: you want to keep it. One keep is enough; you can take it back while the vote is open.";
         public const string RemovalKeepTakenBack = "Your keep is taken back.";
         public const string RemovalNothingFound = "Nothing in Sonarr or Radarr matches that.";
-        public const string RemovalNothingDownloaded = "Nothing of this is downloaded yet, so there is nothing to remove.";
 
         public static string RemovalScope(Removals.RemovalProposal proposal) =>
-            proposal.WholeTitle ? $"**{proposal.Label}**" : $"**{proposal.Label}**, {(proposal.Seasons.Count == 1 ? "season" : "seasons")} {Ranges(proposal.Seasons)}";
+            proposal.WholeTitle ? $"**{proposal.Label}**" : $"**{proposal.Label}**, {SeasonRanges(proposal.Seasons)}";
 
         public static string RemovalScope(string label, IReadOnlyCollection<int> seasons) =>
-            seasons == null || seasons.Count == 0 ? $"**{label}**" : $"**{label}**, {(seasons.Count == 1 ? "season" : "seasons")} {Ranges(seasons)}";
+            seasons == null || seasons.Count == 0 ? $"**{label}**" : $"**{label}**, {SeasonRanges(seasons)}";
 
         private static string Closing(DateTime utc) => $"<t:{new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds()}:f>";
 
@@ -814,10 +837,18 @@ namespace Requestarr.Core.Discord
         private static string AgainNote(Removals.RemovalProposal proposal) => proposal.WholeTitle ? " It can be requested again any time." : " The rest of the show stays.";
 
         // On the request message after a removal.
-        public static string RemovalNote(Removals.RemovalProposal proposal) =>
-            proposal.WholeTitle
-                ? $"🗑️ Removed from the library{(proposal.Status == Removals.RemovalStatus.Forced ? " by the admin" : " after a vote")}."
-                : $"🗑️ {(proposal.Seasons.Count == 1 ? "Season" : "Seasons")} {Ranges(proposal.Seasons)} removed{(proposal.Status == Removals.RemovalStatus.Forced ? " by the admin" : " after a vote")}.";
+        public static string RemovalNote(Removals.RemovalProposal proposal)
+        {
+            var how = proposal.Status == Removals.RemovalStatus.Forced ? " by the admin" : " after a vote";
+
+            if (proposal.WholeTitle)
+            {
+                return $"🗑️ Removed from the library{how}.";
+            }
+
+            var seasons = proposal.Seasons.Count == 1 ? "Season" : "Seasons";
+            return $"🗑️ {seasons} {Ranges(proposal.Seasons)} removed{how}.";
+        }
 
         public const string FinalRemoved = "🗑️ **Removed**";
 
@@ -835,7 +866,7 @@ namespace Requestarr.Core.Discord
         public static string RemovalVoteStarted(Removals.RemovalProposal proposal) =>
             $"Started: everyone with {Label(proposal.ContentType)} access has until {Closing(proposal.WindowClosesAt ?? DateTime.UtcNow)} to keep {RemovalScope(proposal)}.";
 
-        public static string RemovalAskedRequester(Removals.RemovalProposal proposal, string requester, DateTime answerBy) =>
+        public static string RemovalAskedRequester(string requester, DateTime answerBy) =>
             $"Asked {requester} first, in their channel. No answer by {Closing(answerBy)} counts as yes and starts the vote.";
 
         public static string RemovalAlreadyOpen(Removals.RemovalProposal open) =>
@@ -870,7 +901,7 @@ namespace Requestarr.Core.Discord
 
         // The feed card's removal line, at every step.
         public static string FeedRemovalLine(Removals.RemovalProposal proposal, int keeps, string requester) =>
-            FeedRemovalState(proposal, keeps, requester) + (proposal.WholeTitle ? string.Empty : $" · {(proposal.Seasons.Count == 1 ? "season" : "seasons")} {Ranges(proposal.Seasons)}");
+            FeedRemovalState(proposal, keeps, requester) + (proposal.WholeTitle ? string.Empty : $" · {SeasonRanges(proposal.Seasons)}");
 
         private static string FeedRemovalState(Removals.RemovalProposal proposal, int keeps, string requester) => proposal.Status switch
         {
@@ -939,8 +970,6 @@ namespace Requestarr.Core.Discord
         public const string PlexTitle = "Link a Plex account";
         public const string PlexField = "Plex username or email";
         public const string PickRequestPlaceholder = "Open a request";
-        public const string AllTypesLabel = "All";
-        public const string NoRequestMatches = "No request matches that. Use its number (for example `12`) or part of its title.";
         public const string CancelReasonTitle = "Cancel request";
         public const string CancelReasonLabel = "Reason shown to the user (optional)";
         public const string InvalidLimit = "The limit must be a number from 0 to 1000, and the days from 1 to 365.";
@@ -953,20 +982,14 @@ namespace Requestarr.Core.Discord
 
         public static string PendingLink(MediaServers.MediaServerProvider provider, string username) => $"Waiting for you: a {provider} link request as `{username}`.";
 
-        public static string AccessOption(ContentType type, AccessState state) => $"{Label(type)}: {Capitalize(Label(state))}";
-
         public static string LimitOption(ContentType type, UserMediaAccess access) =>
             $"{Label(type)} limit (now {(access?.QuotaLimit is { } limit ? $"{limit} per {(int)(access.QuotaWindow ?? TimeSpan.FromDays(7)).TotalDays} days" : "none")})";
 
         public static string InstanceOption(ContentType type, string instance) => $"{Label(type)}: {instance}";
 
-        public static string Current => "current";
-
         public static string InstanceLine(ContentType type, string instance) => $"• {Label(type)} requests go to {instance}";
 
         public static string MemberRequestsHeader(string name, int count) => $"**{name}'s requests** · {count}";
-
-        public static string RequestMatches(string query, int count) => $"**{count} requests match \"{query}\"**. Pick one to open it.";
 
         public static string UsersHeader(int count) => $"**Users** · {count}";
 
@@ -974,10 +997,12 @@ namespace Requestarr.Core.Discord
             DiscordLimits.Truncate($"#{request.Id} {request.Label} · {Label(request.Status)} · {owner}", DiscordLimits.OptionLabelLength);
 
         // Connection states: what the admins are told, and what users see while an instance is down.
-        public static ContentType TypeOf(Backends.BackendInstance instance) =>
-            instance.Implementation == Backends.BackendImplementations.Sonarr ? ContentType.Tv
-            : instance.Implementation == Backends.BackendImplementations.Lidarr ? ContentType.Music
-            : ContentType.Movie;
+        public static ContentType TypeOf(Backends.BackendInstance instance) => instance.Implementation switch
+        {
+            Backends.BackendImplementations.Sonarr => ContentType.Tv,
+            Backends.BackendImplementations.Lidarr => ContentType.Music,
+            _ => ContentType.Movie
+        };
 
         public static string InstanceDownAlert(Backends.BackendInstance instance) =>
             $"⚠️ **{instance.Name} can't be reached** since <t:{new DateTimeOffset(DateTime.SpecifyKind(instance.DownSince ?? DateTime.UtcNow, DateTimeKind.Utc)).ToUnixTimeSeconds()}:f> ({Label(TypeOf(instance))}). " +
@@ -986,12 +1011,12 @@ namespace Requestarr.Core.Discord
         public static string InstanceBackAlert(Backends.BackendInstance instance, TimeSpan downFor) =>
             $"✅ **{instance.Name} is back** after {Duration(downFor)}. {Label(TypeOf(instance))} requests work again.";
 
-        public static string Duration(TimeSpan span) =>
-            span.TotalMinutes < 90 ? Minutes(Math.Max(1, (int)Math.Round(span.TotalMinutes)))
-            : span.TotalHours < 48 ? $"{span.TotalHours:0.#} hours"
-            : $"{span.TotalDays:0.#} days";
-
-        private static string Minutes(int n) => $"{n} minute{(n == 1 ? string.Empty : "s")}";
+        public static string Duration(TimeSpan span) => span switch
+        {
+            { TotalMinutes: < 90 } => Plural(Math.Max(1, (int)Math.Round(span.TotalMinutes)), "minute"),
+            { TotalHours: < 48 } => $"{span.TotalHours:0.#} hours",
+            _ => $"{span.TotalDays:0.#} days"
+        };
 
         public static string RequestsPaused(ContentType type, string instance) =>
             $"{Label(type)} requests are paused right now: {instance} can't be reached. Requestarr keeps trying, and the admin is alerted if it stays down.";
@@ -1034,13 +1059,19 @@ namespace Requestarr.Core.Discord
         public const string ReadChangesLabel = "Read changes";
         public const string VersionNotesContinued = " (continued)";
 
-        public static string VersionCardAdminTitle(string version, int admins, int users) =>
-            $"Requestarr {version} · " + (admins > 0
-                ? $"{admins} change{(admins == 1 ? string.Empty : "s")} for admins{(users > 0 ? $", {users} for users" : string.Empty)}"
-                : $"{users} change{(users == 1 ? string.Empty : "s")} for users");
+        public static string VersionCardAdminTitle(string version, int admins, int users)
+        {
+            if (admins <= 0)
+            {
+                return $"Requestarr {version} · {Plural(users, "change")} for users";
+            }
+
+            var forUsers = users > 0 ? $", {users} for users" : string.Empty;
+            return $"Requestarr {version} · {Plural(admins, "change")} for admins{forUsers}";
+        }
 
         public static string VersionCardUsersTitle(string version, int count) =>
-            $"Requestarr {version} · {count} new thing{(count == 1 ? string.Empty : "s")} for you";
+            $"Requestarr {version} · {Plural(count, "new thing")} for you";
 
         public static string VersionCardFullTitle(string version, DateTime? date) =>
             $"Requestarr {version}{(date.HasValue ? $" · {date.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty)}";
@@ -1054,7 +1085,7 @@ namespace Requestarr.Core.Discord
 
         public static string WelcomeMessage(IReadOnlyCollection<ContentType> types, IReadOnlyCollection<MediaServerProvider> mediaServers)
         {
-            var what = types.Count == 0 ? "movies and TV shows" : string.Join(" and ", types.Select(t => t == ContentType.Movie ? "movies" : t == ContentType.Tv ? "TV shows" : Label(t).ToLowerInvariant()));
+            var what = types.Count == 0 ? "movies and TV shows" : string.Join(" and ", types.Select(WelcomeName));
             var media = mediaServers.Count == 0
                 ? string.Empty
                 : $"\nTo watch on {string.Join(" or ", mediaServers)}, press its button and give your username; you can ask for that on its own or with Requestarr access.";
@@ -1068,6 +1099,13 @@ namespace Requestarr.Core.Discord
                    "### Already a member?\n" +
                    $"Your channel is in the **{ChannelLayout.UsersCategoryName}** group." + media;
         }
+
+        private static string WelcomeName(ContentType type) => type switch
+        {
+            ContentType.Movie => "movies",
+            ContentType.Tv => "TV shows",
+            _ => Label(type).ToLowerInvariant()
+        };
 
         // The blocked channel's one message, a card; only someone holding the blocked role sees it.
         public const string BlockedTitle = "You can't request access through Requestarr any more";
@@ -1093,8 +1131,16 @@ namespace Requestarr.Core.Discord
             $"Your last request was declined{ReasonSentence(reason)} You can ask again <t:{Unix(from)}:R>.";
 
         // ": the reason." (with a full stop unless it has its own), or just "." without one.
-        private static string ReasonSentence(string reason) =>
-            string.IsNullOrWhiteSpace(reason) ? "." : $": {reason.Trim()}{(".!?".Contains(reason.Trim()[^1]) ? string.Empty : ".")}";
+        private static string ReasonSentence(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return ".";
+            }
+
+            var trimmed = reason.Trim();
+            return ".!?".Contains(trimmed[^1]) ? $": {trimmed}" : $": {trimmed}.";
+        }
 
         public static string WelcomeMediaLinked(MediaServerProvider provider) => $"Your {provider} account is already linked.";
 
@@ -1157,7 +1203,7 @@ namespace Requestarr.Core.Discord
         public static string AccessLevelsPrompt(string name) =>
             $"**Approve {name}**\nChoose their access for each type, then **{AddWithAccessLabel}**. It adds them exactly as **{AddMemberLabel}** on the admin panel does.";
 
-        public static string AccessRequestApprovedCard(Access.AccessRequest request, string admin, string channelId) =>
+        public static string AccessRequestApprovedCard(string admin, string channelId) =>
             $"✅ Approved by {admin}{(channelId != null ? $": their channel is <#{channelId}>." : ".")}";
 
         public static string AccessRequestDeniedCard(Access.AccessRequest request, string admin) =>
@@ -1206,11 +1252,20 @@ namespace Requestarr.Core.Discord
             $"Request #{request.Id} for {request.Label} is waiting for approval since <t:{Unix(request.Requested)}:R>.";
 
         // What went wrong with an approved request, in plain words, and what the buttons do.
-        public static string TroubleText(Request request, string instance) => request.Status == RequestStatus.Failed
-            ? $"Request #{request.Id} for {request.Label} couldn't be added to {instance}{Because(request.DecisionReason)}. **{RetrySendLabel}** once that's fixed; **{CancelLabel}** drops it; **{AlreadyAvailableLabel}** closes it if you have the title another way."
-            : request.Progress == DownloadProgress.Failed
-                ? $"The download for request #{request.Id} ({request.Label}) failed{Because(request.ProgressDetail)}. {instance} usually blocklists that release and tries another by itself. **{SearchAgainLabel}** asks it to look now; **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way."
-                : $"The download for request #{request.Id} ({request.Label}) is stuck{Because(request.ProgressDetail)}. **{SearchAgainLabel}** asks {instance} for another release (the stuck download stays in your download client until you remove it there); **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way.";
+        public static string TroubleText(Request request, string instance)
+        {
+            if (request.Status == RequestStatus.Failed)
+            {
+                return $"Request #{request.Id} for {request.Label} couldn't be added to {instance}{Because(request.DecisionReason)}. **{RetrySendLabel}** once that's fixed; **{CancelLabel}** drops it; **{AlreadyAvailableLabel}** closes it if you have the title another way.";
+            }
+
+            if (request.Progress == DownloadProgress.Failed)
+            {
+                return $"The download for request #{request.Id} ({request.Label}) failed{Because(request.ProgressDetail)}. {instance} usually blocklists that release and tries another by itself. **{SearchAgainLabel}** asks it to look now; **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way.";
+            }
+
+            return $"The download for request #{request.Id} ({request.Label}) is stuck{Because(request.ProgressDetail)}. **{SearchAgainLabel}** asks {instance} for another release (the stuck download stays in your download client until you remove it there); **{CancelLabel}** stops the search (nothing is deleted); **{AlreadyAvailableLabel}** closes it if you have the title another way.";
+        }
 
         public static string PlexLinkWaiting(string name, string discordId, MediaServers.MediaServerProvider provider, string username, DateTime since) =>
             $"**{name}** (<@{discordId}>) asks for {provider} access as `{username}`, since <t:{Unix(since)}:R>.";
@@ -1244,60 +1299,12 @@ namespace Requestarr.Core.Discord
             public const string Admin = "Requestarr admin commands";
             public const string AdminUser = "Open a member's card: add, access, limits, Plex, suspend, remove";
             public const string AdminRequests = "Go through everything waiting on you, one at a time";
-            public const string OptionRequestSearch = "Request number or part of its title";
-            public const string AdminMediaServer = "Media server access requests";
             public const string RequestOne = "Request a movie or TV show";
             public const string Help = "How to use Requestarr";
-            public const string AdminCancel = "Cancel a pending request (admin)";
-            public const string AdminAvailable = "Close a pending request as already available (admin)";
-            public const string OptionCancelReason = "Reason shown to the user";
             public const string AdminHelp = "Help for admins";
             public const string OptionRequestType = "What to request (only types you have access to)";
             public const string OptionRequestQuery = "Title to search for, or tmdb:603 / tvdb:12345";
-            public const string User = "Manage Requestarr users (admin)";
-            public const string UserAdd = "Add a server member as a Requestarr user";
-            public const string UserRemove = "Remove a user; their channel is archived and history kept";
-            public const string UserSuspend = "Suspend a user and lock their channel";
-            public const string UserUnsuspend = "Restore a suspended user";
-            public const string UserAccess = "Set what a user may request for one content type";
-            public const string UserQuota = "Set a user's request quota for one content type";
-            public const string UserInfo = "Show a user's Requestarr settings";
-            public const string UserMediaServer = "Link a user's media server account";
-            public const string MediaServer = "Media server access";
-            public const string MediaServerRequest = "Ask the admin for media server access";
-
-            public const string Queue = "Show requests waiting for approval (admin)";
-            public const string Approve = "Approve a pending request (admin)";
-            public const string Deny = "Deny a pending request (admin)";
-            public const string Request = "Request movies and TV";
-            public const string RequestMovie = "Search for a movie to request";
-            public const string RequestTv = "Search for a TV show to request";
-            public const string RequestMovieTmdb = "Request a movie by its TMDB ID";
-            public const string RequestTvTvdb = "Request a TV show by its TVDB ID";
-            public const string RequestCancel = "Cancel one of your pending requests";
-            public const string Requests = "List requests";
-            public const string Quota = "Show request limits and usage";
-            public const string MediaServerApprove = "Approve a media server access request (admin)";
-            public const string MediaServerDeny = "Deny a media server access request (admin)";
-            public const string OptionInstance = "Backend instance by name (default: the type's default)";
-            public const string OptionReason = "Reason shown to the user";
-            public const string OptionUserFilter = "Only this user (admin)";
-            public const string OptionQuery = "Title to search for";
-            public const string OptionTmdbId = "TMDB movie ID";
-            public const string OptionTvdbId = "TVDB series ID";
-            public const string OptionRequestId = "Request number";
-            public const string OptionStatus = "Request status";
-
             public const string OptionMember = "The server member";
-            public const string OptionType = "Content type";
-            public const string OptionLevel = "Access level";
-            public const string OptionLimit = "Requests allowed per window (0 removes the quota)";
-            public const string OptionDays = "Window length in days (default 7)";
-            public const string OptionService = "Media server";
-            public const string OptionUsername = "Media server username";
-            public const string OptionMovie = "Movies access (default: needs approval)";
-            public const string OptionTv = "TV access (default: needs approval)";
-            public const string OptionMusic = "Music access (default: off)";
         }
     }
 }

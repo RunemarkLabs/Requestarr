@@ -4,7 +4,7 @@ using NzbDrone.Core.Datastore.Migration.Framework;
 namespace NzbDrone.Core.Datastore.Migration
 {
     // Requestarr's initial schema. Servarr infrastructure tables keep their upstream
-    // shape (Prowlarr migrations 001-044 collapsed, Prowlarr domain tables dropped);
+    // shape, with Prowlarr migrations 001-044 collapsed and Prowlarr domain tables dropped.
     // Requestarr's core data model is added alongside them.
     [Migration(1)]
     public class InitialSetup : NzbDroneMigrationBase

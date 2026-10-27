@@ -110,62 +110,59 @@ namespace Requestarr.Core.Discord.Handlers
                     });
                     return;
 
-                // Force removes for good: the card asks first.
-                case WalkRoutes.Do when verb == "rm-force":
-                {
-                    if (!Waiting(at.Key))
-                    {
-                        await responder.UpdateMessageAsync(await CardAfter(at, DiscordText.AlreadyHandled));
-                        return;
-                    }
-
-                    var proposal = _removals.Find(int.Parse(at.Key.AsSpan(1)));
-                    await responder.UpdateMessageAsync(new InteractionReply
-                    {
-                        Content = DiscordText.RemovalConfirmForce(proposal.Label, proposal.Seasons),
-                        Buttons = new List<InteractionButton>
-                        {
-                            new() { CustomId = $"{WalkRoutes.Do}:rm-force-yes:{at.Ticks}:{at.Key}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger },
-                            new() { CustomId = $"{WalkRoutes.Move}:back:{at.Ticks + 1}:{at.Key}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
-                        }
-                    });
-                    return;
-                }
-
-                case WalkRoutes.Do when verb is "deny" or "cancel":
-                {
-                    if (!Waiting(at.Key))
-                    {
-                        await responder.UpdateMessageAsync(await CardAfter(at, DiscordText.AlreadyHandled));
-                        return;
-                    }
-
-                    await responder.ShowModalAsync(new InteractionModal
-                    {
-                        CustomId = $"{WalkRoutes.Form}:{verb}:{at.Ticks}:{at.Key}",
-                        Title = verb == "deny" ? DiscordText.DenyReasonTitle : DiscordText.CancelReasonTitle,
-                        Fields = new List<InteractionTextField> { new(RequestRoutes.ReasonField, verb == "deny" ? DiscordText.DenyReasonLabel : DiscordText.CancelReasonLabel, Required: false) }
-                    });
-                    return;
-                }
-
                 case WalkRoutes.Do:
                 case WalkRoutes.Form:
-                {
-                    // Checked again: someone may have handled it while this card was open.
-                    if (!Waiting(at.Key))
-                    {
-                        await responder.UpdateMessageAsync(await CardAfter(at, DiscordText.AlreadyHandled));
-                        return;
-                    }
-
-                    await responder.DeferAsync();
-                    interaction.Fields.TryGetValue(RequestRoutes.ReasonField, out var reason);
-                    var result = await ActAsync(verb, at.Key, reason, actor, adminName);
-                    await responder.EditAsync(await CardAfter(at, result.Message));
+                    await HandleAction(interaction, responder, verb, at, actor, adminName);
                     return;
-                }
             }
+        }
+
+        // An action on the card's item, checked again first: someone may have handled it while this card was open.
+        private async Task HandleAction(DiscordInteraction interaction, IInteractionResponder responder, string verb, (long Ticks, string Key) at, Actor actor, string adminName)
+        {
+            if (!Waiting(at.Key))
+            {
+                await responder.UpdateMessageAsync(await CardAfter(at, DiscordText.AlreadyHandled));
+                return;
+            }
+
+            // Force removes for good: the card asks first.
+            if (interaction.Route == WalkRoutes.Do && verb == "rm-force")
+            {
+                await responder.UpdateMessageAsync(ForceConfirmation(at));
+                return;
+            }
+
+            if (interaction.Route == WalkRoutes.Do && verb is "deny" or "cancel")
+            {
+                await responder.ShowModalAsync(new InteractionModal
+                {
+                    CustomId = $"{WalkRoutes.Form}:{verb}:{at.Ticks}:{at.Key}",
+                    Title = verb == "deny" ? DiscordText.DenyReasonTitle : DiscordText.CancelReasonTitle,
+                    Fields = new List<InteractionTextField> { new(RequestRoutes.ReasonField, verb == "deny" ? DiscordText.DenyReasonLabel : DiscordText.CancelReasonLabel, Required: false) }
+                });
+                return;
+            }
+
+            await responder.DeferAsync();
+            interaction.Fields.TryGetValue(RequestRoutes.ReasonField, out var reason);
+            var result = await ActAsync(verb, at.Key, reason, actor, adminName);
+            await responder.EditAsync(await CardAfter(at, result.Message));
+        }
+
+        private InteractionReply ForceConfirmation((long Ticks, string Key) at)
+        {
+            var proposal = _removals.Find(int.Parse(at.Key.AsSpan(1)));
+
+            return new InteractionReply
+            {
+                Content = DiscordText.RemovalConfirmForce(proposal.Label, proposal.Seasons),
+                Buttons = new List<InteractionButton>
+                {
+                    new() { CustomId = $"{WalkRoutes.Do}:rm-force-yes:{at.Ticks}:{at.Key}", Label = DiscordText.ConfirmDeleteLabel, Style = ButtonStyle.Danger },
+                    new() { CustomId = $"{WalkRoutes.Move}:back:{at.Ticks + 1}:{at.Key}", Label = DiscordText.BackLabel, Style = ButtonStyle.Secondary }
+                }
+            };
         }
 
         private async Task<ServiceResult> ActAsync(string action, string key, string reason, Actor actor, string adminName)
@@ -284,72 +281,21 @@ namespace Requestarr.Core.Discord.Handlers
             }
 
             var reply = new InteractionReply();
-            InteractionButton Button(string action, string label, ButtonStyle style) => new() { CustomId = $"{WalkRoutes.Do}:{action}:{at}", Label = label, Style = style };
 
             switch (item.Kind)
             {
                 case 'r':
                 case 't':
-                {
-                    var request = _requests.Find(item.Id);
-                    var instance = _backends.Find(request.BackendId ?? 0);
-                    var title = await _requests.ItemForAsync(request);
-
-                    lines.Add(item.Kind == 'r' ? DiscordText.WaitingSince(request) : DiscordText.TroubleText(request, instance?.Name ?? DiscordText.Label(request.ContentType)));
-
-                    if (request.ContentType == ContentType.Tv)
-                    {
-                        lines.Add(DiscordText.SeasonsLine(DiscordText.Seasons(request)));
-                    }
-
-                    lines.AddRange(_requests.PeopleOn(request));
-
-                    if (title != null)
-                    {
-                        reply.Embeds.Add(RequestCards.Card(request.ContentType, title, instance?.Name, item.Kind == 'r' ? RequestCards.PendingColor : RequestCards.RefusedColor));
-                    }
-
-                    if (item.Kind == 'r')
-                    {
-                        reply.Buttons.Add(Button("approve", DiscordText.ApproveLabel, ButtonStyle.Success));
-                        reply.Buttons.Add(Button("deny", DiscordText.DenyLabel, ButtonStyle.Danger));
-                    }
-                    else
-                    {
-                        reply.Buttons.Add(request.Status == RequestStatus.Failed
-                            ? Button("retry", DiscordText.RetrySendLabel, ButtonStyle.Primary)
-                            : Button("search", DiscordText.SearchAgainLabel, ButtonStyle.Primary));
-                    }
-
-                    reply.Buttons.Add(Button("available", DiscordText.AlreadyAvailableLabel, ButtonStyle.Secondary));
-                    reply.Buttons.Add(Button("cancel", DiscordText.CancelLabel, ButtonStyle.Secondary));
+                    await DescribeRequest(item, at, lines, reply);
                     break;
-                }
 
                 case 'p':
-                {
-                    var link = _accessRequests.Find(item.Id);
-                    var discordId = _identities.GetForUser(link.UserId).FirstOrDefault(i => i.Provider == UserIdentity.DiscordProvider)?.ExternalId;
-
-                    lines.Add(DiscordText.PlexLinkWaiting(_userStore.Find(link.UserId)?.DisplayName ?? $"user {link.UserId}", discordId, link.Provider, link.Username, link.Requested));
-                    lines.Add(DiscordText.FormatAccess(_access.GetForUser(link.UserId)));
-                    reply.Buttons.Add(Button("link-a", DiscordText.ApproveLinkLabel, ButtonStyle.Success));
-                    reply.Buttons.Add(Button("link-d", DiscordText.DenyLinkLabel, ButtonStyle.Danger));
+                    DescribePlexLink(item.Id, at, lines, reply);
                     break;
-                }
 
                 case 'x':
-                {
-                    var proposal = _removals.Find(item.Id);
-                    var flaggers = _removals.FlagsOn(proposal.Id).Select(f => _userStore.Find(f.UserId)?.DisplayName ?? $"user {f.UserId}").ToList();
-                    var requester = proposal.RequesterUserId.HasValue ? _userStore.Find(proposal.RequesterUserId.Value)?.DisplayName : null;
-
-                    lines.Add(DiscordText.RemovalWaiting(proposal, requester ?? "the requester", flaggers));
-                    reply.Embeds.Add(new InteractionEmbed { Title = proposal.Label, ThumbnailUrl = proposal.PosterUrl, Color = RequestCards.PendingColor, Footer = DiscordText.RemovalFeedFooter(proposal) });
-                    reply.Buttons.Add(Button("rm-force", DiscordText.ForceRemovalLabel, ButtonStyle.Danger));
-                    reply.Buttons.Add(Button("rm-drop", DiscordText.DropRemovalLabel, ButtonStyle.Secondary));
+                    DescribeRemoval(item.Id, at, lines, reply);
                     break;
-                }
 
                 // Approve… and Deny are the card's own buttons (AccessRequestHandler): the chooser opens privately.
                 case 'a':
@@ -365,7 +311,7 @@ namespace Requestarr.Core.Discord.Handlers
                 {
                     var instance = _backends.Find(item.Id);
                     lines.Add(DiscordText.InstanceWaiting(instance));
-                    reply.Buttons.Add(Button("check", DiscordText.CheckNowLabel, ButtonStyle.Primary));
+                    reply.Buttons.Add(ActionButton("check", at, DiscordText.CheckNowLabel, ButtonStyle.Primary));
                     break;
                 }
             }
@@ -384,6 +330,71 @@ namespace Requestarr.Core.Discord.Handlers
                 Buttons = reply.Buttons
             };
         }
+
+        // A request waiting for approval ('r') or in trouble ('t'): its state, seasons and people, its
+        // title card, and the actions for its state.
+        private async Task DescribeRequest(QueueItem item, string at, List<string> lines, InteractionReply reply)
+        {
+            var waiting = item.Kind == 'r';
+            var request = _requests.Find(item.Id);
+            var instance = _backends.Find(request.BackendId ?? 0);
+            var title = await _requests.ItemForAsync(request);
+
+            lines.Add(waiting ? DiscordText.WaitingSince(request) : DiscordText.TroubleText(request, instance?.Name ?? DiscordText.Label(request.ContentType)));
+
+            if (request.ContentType == ContentType.Tv)
+            {
+                lines.Add(DiscordText.SeasonsLine(DiscordText.Seasons(request)));
+            }
+
+            lines.AddRange(_requests.PeopleOn(request));
+
+            if (title != null)
+            {
+                reply.Embeds.Add(RequestCards.Card(request.ContentType, title, instance?.Name, waiting ? RequestCards.PendingColor : RequestCards.RefusedColor));
+            }
+
+            if (waiting)
+            {
+                reply.Buttons.Add(ActionButton("approve", at, DiscordText.ApproveLabel, ButtonStyle.Success));
+                reply.Buttons.Add(ActionButton("deny", at, DiscordText.DenyLabel, ButtonStyle.Danger));
+            }
+            else
+            {
+                reply.Buttons.Add(request.Status == RequestStatus.Failed
+                    ? ActionButton("retry", at, DiscordText.RetrySendLabel, ButtonStyle.Primary)
+                    : ActionButton("search", at, DiscordText.SearchAgainLabel, ButtonStyle.Primary));
+            }
+
+            reply.Buttons.Add(ActionButton("available", at, DiscordText.AlreadyAvailableLabel, ButtonStyle.Secondary));
+            reply.Buttons.Add(ActionButton("cancel", at, DiscordText.CancelLabel, ButtonStyle.Secondary));
+        }
+
+        private void DescribePlexLink(int id, string at, List<string> lines, InteractionReply reply)
+        {
+            var link = _accessRequests.Find(id);
+            var discordId = _identities.GetForUser(link.UserId).FirstOrDefault(i => i.Provider == UserIdentity.DiscordProvider)?.ExternalId;
+
+            lines.Add(DiscordText.PlexLinkWaiting(_userStore.Find(link.UserId)?.DisplayName ?? $"user {link.UserId}", discordId, link.Provider, link.Username, link.Requested));
+            lines.Add(DiscordText.FormatAccess(_access.GetForUser(link.UserId)));
+            reply.Buttons.Add(ActionButton("link-a", at, DiscordText.ApproveLinkLabel, ButtonStyle.Success));
+            reply.Buttons.Add(ActionButton("link-d", at, DiscordText.DenyLinkLabel, ButtonStyle.Danger));
+        }
+
+        private void DescribeRemoval(int id, string at, List<string> lines, InteractionReply reply)
+        {
+            var proposal = _removals.Find(id);
+            var flaggers = _removals.FlagsOn(proposal.Id).Select(f => _userStore.Find(f.UserId)?.DisplayName ?? $"user {f.UserId}").ToList();
+            var requester = proposal.RequesterUserId.HasValue ? _userStore.Find(proposal.RequesterUserId.Value)?.DisplayName : null;
+
+            lines.Add(DiscordText.RemovalWaiting(proposal, requester ?? "the requester", flaggers));
+            reply.Embeds.Add(new InteractionEmbed { Title = proposal.Label, ThumbnailUrl = proposal.PosterUrl, Color = RequestCards.PendingColor, Footer = DiscordText.RemovalFeedFooter(proposal) });
+            reply.Buttons.Add(ActionButton("rm-force", at, DiscordText.ForceRemovalLabel, ButtonStyle.Danger));
+            reply.Buttons.Add(ActionButton("rm-drop", at, DiscordText.DropRemovalLabel, ButtonStyle.Secondary));
+        }
+
+        private static InteractionButton ActionButton(string action, string at, string label, ButtonStyle style) =>
+            new() { CustomId = $"{WalkRoutes.Do}:{action}:{at}", Label = label, Style = style };
 
         private static InteractionReply Private(InteractionReply card) => new()
         {

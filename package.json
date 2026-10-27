@@ -8,7 +8,7 @@
     "clean": "rimraf ./_output/UI && rimraf --glob \"**/*.js.map\"",
     "start": "webpack --watch --config ./frontend/build/webpack.config.js",
     "watch": "webpack --watch --config ./frontend/build/webpack.config.js",
-    "lint": "eslint --config frontend/.eslintrc.js --ignore-path frontend/.eslintignore frontend/",
+    "lint": "eslint --config frontend/eslint.config.js --suppressions-location frontend/eslint-suppressions.json frontend/",
     "lint-fix": "yarn lint --fix",
     "stylelint-linux": "stylelint $(find frontend -name '*.css') --config frontend/.stylelintrc",
     "stylelint-windows": "stylelint \"frontend/**/*.css\" --config frontend/.stylelintrc",
@@ -91,6 +91,7 @@
     "@babel/preset-env": "7.29.7",
     "@babel/preset-react": "7.29.7",
     "@babel/preset-typescript": "7.29.7",
+    "@eslint/compat": "2.1.1",
     "@types/lodash": "4.17.27",
     "@types/react-document-title": "2.0.10",
     "@types/react-router-dom": "5.3.3",
@@ -108,18 +109,21 @@
     "core-js": "3.51.0",
     "css-loader": "6.11.0",
     "css-modules-typescript-loader": "4.0.1",
-    "eslint": "8.57.1",
+    "eslint": "9.39.5",
     "eslint-config-prettier": "8.10.0",
     "eslint-plugin-filenames": "1.3.2",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-prettier": "4.2.1",
     "eslint-plugin-react": "7.37.5",
-    "eslint-plugin-react-hooks": "4.6.2",
+    "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-simple-import-sort": "12.1.1",
+    "eslint-plugin-sonarjs": "4.2.2",
     "file-loader": "6.2.0",
     "filemanager-webpack-plugin": "9.0.1",
     "fork-ts-checker-webpack-plugin": "8.0.0",
+    "globals": "17.13.0",
     "html-webpack-plugin": "5.6.8",
+    "knip": "6.43.0",
     "loader-utils": "^3.2.1",
     "mini-css-extract-plugin": "2.10.2",
     "postcss": "8.5.31",
@@ -145,5 +149,23 @@
   "resolutions": {
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7"
+  },
+  "knip": {
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": [
+      "frontend/src/index.ts!",
+      "frontend/build/webpack.config.js",
+      "frontend/babel.config.js",
+      "frontend/postcss.config.js",
+      "frontend/eslint.config.js",
+      "frontend/src/Styles/Variables/*.js"
+    ],
+    "project": [
+      "frontend/**/*.{js,jsx,ts,tsx}!"
+    ],
+    "ignore": [
+      "frontend/src/**/JsLibraries/**",
+      "frontend/**/*.css.d.ts"
+    ]
   }
 }

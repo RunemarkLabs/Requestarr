@@ -28,6 +28,48 @@ dotnet test Requestarr.Api.V1.Test.dll Requestarr.Common.Test.dll Requestarr.Cor
 
 On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and `LINUX` for `WINDOWS`.
 
+## Clean code
+
+Requestarr's code is written to be read and reviewed by people. These standards hold for every change; checks in the build enforce what a tool can see, and review covers the rest. Follow the surrounding code's style (Servarr's conventions in the backend, the web app's existing patterns) rather than a textbook, and don't split code into layers or tiny functions just to meet a number.
+
+| Standard | Limit | Checked by |
+|---|---|---|
+| **No unused code**: functions, classes, fields, parameters, locals, imports, exports, files, packages | none | C#: IDE0051, IDE0052, IDE0060, CA1823 and Sonar's S1144, S1172, S1481, S4487 (private members, parameters, locals); unused public members: below. Web: ESLint's unused-variable rules and TypeScript's unused locals and parameters; knip for files, exports and packages |
+| **One thing per function** | cognitive complexity 15; nesting 4 deep; C#: 60 lines a method; web: at most 4 parameters and 50 lines a function in `.ts` (80 in `.tsx` and `.js`, which hold markup) | C#: Sonar's S3776, S134, S138 (limits in `src/SonarLint.xml`). Web: `sonarjs/cognitive-complexity`, `complexity` (15, a whole `switch` counted once), `max-depth`, `max-params`, `max-lines-per-function` |
+| **Clear names**: full words, verbs for functions, names a reader understands without the code around them | C#: `_camelCase` private fields, PascalCase constants and static fields, `I` before interfaces, `Id` not `ID`. TypeScript: no `I` prefix, acronyms as words (`loadHttpUrl`) | C#: naming rules (IDE1006) for fields and constants; the rest in review |
+| **No nested ternaries**, no copied branches or methods | | C#: S3358, S1871, S4144. Web: `no-nested-ternary` (upstream) |
+| **No commented-out code; comments say why**, never what | | C#: S125; the rest in review |
+| **No unnamed numbers or strings** for limits, timeouts, identifiers or paths | named constants or settings | review: the tools for this flag every `0`, `1` and color in markup, so it stays a review rule |
+| **React**: derived values computed during render, logic for a user's action in its handler, effects only to sync with something outside | | the react-hooks plugin's 17 recommended rules |
+
+**Limits are review triggers, not proof.** A limit hit means look again: simplify (early returns, fewer conditions, a clearer data shape), or leave it and say why in a comment on the same line. Never split code just to get under a number: cognitive complexity ignores method calls, so moving a nested block into a helper lowers the score without making anything simpler. A good split extracts a piece with a purpose you can name that hides detail from the caller; a bad one leaves the reader jumping between helpers that only make sense together.
+
+```ts
+// Bad: three helpers that must be read together to follow one decision
+const isDue = checkDue(item); const isOwned = checkOwner(item, user); return decide(isDue, isOwned);
+
+// Good: one function with early returns
+if (!item.dueAt) return false;
+if (item.ownerId !== user.id) return false;
+return item.dueAt <= now;
+```
+
+**Suppressions need a reason on the same line**: `// eslint-disable-next-line max-params -- mirrors upstream's API` in the web app, a `//` comment after `#pragma warning disable` or a `Justification` on `[SuppressMessage]` in C#. CI's Changelog job runs `.github/suppression_check.py` on every pull request: it fails on a suppression without a reason, on a baseline that grows, and on a rule turned down or a limit raised.
+
+**C#: Requestarr's code only.** The backend checks apply to Requestarr's own code: its `Requestarr` folders, its migrations, and the few files it added beside inherited ones, listed in the "Requestarr additions" section at the end of `.editorconfig` (a file Requestarr adds outside a `Requestarr` folder joins that list in the same pull request). Inherited code keeps upstream's settings, so it needs no baseline and upstream merges stay easy. Warnings fail the build (`TreatWarningsAsErrors`), so a new violation in Requestarr code stops the build. The rules come from .NET's analyzers and from Sonar's analyzer for .NET (`SonarAnalyzer.CSharp` 9.32, the last LGPL-3.0 release; 10.x is under Sonar's own license, so Dependabot skips it). `src/Sonar.globalconfig` switches every Sonar rule off, and the additions switch the chosen ones back on for Requestarr code. Tests and migrations are exempt from the length and complexity limits only: a test reads as the steps a person takes, a migration as the schema, and splitting either would hide that.
+
+**Unused public members in C#** can't be seen by an analyzer, which looks at one project at a time. The best tool found is Roslynator's command line (`roslynator find-symbol --unused`, Apache-2.0), which searches the whole solution. Running it needs the owner's permission (Claude Code's permission check stopped it), so it isn't in CI yet. Until then, a name search across `src/`, the web app and the docs finds candidates, and each one is checked by hand, because controllers, migrations, resources, dependency injection and serialization reach members no search sees.
+
+**Inherited code and the baselines.** The checks were added after most of the code existed. The web app is almost all inherited, so its existing violations are recorded and only new ones fail:
+
+- **ESLint**: `frontend/eslint-suppressions.json` (ESLint's bulk suppressions) holds the violations that existed when a rule was added, counted per file and rule. `yarn lint` fails on any new one, and on a suppression that is no longer needed, so the file can only shrink: fix a violation, then `npx eslint --config frontend/eslint.config.js --suppressions-location frontend/eslint-suppressions.json --prune-suppressions frontend/`. Never add to it by hand.
+- **knip**: `frontend/knip-baseline.json` holds the unused files, exports and packages knip found when the check was added. `python3 .github/knip_check.py` (CI's Frontend job) fails on anything new and on an entry that is fixed but still listed; `--update` rewrites the file after a fix. knip's package findings include build plugins it can't see being loaded by name (babel, postcss and webpack loaders), so check before removing a package.
+- **Inherited files Requestarr still uses** are not edited to meet these limits, so upstream fixes keep applying (`docs/upstream.md`); only whole files nothing uses are removed.
+
+**How the baselines shrink.** Every fix to inherited web code removes its entry (the checks fail until it's removed). Removing whole unused files shrinks knip's baseline the most; the first sweep took it from 367 to 260 findings. Inherited C# has no baseline: it isn't held to these limits.
+
+The web app's lint configuration is `frontend/eslint.config.js` (ESLint 9's format: ESLint 10 removed the old one, and ESLint 10 itself waits for the React and file-name plugins to support it). Upstream's rules are in it unchanged, and Requestarr's own checks are in a marked block at the end.
+
 ## Continuous integration
 
 `.github/workflows/build.yml` runs on every push and pull request using standard GitHub-hosted runners. The `build` job is the single required status for `dev`, `qa`, `staging` and `main`, which accept changes only through a pull request with this check passing (see [Release flow](#release-flow)).
@@ -36,9 +78,9 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 |---|---|
 | Backend (Linux) | solution build (`Platform=Posix`); test suites Api.V1, Common, Core, Host, Libraries, Mono, Update, excluding categories ManualTest, IntegrationTest, AutomationTest, WINDOWS |
 | Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
-| Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
+| Frontend | `tsc --noEmit`, ESLint (with its suppressions baseline), knip's unused-code check against its baseline, Stylelint, production webpack build (see [Clean code](#clean-code)) |
 | Docker image | full `docker/Dockerfile` build (not pushed) |
-| Changelog | the checkers' self-tests (changelog, QA checklist, QA gate, version rules), then `CHANGELOG.md` against the changelog rule; on pull requests also: `CHANGELOG.md` changed, its top version is higher than the base branch's, and into `dev`, `qa` or `staging` it follows the version rules and no other branch has it (see [Changelog](#changelog) and [Versions](#versions)) |
+| Changelog | the checkers' self-tests (changelog, QA checklist, QA gate, version rules, knip, suppressions), on pull requests the suppression check ([Clean code](#clean-code)), then `CHANGELOG.md` against the changelog rule; on pull requests also: `CHANGELOG.md` changed, its top version is higher than the base branch's, and into `dev`, `qa` or `staging` it follows the version rules and no other branch has it (see [Changelog](#changelog) and [Versions](#versions)) |
 | Promotion record | pull requests that promote `dev`'s commits into `qa`, or `qa`'s into `staging`: the description has a `Requested by:` line (see [Release flow](#release-flow)) |
 
 `.github/workflows/drift.yml` runs on every push to `dev`, `qa` or `staging`, daily, and by hand (Actions → Drift → Run workflow, with any branches): it fails while `qa` has a commit `dev` doesn't, or `staging` one `qa` doesn't. It isn't a required check, because a fix merged into `qa` or `staging` is drift until it is merged back, in the same task.

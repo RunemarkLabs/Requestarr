@@ -165,7 +165,12 @@ namespace Requestarr.Core.Test.Qa
 
         private static ReleaseEnvironment Environment(string name, string staged = "") => new()
         {
-            Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? name : v == ReleaseEnvironment.StagedVersionsVariable ? staged : null
+            Variable = v => v switch
+            {
+                ReleaseEnvironment.EnvironmentVariable => name,
+                ReleaseEnvironment.StagedVersionsVariable => staged,
+                _ => null
+            }
         };
     }
 }

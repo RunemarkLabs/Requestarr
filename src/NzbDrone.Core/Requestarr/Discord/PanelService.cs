@@ -44,8 +44,6 @@ namespace Requestarr.Core.Discord
         public static readonly IReadOnlyList<PanelButton> User = new[] { MyRequests, MyLimits, LinkPlex, Help };
         public static readonly IReadOnlyList<PanelButton> Admin = new[] { PendingQueue, Users, Members, RemoveTitle, AdminHelp };
 
-        public static PanelButton ByRoute(string route) => User.Concat(Admin).Single(b => b.Route == route);
-
         public static InteractionButton ToButton(this PanelButton button) => new() { CustomId = button.Route, Label = button.Label, Style = button.Style };
     }
 
@@ -324,7 +322,8 @@ namespace Requestarr.Core.Discord
                 // The saved one counts even if it no longer looks like a panel (an older version's), and is rewritten.
                 var own = await _gateway.GetOwnMessagesAsync(channelId, PanelScan);
                 var copies = own.Where(panel.Is).Select(m => m.Id).ToList();
-                var keep = ulong.TryParse(panel.Id, out var stored) && own.Any(m => m.Id == stored) ? stored : copies.Count > 0 ? copies[^1] : (ulong?)null;
+                ulong? newestCopy = copies.Count > 0 ? copies[^1] : null;
+                var keep = ulong.TryParse(panel.Id, out var stored) && own.Any(m => m.Id == stored) ? stored : newestCopy;
                 var reply = panel.Build();
 
                 if (keep.HasValue && moveLast && await _gateway.GetLatestMessageIdAsync(channelId) != keep)

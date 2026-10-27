@@ -50,8 +50,8 @@ namespace Requestarr.Core.Removals
         // User-initiated: the requester removes their own title (or seasons), straight to the vote.
         Task<ServiceResult> StartByUserAsync(RequestarrUser user, Actor actor, int requestId, IReadOnlyCollection<int> seasons);
 
-        // Admin-initiated: an owned title asks the requester first; an ownerless one goes to the vote;
-        // force deletes now.
+        // Admin-initiated: an owned title asks the requester first, an ownerless one goes to the vote,
+        // and force deletes now.
         Task<ServiceResult> StartByAdminAsync(Actor admin, string adminName, int? adminUserId, int backendId, int itemId, IReadOnlyCollection<int> seasons, bool force);
 
         Task<ServiceResult> AnswerAsync(int proposalId, RequestarrUser user, Actor actor, bool yes);
@@ -220,7 +220,7 @@ namespace Requestarr.Core.Removals
             _audit.Record(actor, "removal.start", "removal", proposal.Id.ToString(), $"{Scope(proposal)} on {target.Value.Instance.Name}, by its requester");
 
             // Their own channel says it's up for a vote, and gets the outcome.
-            var message = await PostToUser(user.Id, DiscordText.RemovalStartedByYou(proposal, Closes(proposal)));
+            var message = await PostToUser(user.Id, DiscordText.RemovalStartedByYou(proposal, Closes()));
             proposal.RequesterChannelId = message.Channel;
             proposal.RequesterMessageId = message.Id;
 
@@ -266,7 +266,7 @@ namespace Requestarr.Core.Removals
                 Save(proposal);
                 await Changed(proposal);
 
-                return ServiceResult.Ok(DiscordText.RemovalAskedRequester(proposal, target.Value.Requester.DisplayName, proposal.AnswerBy.Value));
+                return ServiceResult.Ok(DiscordText.RemovalAskedRequester(target.Value.Requester.DisplayName, proposal.AnswerBy.Value));
             }
 
             // Never requested through Requestarr, or the requester was removed: straight to the vote.
@@ -757,7 +757,7 @@ namespace Requestarr.Core.Removals
         private DateTime? ReminderAt(RemovalProposal proposal) =>
             _settings.ReminderAfter is { } after ? proposal.Created + after : null;
 
-        private DateTime Closes(RemovalProposal proposal) => Clock() + _settings.VoteWindow;
+        private DateTime Closes() => Clock() + _settings.VoteWindow;
 
         private static List<InteractionButton> AnswerButtons(RemovalProposal proposal) => new()
         {

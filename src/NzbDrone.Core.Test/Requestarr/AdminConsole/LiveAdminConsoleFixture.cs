@@ -29,7 +29,7 @@ namespace Requestarr.Core.Test.AdminConsole
     // Live: the real bot in the Discord test server with the dev stack's TEST Radarr. Reads back the
     // registered commands; onboards a member through the admin panel's member picker; changes their
     // access and limit on the member card; approves their request from /admin requests. Clicks are
-    // simulated through the real handlers (their replies are private, so they're recorded here);
+    // simulated through the real handlers (their replies are private, so they're recorded here), and
     // the real effects (role, channel, panel, request message) are read back from Discord.
     // Never runs in CI (ManualTest). Needs the stack's Requestarr stopped and a clean server:
     // docker/dev.sh reset-dev --stopped.

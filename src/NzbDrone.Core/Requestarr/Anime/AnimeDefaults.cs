@@ -56,7 +56,7 @@ namespace Requestarr.Core.Anime
         public static string PriorityKey(AnimePriority priority) => priority.ToString().ToLowerInvariant();
 
         // Which language a series ends up in when it is one language and a request asks for the other.
-        public static AnimeLanguage Winner(AnimePriority priority, AnimeLanguage existing, AnimeLanguage requested) => priority switch
+        public static AnimeLanguage Winner(AnimePriority priority, AnimeLanguage existing) => priority switch
         {
             AnimePriority.Dub => AnimeLanguage.Dub,
             AnimePriority.Sub => AnimeLanguage.Sub,

@@ -23,23 +23,6 @@ namespace Requestarr.Core.Discord.Handlers
             };
         }
 
-        public static long? GetInteger(this DiscordInteraction interaction, string name)
-        {
-            if (!interaction.Options.TryGetValue(name, out var value) || value == null)
-            {
-                return null;
-            }
-
-            return value switch
-            {
-                long l => l,
-                int i => i,
-                double d => (long)d,
-                string s when long.TryParse(s, out var parsed) => parsed,
-                _ => null
-            };
-        }
-
         public static AccessState? ParseLevel(string value) => value?.ToLowerInvariant() switch
         {
             "off" => AccessState.Off,

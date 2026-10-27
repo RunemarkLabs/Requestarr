@@ -280,40 +280,9 @@ namespace Requestarr.Core.Availability
 
             foreach (var instance in _backends.All().Where(b => b.Enable && b.Implementation is BackendImplementations.Sonarr or BackendImplementations.Radarr))
             {
-                var api = _backends.ApiFor(instance);
-
                 try
                 {
-                    if (baseUrl == null || instance.Settings.PollingOnly)
-                    {
-                        _problems.TryRemove(instance.Name, out _);
-
-                        if (await api.RemoveWebhookAsync(instance.Settings))
-                        {
-                            _logger.Info("Removed Requestarr's webhook from {0} (polling only)", instance.Name);
-                        }
-
-                        continue;
-                    }
-
-                    var change = await api.EnsureWebhookAsync(instance.Settings, WebhookTokens.Url(baseUrl, _config.ApiKey, instance.Id));
-
-                    if (change != WebhookChange.Unchanged)
-                    {
-                        _logger.Info("{0} Requestarr's webhook on {1}", change, instance.Name);
-                    }
-
-                    var error = await api.TestWebhookAsync(instance.Settings);
-
-                    if (error == null)
-                    {
-                        _problems.TryRemove(instance.Name, out _);
-                    }
-                    else
-                    {
-                        _problems[instance.Name] = Requestarr.Core.Discord.DiscordText.WebhookUnreachable(baseUrl, CleanseLogMessage.Cleanse(error), _settings.PollMinutes);
-                        _logger.Warn("{0} can't reach Requestarr at {1}; polling every {2} minutes covers it", instance.Name, baseUrl, _settings.PollMinutes);
-                    }
+                    await SetUpWebhookAsync(instance, baseUrl);
                 }
                 catch (BackendException ex)
                 {
@@ -322,6 +291,43 @@ namespace Requestarr.Core.Availability
             }
 
             _events.PublishEvent(new AvailabilityWebhooksCheckedEvent());
+        }
+
+        // One instance: polling only (or no address for Requestarr) removes the webhook; otherwise
+        // it's created or updated and tested, and a failed test is recorded as a problem.
+        private async Task SetUpWebhookAsync(BackendInstance instance, string baseUrl)
+        {
+            var api = _backends.ApiFor(instance);
+
+            if (baseUrl == null || instance.Settings.PollingOnly)
+            {
+                _problems.TryRemove(instance.Name, out _);
+
+                if (await api.RemoveWebhookAsync(instance.Settings))
+                {
+                    _logger.Info("Removed Requestarr's webhook from {0} (polling only)", instance.Name);
+                }
+
+                return;
+            }
+
+            var change = await api.EnsureWebhookAsync(instance.Settings, WebhookTokens.Url(baseUrl, _config.ApiKey, instance.Id));
+
+            if (change != WebhookChange.Unchanged)
+            {
+                _logger.Info("{0} Requestarr's webhook on {1}", change, instance.Name);
+            }
+
+            var error = await api.TestWebhookAsync(instance.Settings);
+
+            if (error == null)
+            {
+                _problems.TryRemove(instance.Name, out _);
+                return;
+            }
+
+            _problems[instance.Name] = Requestarr.Core.Discord.DiscordText.WebhookUnreachable(baseUrl, CleanseLogMessage.Cleanse(error), _settings.PollMinutes);
+            _logger.Warn("{0} can't reach Requestarr at {1}; polling every {2} minutes covers it", instance.Name, baseUrl, _settings.PollMinutes);
         }
 
         public void HandleAsync(BackendsCheckedEvent message) => SetUpWebhooksAsync().GetAwaiter().GetResult();
