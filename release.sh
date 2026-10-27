@@ -5,17 +5,21 @@
 #
 #   ./release.sh drift [<dev ref> <qa ref> [<staging ref>]]
 #         fails if qa has a commit dev doesn't, or staging one qa doesn't (default: origin/dev, origin/qa, origin/staging)
-#   ./release.sh promote-qa <version | commit> "<who asked, and their words>"
-#   ./release.sh promote-staging <version | commit> "<who asked, and their words>" [--owner-override "<the owner's words>"]
+#   ./release.sh promote-qa <version | commit> "<who asked, and their words>" [--dry-run]
+#   ./release.sh promote-staging <version | commit> "<who asked, and their words>" [--owner-override "<the owner's words>"] [--dry-run]
 #         moves qa (or staging) to exactly that point of dev (or qa): a pull request that records who asked, the build
-#         check, then a fast-forward to that commit (nothing newer, no merge commit). Staging's push publishes its image.
+#         check, then a fast-forward to that commit (nothing newer, no merge commit). Staging's push publishes its image
+#         as the beta version (x.y.z-beta.N, docs/development.md#versions), which the pull request records.
 #         Staging only moves when the QA gate is clear (qa-gate below), unless the owner overrides it in so many words.
+#         --dry-run says what would move and which versions come out of it, and changes nothing.
+#   ./release.sh next-version [dev | qa | staging]
+#         the version the next pull request into that branch takes (default dev)
 #   ./release.sh qa-gate [--json]
 #         is QA's test checklist complete, with no item failing and no bug report from QA still open? Read from the QA
 #         stack on this machine (docker/qa-gate.py); exit 0 when clear
 #   ./release.sh merge-back
 #         after a fix merged into staging or qa: pull requests that merge staging into qa and qa into dev, each merged
-#         once the build check passes
+#         once the build check passes. The changelog and QA checklist keep every version of both, highest first.
 #   ./release.sh check-changelog <base> <head> <target branch> [<pull request head> [<pull request branch>]]
 #         the changelog rules CI's Changelog job applies to a pull request
 #
@@ -46,6 +50,21 @@ higher() {
 
 has_ref() {
     git rev-parse -q --verify "$1^{commit}" >/dev/null
+}
+
+# {"dev": [...], "qa": [...], "staging": [...]}: each branch's versions, newest first, for .github/version_rules.py.
+# Optional overrides: name=ref (the pull request's base for its target, or what a promotion would move a branch to).
+branch_versions() {
+    local name ref override out="{"
+    for name in dev qa staging; do
+        ref="origin/$name"
+        for override in "$@"; do
+            [ "${override%%=*}" = "$name" ] && ref="${override#*=}"
+        done
+        has_ref "$ref" || continue
+        out+="\"$name\": [$(all_versions "$ref" | sed 's/.*/"&"/' | paste -sd, -)],"
+    done
+    echo "${out%,}}"
 }
 
 # The first Python that really runs (a stub can exit 0 without running anything).
@@ -165,25 +184,19 @@ check_changelog() {
         return 0
     fi
 
-    # dev, qa and staging never use the same version for different changes: a fix into qa or staging takes the next
-    # number above all three.
-    local other theirs
-    for other in dev qa staging; do
-        [ "$other" != "$target" ] || continue
-        has_ref "origin/$other" || continue
-        theirs=$(top_version "origin/$other")
-        [ -n "$theirs" ] || continue
-        if git merge-base --is-ancestor "origin/$other" "$head"; then
-            if higher "$theirs" "$new"; then
-                echo "::error::$new is lower than $other's $theirs, which this change contains."
-                return 1
-            fi
-        elif ! higher "$new" "$theirs"; then
-            echo "::error::$other already has $theirs, so this change needs a version higher than every release branch's (a fix into qa or staging takes the next number above all of them)."
-            return 1
-        fi
-    done
-    echo "Version $new is free on dev, qa and staging."
+    # The version rules (docs/development.md#versions): into dev the next patch on dev's line, or the next minor once
+    # QA has that line; a fix into qa or staging the next free patch on that branch's own line; never a version
+    # another branch has.
+    local changelog problem
+    changelog=$(mktemp)
+    git show "$head:CHANGELOG.md" >"$changelog"
+    problem=$(branch_versions "$target=$base" | python "$here/.github/version_rules.py" check "$target" "$new" "$changelog") || {
+        rm -f "$changelog"
+        echo "::error::$problem Bump <AssemblyVersion> in src/Directory.Build.props to match (docs/development.md#versions)."
+        return 1
+    }
+    rm -f "$changelog"
+    echo "Version $new follows the version rules for $target, and no other branch has it."
 }
 
 # The newest commit on a branch's first-parent line whose CHANGELOG.md tops out at the version.
@@ -213,12 +226,27 @@ wait_for_build() {
     [ "$state" = "SUCCESS" ]
 }
 
-# promote <from> <to> <version | commit> <who>
+# promote <from> <to> <version | commit> <who> [--owner-override <words>] [--dry-run]
 promote() {
-    local from="$1" to="$2" what="${3:-}" who="${4:-}" name
+    local from="$1" to="$2" what="${3:-}" who="${4:-}" name dry=0 override="" arg
+    [ $# -ge 4 ] && shift 4 || shift $#
+    while [ $# -gt 0 ]; do
+        arg="$1"
+        shift
+        case "$arg" in
+            --dry-run) dry=1 ;;
+            --owner-override)
+                override="${1:-}"
+                [ -n "$override" ] || die "--owner-override needs the owner's words"
+                shift
+                ;;
+            *) die "unknown option $arg" ;;
+        esac
+    done
     name=$([ "$to" = qa ] && echo QA || echo staging)
     [ -n "$what" ] && [ -n "$who" ] || die "promote-$to <version | commit> \"<who asked, and their words>\""
-    git fetch -q origin "$from" "$to"
+    git fetch -q origin dev qa
+    git fetch -q origin staging 2>/dev/null || true
 
     local target
     if [[ "$what" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -235,28 +263,48 @@ promote() {
     # Staging: only with QA's test checklist complete and no bug report from QA open, or on the owner's explicit word.
     local gate=""
     if [ "$to" = staging ]; then
-        if [ "${5:-}" = "--owner-override" ]; then
-            [ -n "${6:-}" ] || die "--owner-override needs the owner's words"
-            gate="Owner override: ${6} (the QA gate was not checked or not clear)"
+        if [ -n "$override" ]; then
+            gate="Owner override: $override (the QA gate was not checked or not clear)"
         else
             local verdict
-            verdict=$("$here/docker/dev.sh" qa-gate --json) || {
+            if verdict=$("$here/docker/dev.sh" qa-gate --json); then
+                gate=$(printf '%s' "$verdict" | python -c 'import json,sys; v=json.load(sys.stdin); print("QA checklist: complete for %s (%d items), the last item passed by %s at %s; no bug report from QA open." % (", ".join(v["versions"]), v["total"], v["completedBy"], v["completedAt"]))')
+            elif [ "$dry" = 1 ]; then
+                gate="QA gate: blocked (a real promotion stops here unless the owner overrides it)."
+            else
                 "$here/docker/dev.sh" qa-gate || true
                 die "promotion to staging is blocked: QA's test checklist isn't complete, an item is failing, or a bug report from QA is still open. Only the owner can override it: promote-staging <version> \"<who>\" --owner-override \"<the owner's words>\""
-            }
-            gate=$(printf '%s' "$verdict" | python -c 'import json,sys; v=json.load(sys.stdin); print("QA checklist: complete for %s (%d items), the last item passed by %s at %s; no bug report from QA open." % (", ".join(v["versions"]), v["total"], v["completedBy"], v["completedAt"]))')
+            fi
         fi
     fi
 
-    local version short branch commits versions
+    local version short branch commits versions published="" next=""
     version=$(top_version "$target")
     short=$(git rev-parse --short "$target")
     branch="promote/$to-$version"
     commits=$(git log --format='- %h %s' "origin/$to..$target")
     versions=$(comm -23 <(all_versions "$target" | sort -u) <(all_versions "origin/$to" | sort -u) | sort -rV | sed 's/^/- /')
+    if [ "$to" = staging ]; then
+        # Each publish to staging is recorded as a v<x.y.z>-beta.<n> tag on its commit; n counts the line's publishes.
+        published=$(git ls-remote --tags origin | python "$here/.github/version_rules.py" beta "$version" "$(git rev-parse "$target")")
+    else
+        next=$(branch_versions "qa=$target" | python "$here/.github/version_rules.py" next dev)
+    fi
 
     echo "Promoting $version ($short) to $name. Commits moving to $to:"
     echo "$commits"
+    echo "Versions now in $name:"
+    echo "$versions"
+    if [ -n "$published" ]; then
+        echo "Published to staging as $published (image tags staging and $published; the commit is tagged v$published)."
+    else
+        echo "QA gets $version as it is; the next pull request into dev starts the next minor: $next."
+    fi
+    [ -z "$gate" ] || echo "$gate"
+    if [ "$dry" = 1 ]; then
+        echo "Dry run: nothing pushed, no pull request opened; $to stays at $(top_version "origin/$to") ($(git rev-parse --short "origin/$to"))."
+        return 0
+    fi
     git push -q origin "$target:refs/heads/$branch"
     local url
     url=$(gh pr create --base "$to" --head "$branch" --title "Promote $version to $name" --body "$(cat <<EOF
@@ -265,6 +313,8 @@ Moves \`$to\` to \`$from\` @ \`$short\` (version $version): exactly these commit
 Requested by: $who
 ${gate:+
 $gate
+}${published:+
+Published to staging as: $published
 }
 ### Versions now in $name
 $versions
@@ -287,29 +337,70 @@ EOF
     if [ "$to" = qa ]; then
         echo "Next: .\\docker\\dev.ps1 reset-qa (or docker/dev.sh reset-qa) so the QA stack runs qa."
     else
-        echo "Next: the Image workflow publishes ghcr.io/runemarklabs/requestarr:staging and :$version (gh run list --workflow image.yml);"
+        echo "Next: the Image workflow publishes ghcr.io/runemarklabs/requestarr:staging and :$published and tags the commit v$published (gh run list --workflow image.yml);"
         echo "      .\\docker\\dev.ps1 up (or docker/dev.sh up) so QA drops the versions staging now has;"
         echo "      on the server: ./update.sh in the staging folder (docs/setup-guide.md, the beta environment)."
     fi
 }
 
-# merge_into <from> <to>: a pull request that merges branch <from> into <to>, merged once the build check passes.
-merge_into() {
-    local from="$1" to="$2" version url
-    version=$(top_version "origin/$from")
-    url=$(gh pr create --base "$to" --head "$from" --title "Merge $from fix $version back into $to" \
-        --body "Merges \`$from\` (version $version) into \`$to\`, so $to has every fix made in $from and the drift check passes.")
-    echo "$url"
-    sleep 10
-    if [ "$(gh pr view "$url" --json mergeable --jq .mergeable)" = "CONFLICTING" ]; then
-        cat <<EOF
-$from and $to conflict (usually CHANGELOG.md and the version). Resolve on a branch:
-  git switch -c merge-back/$from-$version origin/$to && git merge origin/$from
-  CHANGELOG.md: keep every section, highest version on top. src/Directory.Build.props: the higher version.
+# resolve_merge_back <from> <to> <version>: when <from> and <to> conflict, the merge on a branch merge-back/<from>-<version>
+# (made in a separate worktree, so the checkout here is untouched): CHANGELOG.md and QA-CHECKLIST.md keep every version
+# of both, highest first, and the build version is the merged changelog's top. Prints the branch; fails, saying what to
+# do, if anything else conflicts.
+resolve_merge_back() {
+    local from="$1" to="$2" version="$3" branch dir file conflicted others="" top
+    branch="merge-back/$from-$version"
+    dir=$(mktemp -d)
+    git worktree add -q -b "$branch" "$dir" "origin/$to" >&2
+    if ! git -C "$dir" merge -q --no-edit -m "Merge $from fix $version back into $to" "origin/$from" >/dev/null 2>&1; then
+        conflicted=$(git -C "$dir" diff --name-only --diff-filter=U)
+        for file in $conflicted; do
+            case "$file" in
+                CHANGELOG.md | QA-CHECKLIST.md)
+                    git -C "$dir" show ":2:$file" >"$dir/.ours"
+                    git -C "$dir" show ":3:$file" >"$dir/.theirs"
+                    python "$here/.github/version_rules.py" merge "$dir/.ours" "$dir/.theirs" "$dir/$file" >&2 || others+=" $file"
+                    rm -f "$dir/.ours" "$dir/.theirs"
+                    ;;
+                src/Directory.Build.props) git -C "$dir" checkout -q --ours src/Directory.Build.props ;;
+                *) others+=" $file" ;;
+            esac
+        done
+        if [ -n "$others" ]; then
+            git -C "$dir" merge --abort
+            git worktree remove --force "$dir"
+            git branch -q -D "$branch"
+            cat >&2 <<EOF
+$from and $to conflict in:$others. Resolve on a branch:
+  git switch -c $branch origin/$to && git merge origin/$from
+  CHANGELOG.md and QA-CHECKLIST.md: python3 .github/version_rules.py merge <ours> <theirs> <file> (every version, highest first).
+  src/Directory.Build.props: the changelog's top version.
   git commit, push, then: gh pr create --base $to --title "Merge $from fix $version back into $to"
 EOF
-        return 1
+            return 1
+        fi
+        top=$(grep -m1 -E '^## [0-9]+\.[0-9]+\.[0-9]+' "$dir/CHANGELOG.md" | sed -E 's/^## +//; s/ .*//')
+        sed -i -E "s|<AssemblyVersion>[^<]*</AssemblyVersion>|<AssemblyVersion>$top.*</AssemblyVersion>|" "$dir/src/Directory.Build.props"
+        git -C "$dir" add CHANGELOG.md QA-CHECKLIST.md src/Directory.Build.props
+        git -C "$dir" commit -q --no-edit >&2
     fi
+    git -C "$dir" push -q origin "$branch" >&2
+    git worktree remove --force "$dir"
+    echo "$branch"
+}
+
+# merge_into <from> <to>: a pull request that merges branch <from> into <to>, merged once the build check passes.
+merge_into() {
+    local from="$1" to="$2" version url head="$1"
+    version=$(top_version "origin/$from")
+    if ! git merge-tree --write-tree --no-messages "origin/$to" "origin/$from" >/dev/null 2>&1; then
+        echo "$from and $to conflict; merging them on a branch, with every version of both kept, highest first."
+        head=$(resolve_merge_back "$from" "$to" "$version") || return 1
+    fi
+    url=$(gh pr create --base "$to" --head "$head" --title "Merge $from fix $version back into $to" \
+        --body "Merges \`$from\` (version $version) into \`$to\`, so $to has every fix made in $from and the drift check passes. The changelog and QA checklist keep every version of both, highest first.")
+    echo "$url"
+    sleep 10
 
     echo "Waiting for the build check…"
     wait_for_build "$url" || die "the build check didn't pass; nothing merged"
@@ -340,10 +431,15 @@ case "${1:-}" in
     check-changelog) shift; check_changelog "$@" ;;
     promote-qa) shift; promote dev qa "$@" ;;
     promote-staging) shift; promote qa staging "$@" ;;
+    next-version)
+        git fetch -q origin dev qa
+        git fetch -q origin staging 2>/dev/null || true
+        branch_versions | python "$here/.github/version_rules.py" next "${2:-dev}"
+        ;;
     qa-gate) shift; "$here/docker/dev.sh" qa-gate "$@" ;;
     merge-back) merge_back ;;
     *)
-        sed -n '2,21p' "$0"
+        sed -n '2,26p' "$0"
         exit 1
         ;;
 esac

@@ -1034,15 +1034,15 @@ namespace Requestarr.Core.Discord
         public const string ReadChangesLabel = "Read changes";
         public const string VersionNotesContinued = " (continued)";
 
-        public static string VersionCardAdminTitle(Version version, int admins, int users) =>
+        public static string VersionCardAdminTitle(string version, int admins, int users) =>
             $"Requestarr {version} · " + (admins > 0
                 ? $"{admins} change{(admins == 1 ? string.Empty : "s")} for admins{(users > 0 ? $", {users} for users" : string.Empty)}"
                 : $"{users} change{(users == 1 ? string.Empty : "s")} for users");
 
-        public static string VersionCardUsersTitle(Version version, int count) =>
+        public static string VersionCardUsersTitle(string version, int count) =>
             $"Requestarr {version} · {count} new thing{(count == 1 ? string.Empty : "s")} for you";
 
-        public static string VersionCardFullTitle(Version version, DateTime? date) =>
+        public static string VersionCardFullTitle(string version, DateTime? date) =>
             $"Requestarr {version}{(date.HasValue ? $" · {date.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty)}";
 
         public static string VersionNotFound(Version version) => $"Requestarr {version}'s changes aren't in this version of Requestarr.";

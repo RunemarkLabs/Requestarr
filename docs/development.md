@@ -17,7 +17,7 @@ The app listens on http://localhost:9797.
 
 ## Tests
 
-The Servarr suites run like `test.sh` does, minus integration and automation tests:
+The Servarr suites, minus integration and automation tests (the same set CI runs):
 
 ```bash
 cd _tests/net10.0
@@ -38,7 +38,7 @@ On Linux, swap `Requestarr.Windows.Test.dll` for `Requestarr.Mono.Test.dll` and 
 | Backend (Windows) | solution build (`Platform=Windows`); test suites Api.V1, Common, Core, Host, Libraries, Update, Windows, excluding categories ManualTest, IntegrationTest, AutomationTest, LINUX |
 | Frontend | `tsc --noEmit`, ESLint, Stylelint, production webpack build |
 | Docker image | full `docker/Dockerfile` build (not pushed) |
-| Changelog | the checker's self-test, then `CHANGELOG.md` against the changelog rule; on pull requests also: `CHANGELOG.md` changed, its top version is higher than the base branch's, and into `dev`, `qa` or `staging` free on the other two (see [Changelog](#changelog)) |
+| Changelog | the checkers' self-tests (changelog, QA checklist, QA gate, version rules), then `CHANGELOG.md` against the changelog rule; on pull requests also: `CHANGELOG.md` changed, its top version is higher than the base branch's, and into `dev`, `qa` or `staging` it follows the version rules and no other branch has it (see [Changelog](#changelog) and [Versions](#versions)) |
 | Promotion record | pull requests that promote `dev`'s commits into `qa`, or `qa`'s into `staging`: the description has a `Requested by:` line (see [Release flow](#release-flow)) |
 
 `.github/workflows/drift.yml` runs on every push to `dev`, `qa` or `staging`, daily, and by hand (Actions → Drift → Run workflow, with any branches): it fails while `qa` has a commit `dev` doesn't, or `staging` one `qa` doesn't. It isn't a required check, because a fix merged into `qa` or `staging` is drift until it is merged back, in the same task.
@@ -55,7 +55,7 @@ Not run in CI:
 
 `CHANGELOG.md` at the repo root records what changed for the people who use Requestarr, and Requestarr posts it in Discord: when a server starts on a new version, the whole entry goes to the admin channel and the **For users** lines go to the announcements channel, word for word (which versions each server shows: [Version posts](#version-posts)). So every pull request does this:
 
-1. **Bump the version** in `src/Directory.Build.props` (`<AssemblyVersion>x.y.z.*</AssemblyVersion>`): the patch number for fixes and internal work, the minor number for new things people can do. Only `x.y.z` counts; the last part is the build number.
+1. **Bump the version** in `src/Directory.Build.props` (`<AssemblyVersion>x.y.z.*</AssemblyVersion>`) to the one the [version rules](#versions) give the branch the pull request goes into; `./release.sh next-version` (or `next-version qa`, `next-version staging` for a fix there) prints it. Only `x.y.z` counts; the last part is the build number.
 2. **Add a `## x.y.z (YYYY-MM-DD)` section at the top of `CHANGELOG.md`**, with the day the version was made (the version cards in Discord show it), following the changelog rule:
 
    ```markdown
@@ -76,7 +76,34 @@ Not run in CI:
 - **Summary words only with substance.** "Minor fixes" or "various improvements" may lead a line only if the same line says what changes for the reader. No placeholders ("nothing this time", "n/a").
 - **Group related changes**, three to seven lines per section is normal; fixes say what was wrong in the reader's terms ("Fixed: approving a request sometimes left the old Cancel button working.").
 
-**The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; a version heading without its day; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also be higher than the other two branches', unless the pull request already contains that branch, so a fix made in QA or staging never shares a number with `dev`. A merge-back keeps every version from both branches instead of adding one. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+**The checks.** CI's `Changelog` job runs `.github/changelog_check.py` (its own self-test first, so a broken rule can't pass silently) and fails a pull request whose changelog has: a section other than For users and For admins, or the same one twice; an empty section heading; loose text that isn't a heading or a `- ` line; code-style text in a line (backticks, a file name, a path, a command flag, a settings key or an environment variable name); a placeholder; a summary phrase with fewer than five words of substance on its line; a version heading without its day; or versions out of order or repeated. Run it yourself with `python3 .github/changelog_check.py CHANGELOG.md`. Then `./release.sh check-changelog` fails a pull request that doesn't change `CHANGELOG.md` or whose top version isn't higher than the base branch's. Into `dev`, `qa` or `staging`, the version must also follow the [version rules](#versions) (`.github/version_rules.py`, which has its own self-test): the next patch on `dev`'s line, or the next minor once QA has that line; a fix into `qa` or `staging` the next free patch on that branch's own line; never a version another of the three has. A promotion's versions were checked on the branch below. A merge-back keeps every version from both branches instead of adding one. The QA checklist has the same versions as the changelog, so a wrong number fails its check too. A unit test checks that the top version matches `<AssemblyVersion>`, that the file is embedded in the build, and that **For users** lines avoid technical words. The pull request template has the same checklist.
+
+## Versions
+
+Version numbers follow the release flow, so a number says how far a build has travelled:
+
+1. **Patch = dev builds.** Every pull request into `dev` bumps the patch number on `dev`'s current line: 0.5.0, 0.5.1, 0.5.2. Dependency updates too.
+2. **Minor = QA cycles.** A promotion to QA takes `dev`'s current version as it is. The next pull request into `dev` after it starts the next minor at .0: QA has 0.4.17, so `dev`'s next is 0.5.0 (no zero padding).
+3. **Staging adds a beta pre-release.** A promotion to staging publishes QA's version as `0.4.17-beta.1`. The count goes up each time the same line (0.4) is published to staging again, by a fix into staging or a newer QA version of that line: `-beta.2`, `-beta.3`. A new line starts at `-beta.1`.
+4. **Production removes it.** "Ship it" releases staging's exact code as `0.4.17`: no new number, the suffix dropped.
+5. **Majors.** 1.0.0 is the first public release with the version 1 scope (movies, TV, music and the admin web portal). After that, a major only when admins must act on upgrade (a settings or provisioning format change, a manual migration, dropped support): the pull request that brings such a change bumps the major on `dev`, says what to do in a For admins line led by **Before you upgrade:**, and the banner and reply say so. Until 1.0 nothing triggers a major, and from 1.0 on a "Before you upgrade" line in anything but a major fails the check.
+
+**Fixes into QA or staging** take the next patch on that branch's own line that none of `dev`, `qa` and `staging` has (QA on 0.4.17 while `dev` is on 0.5.x: 0.4.18). A merge-back keeps every version of both branches, in version order, highest first, so each line's versions stay together and the branch keeps its own line's number on top: `dev` reads 0.5.2, 0.5.1, 0.5.0, 0.4.18, 0.4.17.
+
+**Where the beta suffix lives.** The build's own version is numeric (`<AssemblyVersion>` can't carry letters), so `CHANGELOG.md`, `QA-CHECKLIST.md` and the build say 0.4.17. The suffix is on the published `staging` image's version tag, in the version the beta server shows and posts (its version card for the version it runs, System → Status, and the logo's hover text) and in the promotion pull request. The Image workflow builds staging's image with it (`REQUESTARR_RELEASE_VERSION`) and records each publish as a git tag on the commit, `v0.4.17-beta.1`. The next number is one more than the highest tag on the line; a commit that already has one (a re-run) keeps it. `promote-staging` reads the same tags (`git ls-remote --tags`, no login) to say which beta version it will publish. Staging's earlier plain version tags stay as they are.
+
+**Worked example.**
+
+| Step | dev | qa | staging | production |
+|---|---|---|---|---|
+| Today | 0.4.17 | 0.4.17 | 0.3.4 | |
+| Three pull requests into `dev` | 0.5.0, 0.5.1, 0.5.2 | 0.4.17 | 0.3.4 | |
+| "QA passed": promote 0.4.17 to staging | 0.5.2 | 0.4.17 | 0.4.17-beta.1 | |
+| A fix found in QA, merged back | 0.5.2 (with 0.4.18 below) | 0.4.18 | 0.4.17-beta.1 | |
+| "QA passed": promote 0.4.18 to staging | 0.5.2 | 0.4.18 | 0.4.18-beta.2 | |
+| A fix found in staging, merged back | 0.5.2 (with 0.4.19 below) | 0.4.19 | 0.4.19-beta.3 | |
+| "Ship it" | 0.5.2 | 0.4.19 | 0.4.19-beta.3 | 0.4.19 |
+| "Promote to QA" (dev's 0.5.2), then a pull request into `dev` | 0.6.0 | 0.5.2 | 0.4.19-beta.3 | 0.4.19 |
 
 ## QA checklist
 
@@ -114,36 +141,38 @@ Four branches, each with its own environment.
 
 `dev` is the repository's default branch, so Dependabot's pull requests (security fixes included) land there and move up like any other change (see [Dependency updates](#dependency-updates)). All four branches have the same rules on GitHub (one ruleset): a pull request is required, `build` must pass, no force push, no deletion, nobody bypasses.
 
-**A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Bump the version above `dev`'s, `qa`'s and `staging`'s (the Changelog check says so if it isn't).
+**A change.** Branch from `dev`, open the pull request into `dev`, merge it after `build` passes. Take `dev`'s next version ([Versions](#versions); `./release.sh next-version` prints it, and the Changelog check says so if it's wrong).
 
 **Promote to QA** (only when the owner says "promote to QA", or names a version):
 
 ```bash
 ./release.sh promote-qa 0.2.3 'the owner: "promote 0.2.3 to QA"'
+./release.sh promote-qa 0.2.3 'a dry run' --dry-run
 ```
 
-It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`. Work on `dev` carries on meanwhile.
+QA takes `dev`'s current version as it is, so "promote to QA" means `dev`'s top version; the script says what the next pull request into `dev` will be (the next minor). `--dry-run` prints the commits and versions that would move, and the version `dev` goes on to, and changes nothing. It takes a version (the newest `dev` commit with that version on top of `CHANGELOG.md`) or a commit, and refuses anything that isn't on `dev`, or that `qa` can't move to without losing a commit. It opens a pull request into `qa` whose description says who asked, in their words (`Requested by: …`), and lists the versions and commits moving. The Promotion record check fails a promotion without that line, and the pull request stays as the record. Claude Code works with the owner's GitHub account, so GitHub can't tell the owner's approval from Claude Code's; the rule is that Claude Code promotes only on the owner's word, and the record says whose. Once `build` passes, `qa` is fast-forwarded to exactly that commit: the same commits as on `dev`, nothing newer, no merge commit. GitHub marks the pull request merged. Then `.\docker\dev.ps1 reset-qa` (or `docker/dev.sh reset-qa`) so the QA stack runs `qa`. Work on `dev` carries on meanwhile.
 
 **Promote to staging** (when the QA gate is clear, checked at the start of every goal, or when the owner says so). First run the full suite and every live check, and report them ("Testing scope" in the workspace rules: nothing reaches staging without this). Then:
 
 ```bash
 ./release.sh promote-staging 0.3.0 'the QA checklist, completed by <admin>'
 ./release.sh promote-staging 0.3.0 'the owner: "promote it anyway"' --owner-override 'the owner: "promote it anyway"'
+./release.sh promote-staging 0.3.0 'a dry run' --dry-run
 ```
 
 Without `--owner-override`, it runs the QA gate ([QA checklist](#qa-checklist)) and refuses unless it's clear; the pull request records the checklist and who completed it, or the owner's override.
 
-The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:`, then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/runemarklabs/requestarr:staging` and `:0.3.0`. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
+The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:` and the beta version it publishes (`Published to staging as: 0.3.0-beta.1`), then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/runemarklabs/requestarr:staging` and `:0.3.0-beta.1` and tags the commit `v0.3.0-beta.1` ([Versions](#versions)). `--dry-run` prints the versions that would move, the beta version and the QA gate's verdict, and changes nothing. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
 
-**Ship it** (staging to `main`, only on the owner's "ship it"): not scripted yet. It will be the same shape, and the push to `main` publishes the version tags and `latest`.
+**Ship it** (staging to `main`, only on the owner's "ship it"): not scripted yet. It will be the same shape: a pull request into `main` with `Requested by:`, then a fast-forward of `main` to exactly `staging`'s commit. No new number and no changelog change: `main`'s top version is staging's (0.3.0), the beta suffix dropped. The push to `main` publishes `:0.3.0`, `:0.3` and `latest`, built from that same commit without the beta version, so production shows 0.3.0; the commit is tagged `v0.3.0`.
 
-**A fix found in QA or staging.** Branch from that branch (`qa` or `staging`) and open a pull request into it with only the fix, versioned above all of `dev`, `qa` and `staging`. After it merges, in the same task, merge it back down:
+**A fix found in QA or staging.** Branch from that branch (`qa` or `staging`) and open a pull request into it with only the fix, versioned as the next free patch on that branch's own line (`./release.sh next-version qa` or `next-version staging`; [Versions](#versions)). After it merges, in the same task, merge it back down:
 
 ```bash
 ./release.sh merge-back
 ```
 
-It merges `staging` into `qa` (if `staging` has anything `qa` doesn't), then `qa` into `dev`, each through a pull request merged once `build` passes, and runs the drift check. If two branches conflict (usually `CHANGELOG.md` and the version, when the branch below has moved on), it says how: on a branch from the lower one named `merge-back/…`, merge the upper one, keep every changelog section with the highest version on top, and keep the higher version. Then `.\docker\dev.ps1 up` updates the QA stack, keeping its data. A fix into `staging` publishes a new `staging` image on its own.
+It merges `staging` into `qa` (if `staging` has anything `qa` doesn't), then `qa` into `dev`, each through a pull request merged once `build` passes, and runs the drift check. When the branch below has moved on, `CHANGELOG.md`, `QA-CHECKLIST.md` and the version conflict; it merges them itself on a branch from the lower one named `merge-back/…`: every version of both, in version order, highest first, and the build version is the changelog's top (the lower branch's own line). Any other conflict it leaves to you, saying how. Then `.\docker\dev.ps1 up` updates the QA stack, keeping its data. A fix into `staging` publishes a new `staging` image on its own.
 
 **Drift.** `dev` must always contain every commit on `qa`, and `qa` every commit on `staging`:
 
@@ -160,7 +189,7 @@ It lists any commit a lower branch is missing and fails; the Drift workflow runs
 
 | When | Tags |
 |---|---|
-| a push to `staging` (a promotion, or a fix into `staging`) | `staging`, and the exact version (`0.3.0`) |
+| a push to `staging` (a promotion, or a fix into `staging`) | `staging`, and the beta version (`0.3.0-beta.1`, [Versions](#versions)); the commit is tagged `v0.3.0-beta.1`. Before 0.5.0, staging was tagged with the plain version, and those tags stay |
 | a push to `main` (a release) | the version (`0.3.0`), `0.3` and `latest` |
 | Actions → Image → Run workflow on any branch, with a tag starting `test-` | that tag only, to try the workflow (delete it afterwards from the package's page) |
 
@@ -172,7 +201,7 @@ The "what's new" posts in `#requestarr-admin` (both sections) and `#requestarr-a
 
 | Environment | Shows | How it knows |
 |---|---|---|
-| production, staging | every version, each posted once, oldest first, never removed. A new install's first start posts the full history. | It records the versions it has posted. If its data is lost but the channels are kept, it finds its posts in the channels and doesn't repeat them. |
+| production, staging | every version, each posted once, oldest first, never removed. A new install's first start posts the full history. Staging's card for the version it runs shows its beta version (`Requestarr 0.3.0-beta.1 · …`); cards already posted keep their words. | It records the versions it has posted. If its data is lost but the channels are kept, it finds its posts in the channels and doesn't repeat them. |
 | QA | every version in QA that staging doesn't have yet; versions drop off when they're promoted, and a reset rebuilds the list instead of wiping it | Staging has what was last published for it. When the QA stack is built, `docker/staged-versions.py` asks GitHub (its public record, no login) which commit the newest successful Image workflow run on `staging` published, reads the versions in that commit's changelog, and the scripts pass them as `REQUESTARR_STAGED_VERSIONS`. Before anything is published for staging that's nothing, so QA shows every version; offline, it falls back to the `staging` branch. After a promotion to staging, once its image is published, `dev.ps1 up` refreshes them. |
 | dev | only the version running now; a new version replaces the previous post | |
 
@@ -196,7 +225,7 @@ So each kind sends at most one pull request a week for its patch and minor updat
 **What happens to them** (`.github/workflows/dependency-updates.yml`, `.github/dependency_updates.py`):
 
 - A new update is sorted. Patch and minor get the **automatic update** label. Major updates, and updates Dependabot can't size, get **needs review** and a comment, and wait. A security fix follows the same rule by size, and also gets **security**. It gets **for admins** too when the fix is in something Requestarr ships: the backend, the base images, or a web app package the built app contains (followed through `yarn.lock` from `dependencies`, not `devDependencies`).
-- Automatic updates go one at a time, oldest first. The workflow brings the update up to date with `dev`, adds the next version above `dev`'s, `qa`'s and `staging`'s to `src/Directory.Build.props` and `CHANGELOG.md` (in a commit made through GitHub's API, which GitHub signs: `dev`'s rules ask for an extra approval for changes they can't attribute, and a commit the workflow pushed with git is unsigned), starts `build` on that commit, and turns on GitHub's auto-merge. The workflow waits for that `build`, then merges the update if it passed (the full build: backend tests on Linux and Windows, the web app, the image, the secret scan and the Changelog check) and starts on the next one.
+- Automatic updates go one at a time, oldest first. The workflow brings the update up to date with `dev`, adds `dev`'s next version ([Versions](#versions): the next patch, or the next minor after a promotion to QA) to `src/Directory.Build.props` and `CHANGELOG.md` (in a commit made through GitHub's API, which GitHub signs: `dev`'s rules ask for an extra approval for changes they can't attribute, and a commit the workflow pushed with git is unsigned), starts `build` on that commit, and turns on GitHub's auto-merge. The workflow waits for that `build`, then merges the update if it passed (the full build: backend tests on Linux and Windows, the web app, the image, the secret scan and the Changelog check) and starts on the next one.
 - The changelog section is the version heading only, which the changelog rule allows for a change nobody would notice. A security fix labelled **for admins** gets one line under For admins: "**Security update:** parts Requestarr is built from were updated to fix known security problems, so update when you can."
 - If an automatic update conflicts with `dev` (other than the version and changelog, which it rewrites), can't be pushed, or fails `build`, it is moved to **needs review** with a comment.
 - The workflow runs when an update opens or changes, when `dev` moves, and every hour as a fallback (GitHub can run scheduled workflows late or skip them). It waits for the builds it starts itself, because GitHub starts no workflow when they finish or when auto-merge it turned on merges.

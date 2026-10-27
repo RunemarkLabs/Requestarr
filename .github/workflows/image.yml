@@ -1,7 +1,8 @@
 name: Image
 
 # Publishes Requestarr's container image to GitHub's container registry (docs/development.md#published-images):
-#   push to staging (a promotion, or a fix into staging): ghcr.io/runemarklabs/requestarr:staging and :x.y.z
+#   push to staging (a promotion, or a fix into staging): ghcr.io/runemarklabs/requestarr:staging and :x.y.z-beta.N,
+#     and the commit is tagged vx.y.z-beta.N: N counts the line's (x.y) publishes to staging (docs/development.md#versions)
 #   push to main (a release, only on the owner's "ship it"):  :x.y.z, :x.y and :latest
 #   Run workflow on any branch with a tag starting "test-": that tag only, for trying the workflow (delete it after).
 # Two architectures: linux/amd64 (most home servers and NAS boxes) and linux/arm64 (Raspberry Pi 4 and 5, ARM NAS
@@ -15,8 +16,9 @@ on:
         description: A test tag to publish this branch under, starting "test-" (nothing else is tagged)
         required: true
 
+# contents: write only to record each staging publish as a vx.y.z-beta.N tag.
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -47,8 +49,13 @@ jobs:
             echo "::error::The build's version ($version) and CHANGELOG.md's top version ($top) must match."
             exit 1
           fi
+          release="$version"
           case "$EVENT:$BRANCH" in
-            push:staging) tags="$IMAGE:staging,$IMAGE:$version" ;;
+            push:staging)
+              # The beta number this commit already has (a re-run), or one more than its line's highest.
+              release=$(git ls-remote --tags origin | python3 .github/version_rules.py beta "$version" "$GITHUB_SHA")
+              tags="$IMAGE:staging,$IMAGE:$release"
+              ;;
             push:main) tags="$IMAGE:$version,$IMAGE:${version%.*},$IMAGE:latest" ;;
             workflow_dispatch:*)
               if ! [[ "$TEST_TAG" =~ ^test-[a-z0-9.-]+$ ]]; then
@@ -63,9 +70,11 @@ jobs:
               ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "beta=$([ "$release" != "$version" ] && echo "$release")" >> "$GITHUB_OUTPUT"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "first=${tags%%,*}" >> "$GITHUB_OUTPUT"
-          echo "Publishing version $version as: $tags"
+          echo "Publishing version $release as: $tags"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -84,16 +93,32 @@ jobs:
           push: true
           provenance: false
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            RELEASE_VERSION=${{ steps.tags.outputs.beta }}
           labels: |
             org.opencontainers.image.title=Requestarr
             org.opencontainers.image.description=Discord requests for Sonarr and Radarr, with per-user access, approvals and removal votes.
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=GPL-3.0-only
-            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.release }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
           cache-from: type=gha,scope=image
           cache-to: type=gha,scope=image,mode=max
+
+      # The record the next beta number is counted from (and what promote-staging reads): a tag on this commit.
+      - name: Record the beta publish
+        if: steps.tags.outputs.beta != ''
+        env:
+          BETA: ${{ steps.tags.outputs.beta }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$BETA" >/dev/null; then
+            echo "v$BETA is already recorded (a re-run of this publish)."
+          else
+            git tag "v$BETA" "$GITHUB_SHA"
+            git push origin "refs/tags/v$BETA"
+          fi
+          echo "Beta version: \`$BETA\` (tag \`v$BETA\`)" >> "$GITHUB_STEP_SUMMARY"
 
       # Each platform's image, as published: no file that could hold secrets, no secret-looking environment variable or
       # build step, and it starts and answers on its port.

@@ -4,7 +4,7 @@ name: Dependency updates
 # work). A new update is labelled: patch and minor "automatic update", major "needs review" (held, with a comment).
 # Automatic updates go one at a time: the next version and its changelog section are added, build is started on that
 # commit and waited for, then the update is merged (or held if build failed) and the next one starts. It also runs when
-# dev moves and every hour, so a waiting update always carries a version above dev's, qa's and staging's.
+# dev moves and every hour, so a waiting update always carries dev's next version (docs/development.md#versions).
 on:
   pull_request:
     types: [opened, reopened, synchronize]

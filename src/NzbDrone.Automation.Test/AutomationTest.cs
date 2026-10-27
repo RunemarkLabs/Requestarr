@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using FluentAssertions;
 using NLog;
@@ -69,7 +70,7 @@ namespace NzbDrone.Automation.Test
             try
             {
                 var image = (driver as ITakesScreenshot).GetScreenshot();
-                image.SaveAsFile($"./{name}_test_screenshot.png", ScreenshotImageFormat.Png);
+                File.WriteAllBytes($"./{name}_test_screenshot.png", image.AsByteArray);
             }
             catch (Exception ex)
             {

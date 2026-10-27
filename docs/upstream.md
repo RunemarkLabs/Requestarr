@@ -33,6 +33,7 @@ The Prowlarr domain:
 - their API controllers, frontend pages, store slices, and tests
 - Prowlarr's 44 migrations, replaced by one initial migration (`001_initial_setup.cs`). It holds the Servarr infrastructure tables in their final upstream shape plus the Requestarr data model.
 - calls to Servarr-hosted services: Sentry error reporting (backend and frontend), the update and notification service, the system-time check, and Piwik. Requestarr reports no updates until it has its own release feed.
+- the root packaging scripts `build.sh`, `test.sh` and `docs.sh` (2026-10-27). Requestarr builds with `dotnet` and its Dockerfile, runs tests with `dotnet test`, and publishes Docker images only, so nothing used them; they still targeted older SDKs and a macOS package folder Requestarr doesn't have. An upstream change to them doesn't apply: keep them deleted.
 
 ## Renames
 
@@ -55,7 +56,7 @@ Small upstream-file changes worth knowing when merging:
 
 On 2026-10-19, Requestarr moved from net8.0 to net10.0 because .NET 8 support ends 2026-11-10. Upstream Prowlarr was still on net8.0 at the import commit. Expect these differences when merging upstream changes:
 
-- Every `TargetFrameworks` is `net10.0` (`net10.0-windows` for the tray app), and `build.sh` packages `net10.0`. Keep Requestarr's value when an upstream hunk touches these lines.
+- Every `TargetFrameworks` is `net10.0` (`net10.0-windows` for the tray app). Keep Requestarr's value when an upstream hunk touches these lines.
 - `global.json` targets SDK 10.0.100 with `rollForward: latestFeature`.
 - Microsoft.* and System.* packages are on 10.0.x. These references were removed because .NET 10 includes them in the framework (NU1510): System.Text.Json, System.Text.Encoding.CodePages, System.Resources.Extensions, System.Private.Uri, System.Runtime.Loader, System.Security.Principal.Windows. Drop them again if an upstream change re-adds them.
 - APIs obsolete in .NET 10 were replaced:

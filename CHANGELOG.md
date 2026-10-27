@@ -6,7 +6,16 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
-## 0.4.18 (2026-10-26)
+## 0.5.2 (2026-10-27)
+
+## 0.5.1 (2026-10-27)
+
+## 0.5.0 (2026-10-26)
+
+### For admins
+- **Reading a version number:** the last number goes up with every change, the middle one each time a new round of testing on the QA server begins, and the first one only for an upgrade you'll have to do something for, which its notes then say.
+- **Beta versions:** the beta server shows and announces its version with "beta" and a count after it, such as 0.5.0-beta.2, and the count goes up with each new beta build of that release; the release itself has the plain number.
+- **Version on the logo:** point at the logo at the top of the web app to see which version you're running.
 
 ## 0.4.17 (2026-10-26)
 
