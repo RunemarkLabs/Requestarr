@@ -207,3 +207,6 @@ deploy/staging/.previous-version
 
 # Python bytecode from the helper scripts
 __pycache__/
+
+# Claude Code agent worktrees (local only)
+.claude/worktrees/
