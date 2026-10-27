@@ -70,41 +70,57 @@ namespace Requestarr.Core.Discord.Handlers
                     await Back(responder, request, user, asAdmin);
                     return;
 
-                case RequestRoutes.AddConfirm:
-                {
-                    var add = RequestCards.DecodeSeasons(args.ElementAtOrDefault(1));
-                    var actor = Actor(interaction, user);
-
-                    if (asAdmin && caller.InFeedChannel)
-                    {
-                        // The service reposts the feed card at the bottom; the outcome goes to the admin privately.
-                        await responder.DeferAsync(ephemeral: true);
-                        var result = await _requests.AddSeasonsAsync(request.Id, user, true, actor, add);
-                        await responder.FollowupAsync(new InteractionReply { Content = DiscordLimits.Truncate(result.Message, DiscordLimits.MessageLength), Ephemeral = true });
-
-                        if (!result.Success)
-                        {
-                            await _feed.PostAsync(_requests.Find(request.Id));
-                        }
-
-                        return;
-                    }
-
-                    await responder.DeferAsync();
-                    var outcome = await _requests.AddSeasonsAsync(request.Id, user, asAdmin, actor, add);
-                    var updated = _requests.Find(request.Id);
-
-                    await responder.EditAsync(await _requests.StatusReplyForAsync(updated, user, outcome.Success ? DiscordText.SeasonsAddedNote(DiscordText.AddedSeasons((add?.Seasons ?? new List<int>()).Except(request.Seasons).ToList(), (add?.Future ?? false) && !request.MonitorFutureSeasons)) : null));
-
-                    if (!outcome.Success)
-                    {
-                        await responder.FollowupAsync(new InteractionReply { Content = outcome.Message, Ephemeral = true });
-                    }
-
+                case RequestRoutes.AddConfirm when asAdmin && caller.InFeedChannel:
+                    await AddFromFeedCard(interaction, responder, request, user);
                     return;
-                }
-            }
 
+                case RequestRoutes.AddConfirm:
+                    await AddFromMessage(interaction, responder, request, user, asAdmin);
+                    return;
+
+                default:
+                    await ShowPicker(interaction, responder, request);
+                    return;
+            }
+        }
+
+        // The service reposts the feed card at the bottom; the outcome goes to the admin privately.
+        private async Task AddFromFeedCard(DiscordInteraction interaction, IInteractionResponder responder, Request request, RequestarrUser user)
+        {
+            var add = RequestCards.DecodeSeasons(interaction.CustomIdArgs.ElementAtOrDefault(1));
+
+            await responder.DeferAsync(ephemeral: true);
+            var result = await _requests.AddSeasonsAsync(request.Id, user, true, Actor(interaction, user), add);
+            await responder.FollowupAsync(new InteractionReply { Content = DiscordLimits.Truncate(result.Message, DiscordLimits.MessageLength), Ephemeral = true });
+
+            if (!result.Success)
+            {
+                await _feed.PostAsync(_requests.Find(request.Id));
+            }
+        }
+
+        // The request message shows the request as it is now, noting what was added.
+        private async Task AddFromMessage(DiscordInteraction interaction, IInteractionResponder responder, Request request, RequestarrUser user, bool asAdmin)
+        {
+            var add = RequestCards.DecodeSeasons(interaction.CustomIdArgs.ElementAtOrDefault(1));
+
+            await responder.DeferAsync();
+            var outcome = await _requests.AddSeasonsAsync(request.Id, user, asAdmin, Actor(interaction, user), add);
+            var updated = _requests.Find(request.Id);
+            var added = DiscordText.AddedSeasons((add?.Seasons ?? new List<int>()).Except(request.Seasons).ToList(), (add?.Future ?? false) && !request.MonitorFutureSeasons);
+
+            await responder.EditAsync(await _requests.StatusReplyForAsync(updated, user, outcome.Success ? DiscordText.SeasonsAddedNote(added) : null));
+
+            if (!outcome.Success)
+            {
+                await responder.FollowupAsync(new InteractionReply { Content = outcome.Message, Ephemeral = true });
+            }
+        }
+
+        // The picker: opened at its first page, paged through, or with a page's menu picked; the
+        // picks ride along in the custom ID ({id}:{page}:{picks}).
+        private async Task ShowPicker(DiscordInteraction interaction, IInteractionResponder responder, Request request)
+        {
             var item = await _requests.ItemForAsync(request);
 
             if (item == null)
@@ -113,6 +129,7 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
+            var args = interaction.CustomIdArgs;
             var page = int.TryParse(args.ElementAtOrDefault(1), out var p) ? p : 0;
             var picks = RequestCards.DecodeSeasons(args.ElementAtOrDefault(2));
 

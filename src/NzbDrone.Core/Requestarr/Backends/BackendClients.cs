@@ -418,9 +418,15 @@ namespace Requestarr.Core.Backends
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
-        protected static DateTime? Date(Newtonsoft.Json.Linq.JToken token) =>
-            token != null && token.Type == Newtonsoft.Json.Linq.JTokenType.Date ? ((DateTime)token).ToUniversalTime()
-            : DateTime.TryParse(Text(token), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
+        protected static DateTime? Date(Newtonsoft.Json.Linq.JToken token)
+        {
+            if (token != null && token.Type == Newtonsoft.Json.Linq.JTokenType.Date)
+            {
+                return ((DateTime)token).ToUniversalTime();
+            }
+
+            return DateTime.TryParse(Text(token), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
+        }
 
         protected static List<string> Genres(Newtonsoft.Json.Linq.JObject json) =>
             json["genres"]?.Select(g => (string)g).Where(g => !string.IsNullOrWhiteSpace(g)).ToList() ?? new List<string>();
@@ -432,12 +438,16 @@ namespace Requestarr.Core.Backends
 
         private class StatusResource
         {
+            [Newtonsoft.Json.JsonProperty]
             public string AppName { get; set; }
+
+            [Newtonsoft.Json.JsonProperty]
             public string Version { get; set; }
         }
 
         private class RootFolderResource
         {
+            [Newtonsoft.Json.JsonProperty]
             public string Path { get; set; }
         }
 
