@@ -15,18 +15,14 @@ namespace Requestarr.Core.Discord.Handlers
         private readonly ICallerResolver _callers;
         private readonly IRequestService _requests;
         private readonly IUserManagementService _users;
-        private readonly IRequestarrUserRepository _userStore;
-        private readonly IUserMediaAccessRepository _access;
         private readonly IMediaServerConnections _mediaServers;
 
-        public PanelHandler(ICallerResolver callers, IRequestService requests, IUserManagementService users, IRequestarrUserRepository userStore, IUserMediaAccessRepository access, IMediaServerConnections mediaServers)
+        public PanelHandler(ICallerResolver callers, IRequestService requests, IUserManagementService users, IMediaServerConnections mediaServers)
         {
             _mediaServers = mediaServers;
             _callers = callers;
             _requests = requests;
             _users = users;
-            _userStore = userStore;
-            _access = access;
         }
 
         public IEnumerable<(InteractionKind Kind, string Route)> Routes => new[]
