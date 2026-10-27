@@ -125,6 +125,10 @@ namespace Requestarr.Core.Test.Welcome
             access = Mocker.Resolve<AccessRequestService>();
             Mocker.SetConstant<IAccessRequestService>(access);
             var announcements = Mocker.Resolve<AnnouncementService>();
+
+            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news.
+            var withNews = Changelog.Parse(announcements.ChangelogText()).Where(v => v.HasNews).Max(v => v.Version);
+            announcements.CurrentVersion = () => withNews;
             Mocker.SetConstant<IAnnouncementService>(announcements);
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());
             Mocker.SetConstant<IRequestService>(Mocker.Resolve<RequestService>());
@@ -342,7 +346,7 @@ namespace Requestarr.Core.Test.Welcome
                 }
 
                 cards.Should().NotBeEmpty();
-                var read = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{VersionCardRoutes.ReadChanges}:a:{Changelog.Release(NzbDrone.Common.EnvironmentInfo.BuildInfo.Version)}")));
+                var read = await Send(dispatcher, AsOwner(FakeInteraction.Button($"{VersionCardRoutes.ReadChanges}:a:{withNews}")));
                 Log($"[cards] Read changes (private: {read.LastReply.Ephemeral}): {read.LastReply.Cards.Count} card(s), first \"{read.LastReply.Cards.FirstOrDefault()?.Text.Split('\n')[0]}\"");
                 read.LastReply.Ephemeral.Should().BeTrue();
 

@@ -140,6 +140,9 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
             var http = Mocker.Resolve<IHttpClient>();
 
+            // The dev server's feed keeps other checks' cards, so this check counts only the cards posted while it runs.
+            var startedAt = DateTimeOffset.UtcNow;
+
             try
             {
                 await host.StartAsync(settings.Current);
@@ -242,7 +245,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 (await userChannel.GetMessageAsync(movieMessage)).Should().BeNull("the old message was deleted when it was reposted");
                 (await userChannel.GetMessageAsync(tvMessage)).Should().BeNull();
 
-                var cards = await LogFeed(host, feedChannel, "after the poll found them");
+                var cards = (await LogFeed(host, feedChannel, "after the poll found them")).Where(c => c.Timestamp >= startedAt).ToList();
                 cards.Should().HaveCount(2, "one card per request");
                 cards.Should().OnlyContain(c => c.Embeds.First().Description.StartsWith(DiscordText.FinalReady));
                 Log($"[audit] {string.Join("; ", Mocker.Resolve<IAuditRepository>().All().Where(a => a.Action.StartsWith("request.")).Select(a => $"{a.Action} #{a.TargetId}"))}");

@@ -107,15 +107,19 @@ namespace Requestarr.Core.Discord.Handlers
             await responder.DeferAsync();
             var outcome = await _requests.AddSeasonsAsync(request.Id, user, asAdmin, Actor(interaction, user), add);
             var updated = _requests.Find(request.Id);
-            var added = DiscordText.AddedSeasons((add?.Seasons ?? new List<int>()).Except(request.Seasons).ToList(), (add?.Future ?? false) && !request.MonitorFutureSeasons);
+            var note = outcome.Success ? DiscordText.SeasonsAddedNote(AddedSeasons(add, request)) : null;
 
-            await responder.EditAsync(await _requests.StatusReplyForAsync(updated, user, outcome.Success ? DiscordText.SeasonsAddedNote(added) : null));
+            await responder.EditAsync(await _requests.StatusReplyForAsync(updated, user, note));
 
             if (!outcome.Success)
             {
                 await responder.FollowupAsync(new InteractionReply { Content = outcome.Message, Ephemeral = true });
             }
         }
+
+        // What the add brought that the request didn't already have.
+        private static string AddedSeasons(SeasonChoice add, Request request) =>
+            DiscordText.AddedSeasons((add?.Seasons ?? new List<int>()).Except(request.Seasons).ToList(), (add?.Future ?? false) && !request.MonitorFutureSeasons);
 
         // The picker: opened at its first page, paged through, or with a page's menu picked; the
         // picks ride along in the custom ID ({id}:{page}:{picks}).

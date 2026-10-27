@@ -134,6 +134,10 @@ namespace Requestarr.Core.Test.Announcements
             // The dev server keeps only the version running now (task 4d), as the dev stack does.
             Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? "dev" : null });
             var announcements = Mocker.Resolve<AnnouncementService>();
+
+            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news.
+            var withNews = Changelog.Parse(announcements.ChangelogText()).Where(v => v.HasNews).Max(v => v.Version);
+            announcements.CurrentVersion = () => withNews;
             Mocker.SetConstant<IAnnouncementService>(announcements);
             var monitor = Mocker.Resolve<ConnectionMonitor>();
             monitor.AlertAfter = ShortAlert;
@@ -216,9 +220,11 @@ namespace Requestarr.Core.Test.Announcements
                 var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
-                var next = new Version(current.Major, current.Minor, current.Build + 1);
-                announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
+                // The simulated upgrade is to a version above every shipped one, so it can't collide with a real one.
                 var shipped = announcements.ChangelogText();
+                var newest = Changelog.Parse(shipped).Max(v => v.Version);
+                var next = new Version(newest.Major, newest.Minor, newest.Build + 1);
+                announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
                 announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
