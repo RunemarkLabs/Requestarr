@@ -32,8 +32,6 @@ namespace Requestarr.Core.Test.AdminConsole
 
         private static string[] Labels(InteractionReply reply) => reply.Buttons.Select(b => b.Label).ToArray();
 
-        private static string[] Menus(InteractionReply reply) => new[] { reply.SelectMenu }.Concat(reply.MoreMenus).Where(m => m != null).Select(m => m.CustomId.Split(':')[0]).ToArray();
-
         // Member cards, per member state.
         [Test]
         public async Task someone_not_added_gets_only_add()

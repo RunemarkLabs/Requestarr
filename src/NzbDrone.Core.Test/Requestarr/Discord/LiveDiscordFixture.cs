@@ -247,9 +247,9 @@ namespace Requestarr.Core.Test.Discord
 
                 foreach (var o in overwrites)
                 {
-                    var name = o.TargetType == OverwriteTarget.Role
-                        ? (o.TargetId == guild.Id ? "@everyone" : restGuild.GetRole(o.TargetId)?.Name ?? o.TargetId.ToString())
-                        : $"member {(o.TargetId == host.Client.CurrentUser.Id ? "(bot) " : string.Empty)}{o.TargetId}";
+                    var role = o.TargetId == guild.Id ? "@everyone" : restGuild.GetRole(o.TargetId)?.Name ?? o.TargetId.ToString();
+                    var bot = o.TargetId == host.Client.CurrentUser.Id ? "(bot) " : string.Empty;
+                    var name = o.TargetType == OverwriteTarget.Role ? role : $"member {bot}{o.TargetId}";
                     Log($"[permissions] {name,-28} allow=[{o.Allow}] deny=[{o.Deny}]");
                 }
 

@@ -150,7 +150,11 @@ namespace Requestarr.Core.Test.Welcome
                 var adminGroup = channels.OfType<ICategoryChannel>().Single(c => c.Name == ChannelLayout.AdminCategoryName);
                 var usersGroup = channels.OfType<ICategoryChannel>().Single(c => c.Name == ChannelLayout.UsersCategoryName);
                 string Overwrites(IGuildChannel c) => string.Join("; ", c.PermissionOverwrites.Select(o => $"{Name(o.TargetId)} allow[{string.Join(",", o.Permissions.ToAllowList())}] deny[{string.Join(",", o.Permissions.ToDenyList())}]"));
-                string Name(ulong id) => id == guild.Id ? "@everyone" : rest.GetRole(id)?.Name ?? (id == host.Client.CurrentUser.Id ? "the bot" : id.ToString());
+                string Name(ulong id) => id switch
+                {
+                    _ when id == guild.Id => "@everyone",
+                    _ => rest.GetRole(id)?.Name ?? (id == host.Client.CurrentUser.Id ? "the bot" : id.ToString())
+                };
                 INestedChannel Text(string name) => channels.OfType<INestedChannel>().Single(c => c.Name == name);
 
                 Log($"[groups] {adminGroup.Name}: {Overwrites(adminGroup)}");
@@ -352,7 +356,8 @@ namespace Requestarr.Core.Test.Welcome
                 // 8. The version card sits right above the one admin panel.
                 await Task.Delay(TimeSpan.FromSeconds(4));
                 var latest = (await adminRest.GetMessagesAsync(3).FlattenAsync()).OrderByDescending(m => m.Id).ToList();
-                string Describe(IMessage m) => m.Id.ToString() == guildSetup.GetConfig().AdminPanelMessageId ? "the panel" : $"{m.Type} by {(m.Author.Id == host.Client.CurrentUser.Id ? "the bot" : m.Author.Username)}: \"{(m.Embeds.FirstOrDefault()?.Title ?? m.Content).Split('\n')[0]}\"";
+                string Author(IMessage m) => m.Author.Id == host.Client.CurrentUser.Id ? "the bot" : m.Author.Username;
+                string Describe(IMessage m) => m.Id.ToString() == guildSetup.GetConfig().AdminPanelMessageId ? "the panel" : $"{m.Type} by {Author(m)}: \"{(m.Embeds.FirstOrDefault()?.Title ?? m.Content).Split('\n')[0]}\"";
                 Log($"[cards] newest in #{ChannelLayout.AdminChannelName}, newest first: {string.Join(" / ", latest.Select(Describe))}");
                 latest[0].Id.ToString().Should().Be(guildSetup.GetConfig().AdminPanelMessageId);
 

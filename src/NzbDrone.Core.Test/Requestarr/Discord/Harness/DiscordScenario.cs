@@ -360,10 +360,13 @@ namespace Requestarr.Core.Test.Discord.Harness
         {
             var config = Config;
             var id = channel.Id.ToString();
-            var stored = id == config.AdminChannelId ? config.AdminPanelMessageId
-                : id == config.WelcomeChannelId ? config.WelcomeMessageId
-                : id == config.BlockedChannelId ? config.BlockedMessageId
-                : Mocker.Resolve<IRequestarrUserRepository>().FindByChannel(id)?.PanelMessageId;
+            var stored = id switch
+            {
+                _ when id == config.AdminChannelId => config.AdminPanelMessageId,
+                _ when id == config.WelcomeChannelId => config.WelcomeMessageId,
+                _ when id == config.BlockedChannelId => config.BlockedMessageId,
+                _ => Mocker.Resolve<IRequestarrUserRepository>().FindByChannel(id)?.PanelMessageId
+            };
 
             return ulong.TryParse(stored, out var panel) && channel.MessageIds.Contains(panel) ? panel : null;
         }

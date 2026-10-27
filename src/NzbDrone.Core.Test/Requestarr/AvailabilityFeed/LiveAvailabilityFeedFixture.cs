@@ -154,9 +154,22 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 var feedRest = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(feedChannel);
                 var adminRest = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
                 Log($"[feed] #{feedRest.Name} topic=\"{feedRest.Topic}\" category={feedRest.CategoryId?.ToString() ?? "none"} (admin channel category {adminRest.CategoryId?.ToString() ?? "none"})");
+                string Target(ulong id) => id switch
+                {
+                    _ when id == guild.Id => "@everyone",
+                    _ when id == guildSetup.AdminRoleId => "admin role",
+                    _ when id == host.Client.CurrentUser.Id => "bot",
+                    _ => id.ToString()
+                };
                 foreach (var o in feedRest.PermissionOverwrites)
                 {
-                    Log($"[feed]   overwrite {o.TargetType} {(o.TargetId == guild.Id ? "@everyone" : o.TargetId == guildSetup.AdminRoleId ? "admin role" : o.TargetId == host.Client.CurrentUser.Id ? "bot" : o.TargetId.ToString())}: view {(o.Permissions.ViewChannel == global::Discord.PermValue.Allow ? "allow" : o.Permissions.ViewChannel == global::Discord.PermValue.Deny ? "deny" : "inherit")}");
+                    var view = o.Permissions.ViewChannel switch
+                    {
+                        global::Discord.PermValue.Allow => "allow",
+                        global::Discord.PermValue.Deny => "deny",
+                        _ => "inherit"
+                    };
+                    Log($"[feed]   overwrite {o.TargetType} {Target(o.TargetId)}: view {view}");
                 }
 
                 feedRest.Name.Should().Be(ChannelLayout.FeedChannelName);
