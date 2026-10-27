@@ -17,27 +17,33 @@ namespace Requestarr.Core.Discord
         public bool InOwnChannel { get; init; }
 
         // Text to send back when the caller may not run an admin command here; null when allowed.
-        public string AdminDenial =>
-            !RightServer ? DiscordText.WrongServer :
-            !IsAdmin ? DiscordText.AdminOnly :
-            !InAdminChannel ? DiscordText.AdminChannelOnly :
-            null;
+        public string AdminDenial => this switch
+        {
+            { RightServer: false } => DiscordText.WrongServer,
+            { IsAdmin: false } => DiscordText.AdminOnly,
+            { InAdminChannel: false } => DiscordText.AdminChannelOnly,
+            _ => null
+        };
 
         // Buttons on admin cards: the admin channel or the admin feed.
-        public string AdminButtonDenial =>
-            !RightServer ? DiscordText.WrongServer :
-            !IsAdmin ? DiscordText.AdminOnly :
-            !InAdminChannel && !InFeedChannel ? DiscordText.AdminChannelOnly :
-            null;
+        public string AdminButtonDenial => this switch
+        {
+            { RightServer: false } => DiscordText.WrongServer,
+            { IsAdmin: false } => DiscordText.AdminOnly,
+            { InAdminChannel: false, InFeedChannel: false } => DiscordText.AdminChannelOnly,
+            _ => null
+        };
 
         // Same for a user command in the caller's own channel.
-        public string UserDenial =>
-            !RightServer ? DiscordText.WrongServer :
-            IsAdmin && InAdminChannel ? DiscordText.AdminUseUserCommand :
-            User == null || User.Status == UserStatus.Removed ? DiscordText.NotAUser :
-            User.Status == UserStatus.Suspended ? DiscordText.Suspended :
-            !InOwnChannel ? DiscordText.OwnChannelOnly :
-            null;
+        public string UserDenial => this switch
+        {
+            { RightServer: false } => DiscordText.WrongServer,
+            { IsAdmin: true, InAdminChannel: true } => DiscordText.AdminUseUserCommand,
+            { User: null } or { User.Status: UserStatus.Removed } => DiscordText.NotAUser,
+            { User.Status: UserStatus.Suspended } => DiscordText.Suspended,
+            { InOwnChannel: false } => DiscordText.OwnChannelOnly,
+            _ => null
+        };
     }
 
     public interface ICallerResolver

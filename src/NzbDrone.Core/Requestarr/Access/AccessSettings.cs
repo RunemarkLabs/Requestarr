@@ -5,8 +5,8 @@ using Requestarr.Core.Provisioning;
 namespace Requestarr.Core.Access
 {
     // Access requests from the welcome channel: how long someone waits after a denial before asking again, and the
-    // spam guard's numbers. Kept in Requestarr's settings (the admin web portal reads and changes them there);
-    // provisioning sets the ones it names on every start.
+    // spam guard's numbers. Kept in Requestarr's settings, where the admin web portal reads and changes them.
+    // Provisioning sets the ones it names on every start.
     public interface IAccessSettings
     {
         int DenialCooldownDays { get; }

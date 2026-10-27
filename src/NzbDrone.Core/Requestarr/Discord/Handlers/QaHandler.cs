@@ -39,86 +39,85 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var args = interaction.CustomIdArgs;
-
-            switch (interaction.Route)
+            await (interaction.Route switch
             {
-                case QaRoutes.Check:
-                {
-                    var key = args.ElementAtOrDefault(1);
+                QaRoutes.Check => CheckAsync(interaction, responder, caller.IsAdmin),
+                QaRoutes.Report => OpenReportAsync(interaction, responder, null, limited: true),
+                QaRoutes.Part => responder.ShowModalAsync(ReportForm(interaction)),
+                QaRoutes.Form => SubmitAsync(interaction, responder, caller.IsAdmin),
+                _ => Task.CompletedTask
+            });
+        }
 
-                    if (!caller.IsAdmin)
-                    {
-                        await responder.Ephemeral(QaText.AdminsOnly);
-                        return;
-                    }
+        private async Task CheckAsync(DiscordInteraction interaction, IInteractionResponder responder, bool isAdmin)
+        {
+            var args = interaction.CustomIdArgs;
+            var key = args.ElementAtOrDefault(1);
 
-                    if (key == null || _checklist.Find(key) is not { } entry)
-                    {
-                        await responder.Ephemeral(QaText.ItemGone);
-                        return;
-                    }
-
-                    // An admin working through the checklist isn't held to the members' report limit.
-                    if (args.ElementAtOrDefault(0) == "fail")
-                    {
-                        await OpenReportAsync(interaction, responder, entry, limited: false);
-                        return;
-                    }
-
-                    // The card itself shows the pass (who and when), so the press needs no reply of its own. The card
-                    // can't be edited into a plain message anyway: Discord keeps a card a card.
-                    await responder.DeferAsync();
-                    await _checklist.MarkPassedAsync(key, interaction.UserId, interaction.DisplayName);
-                    return;
-                }
-
-                case QaRoutes.Report:
-                    await OpenReportAsync(interaction, responder, null, limited: true);
-                    return;
-
-                case QaRoutes.Part:
-                {
-                    var component = interaction.Values.Count > 0 ? interaction.Values[0] : "other";
-                    var key = args.ElementAtOrDefault(0);
-
-                    await responder.ShowModalAsync(new InteractionModal
-                    {
-                        CustomId = $"{QaRoutes.Form}:{component}{(string.IsNullOrEmpty(key) ? string.Empty : ":" + key)}",
-                        Title = QaText.FormTitle,
-                        Fields = new List<InteractionTextField>
-                        {
-                            new(QaRoutes.WhatField, QaText.WhatLabel, Required: true, MaxLength: BugReportService.FieldLength),
-                            new(QaRoutes.ExpectedField, QaText.ExpectedLabel, Required: false, MaxLength: BugReportService.FieldLength)
-                        }
-                    });
-                    return;
-                }
-
-                case QaRoutes.Form:
-                {
-                    interaction.Fields.TryGetValue(QaRoutes.WhatField, out var what);
-                    interaction.Fields.TryGetValue(QaRoutes.ExpectedField, out var expected);
-
-                    var key = args.ElementAtOrDefault(1);
-                    var fromChecklist = key != null && caller.IsAdmin;
-
-                    // The private menu becomes the answer, so no new private message lands above the report's card.
-                    await responder.UpdateMessageAsync(new InteractionReply { Content = QaText.Sending, Ephemeral = true });
-                    var result = await _reports.SubmitAsync(interaction.UserId, interaction.DisplayName, args.ElementAtOrDefault(0), what, expected, key, limited: !fromChecklist);
-
-                    // From the bug reports channel the new card is the answer, and the private menu goes: it replies to
-                    // the Report a problem panel, which moves below the card and would leave it pointing at nothing.
-                    if (result.Report != null && key == null)
-                    {
-                        await responder.DeleteOriginalAsync();
-                        return;
-                    }
-
-                    await responder.EditAsync(new InteractionReply { Content = result.Message, Ephemeral = true });
-                    return;
-                }
+            if (!isAdmin)
+            {
+                await responder.Ephemeral(QaText.AdminsOnly);
+                return;
             }
+
+            if (key == null || _checklist.Find(key) is not { } entry)
+            {
+                await responder.Ephemeral(QaText.ItemGone);
+                return;
+            }
+
+            // An admin working through the checklist isn't held to the members' report limit.
+            if (args.ElementAtOrDefault(0) == "fail")
+            {
+                await OpenReportAsync(interaction, responder, entry, limited: false);
+                return;
+            }
+
+            // The card itself shows the pass (who and when), so the press needs no reply of its own. The card
+            // can't be edited into a plain message anyway: Discord keeps a card a card.
+            await responder.DeferAsync();
+            await _checklist.MarkPassedAsync(key, interaction.UserId, interaction.DisplayName);
+        }
+
+        private static InteractionModal ReportForm(DiscordInteraction interaction)
+        {
+            var component = interaction.Values.Count > 0 ? interaction.Values[0] : "other";
+            var key = interaction.CustomIdArgs.ElementAtOrDefault(0);
+
+            return new InteractionModal
+            {
+                CustomId = $"{QaRoutes.Form}:{component}{(string.IsNullOrEmpty(key) ? string.Empty : ":" + key)}",
+                Title = QaText.FormTitle,
+                Fields = new List<InteractionTextField>
+                {
+                    new(QaRoutes.WhatField, QaText.WhatLabel, Required: true, MaxLength: BugReportService.FieldLength),
+                    new(QaRoutes.ExpectedField, QaText.ExpectedLabel, Required: false, MaxLength: BugReportService.FieldLength)
+                }
+            };
+        }
+
+        private async Task SubmitAsync(DiscordInteraction interaction, IInteractionResponder responder, bool isAdmin)
+        {
+            var args = interaction.CustomIdArgs;
+            interaction.Fields.TryGetValue(QaRoutes.WhatField, out var what);
+            interaction.Fields.TryGetValue(QaRoutes.ExpectedField, out var expected);
+
+            var key = args.ElementAtOrDefault(1);
+            var fromChecklist = key != null && isAdmin;
+
+            // The private menu becomes the answer, so no new private message lands above the report's card.
+            await responder.UpdateMessageAsync(new InteractionReply { Content = QaText.Sending, Ephemeral = true });
+            var result = await _reports.SubmitAsync(interaction.UserId, interaction.DisplayName, args.ElementAtOrDefault(0), what, expected, key, limited: !fromChecklist);
+
+            // From the bug reports channel the new card is the answer, and the private menu goes: it replies to
+            // the Report a problem panel, which moves below the card and would leave it pointing at nothing.
+            if (result.Report != null && key == null)
+            {
+                await responder.DeleteOriginalAsync();
+                return;
+            }
+
+            await responder.EditAsync(new InteractionReply { Content = result.Message, Ephemeral = true });
         }
 
         // The part menu, privately, saying first whether the report becomes public; or how long to wait.

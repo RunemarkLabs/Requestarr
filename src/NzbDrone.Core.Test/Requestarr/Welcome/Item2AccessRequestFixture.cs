@@ -14,7 +14,7 @@ namespace Requestarr.Core.Test.Welcome
 {
     // Task 4e items 2 and 3: the welcome message says what Requestarr is and has Request access (and a button per
     // connected media server, none today). A request goes to the admin as a card and an /admin requests item; the
-    // admin approves with real access levels (the person is added exactly as from the panel) or denies with a reason;
+    // admin approves with real access levels (the person is added exactly as from the panel) or denies with a reason, and
     // the person hears privately. One open request; after a denial, a cooldown.
     [TestFixture]
     public class Item2AccessRequestFixture : WelcomeScenario

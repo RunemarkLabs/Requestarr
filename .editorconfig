@@ -281,3 +281,63 @@ trim_trailing_whitespace = true
 insert_final_newline = true
 indent_style = space
 indent_size = 2
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Requestarr additions. Everything above is upstream (Prowlarr) and stays as it is, so upstream merges stay easy.
+# The clean-code checks below apply to Requestarr's own code only: its Requestarr folders, its migrations, and the few
+# files it added beside inherited ones. Inherited code keeps upstream's settings. Warnings fail the build here
+# (TreatWarningsAsErrors). Limits are in src/SonarLint.xml; reasons in docs/development.md#clean-code.
+# A file Requestarr adds outside a Requestarr folder is added to this list in the same pull request.
+# ---------------------------------------------------------------------------------------------------------------------
+[{src/**/Requestarr/**.cs,src/NzbDrone.Core/Datastore/Migration/*.cs,src/Requestarr.Http/Qa/**.cs,src/Requestarr.Http/Webhooks/**.cs,src/Requestarr.Http/Frontend/Mappers/VersionLogo.cs,src/Requestarr.Http/Frontend/Mappers/VersionLogoMapper.cs,src/Requestarr.Http/Frontend/Mappers/WebIcons.cs,src/NzbDrone.Common/Exceptions/RequestarrStartupException.cs,src/Requestarr.Api.V1.Test/Frontend/VersionLogoFixture.cs,src/NzbDrone.Common.Test/ExtensionTests/StringExtensionTests/ForLogFixture.cs}]
+
+# Unused code: private members, members written but never read, parameters, locals, private fields.
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+dotnet_diagnostic.CA1823.severity = warning
+dotnet_diagnostic.S1144.severity = warning
+dotnet_diagnostic.S1172.severity = warning
+dotnet_diagnostic.S1481.severity = warning
+dotnet_diagnostic.S4487.severity = warning
+
+# Commented-out code.
+dotnet_diagnostic.S125.severity = warning
+
+# One thing per method: cognitive complexity 15, 60 lines, nesting 4 deep (SonarLint.xml).
+dotnet_diagnostic.S3776.severity = warning
+dotnet_diagnostic.S138.severity = warning
+dotnet_diagnostic.S134.severity = warning
+
+# No nested ternaries, no copy-pasted branches or methods.
+dotnet_diagnostic.S3358.severity = warning
+dotnet_diagnostic.S1871.severity = warning
+dotnet_diagnostic.S4144.severity = warning
+
+# Names: _camelCase private instance fields (upstream defines the style but no rule), PascalCase constants and
+# static fields.
+dotnet_naming_symbols.requestarr_private_fields.applicable_kinds = field
+dotnet_naming_symbols.requestarr_private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.requestarr_constants.applicable_kinds = field
+dotnet_naming_symbols.requestarr_constants.applicable_accessibilities = *
+dotnet_naming_symbols.requestarr_constants.required_modifiers = const
+dotnet_naming_symbols.requestarr_static_fields.applicable_kinds = field
+dotnet_naming_symbols.requestarr_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.requestarr_static_fields.required_modifiers = static
+dotnet_naming_style.requestarr_pascal.capitalization = pascal_case
+dotnet_naming_rule.requestarr_constants_pascal.symbols = requestarr_constants
+dotnet_naming_rule.requestarr_constants_pascal.style = requestarr_pascal
+dotnet_naming_rule.requestarr_constants_pascal.severity = warning
+dotnet_naming_rule.requestarr_static_fields_pascal.symbols = requestarr_static_fields
+dotnet_naming_rule.requestarr_static_fields_pascal.style = requestarr_pascal
+dotnet_naming_rule.requestarr_static_fields_pascal.severity = warning
+dotnet_naming_rule.requestarr_private_fields_underscore.symbols = requestarr_private_fields
+dotnet_naming_rule.requestarr_private_fields_underscore.style = instance_field_style
+dotnet_naming_rule.requestarr_private_fields_underscore.severity = warning
+dotnet_diagnostic.IDE1006.severity = warning
+
+# Tests and migrations read top to bottom: a test scenario is the steps a person takes, a migration is the schema.
+# Splitting them to meet the size and complexity limits would hide those steps, so only those two limits don't apply.
+[{src/*Test/**.cs,src/NzbDrone.Core/Datastore/Migration/*.cs}]
+dotnet_diagnostic.S3776.severity = none
+dotnet_diagnostic.S138.severity = none

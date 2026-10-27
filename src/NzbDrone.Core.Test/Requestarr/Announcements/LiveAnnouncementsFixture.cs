@@ -30,7 +30,7 @@ using Requestarr.Core.Users;
 namespace Requestarr.Core.Test.Announcements
 {
     // Live (task 3d): the real bot in the Discord test server with the dev stack's TEST Radarr and Sonarr.
-    // Reads back the announcements channel, its permissions and the members role on a real member;
+    // Reads back the announcements channel, its permissions and the members role on a real member, then
     // posts what's new for the current version and for a simulated upgrade; stops the test Sonarr past
     // shortened thresholds, presses Announce to users and reads back the notice, then starts it again
     // and reads back the recovery notice. Never runs in CI (ManualTest). Needs the stack's Requestarr
@@ -134,6 +134,10 @@ namespace Requestarr.Core.Test.Announcements
             // The dev server keeps only the version running now (task 4d), as the dev stack does.
             Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? "dev" : null });
             var announcements = Mocker.Resolve<AnnouncementService>();
+
+            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news.
+            var withNews = Changelog.Parse(announcements.ChangelogText()).Where(v => v.HasNews).Max(v => v.Version);
+            announcements.CurrentVersion = () => withNews;
             Mocker.SetConstant<IAnnouncementService>(announcements);
             var monitor = Mocker.Resolve<ConnectionMonitor>();
             monitor.AlertAfter = ShortAlert;
@@ -159,7 +163,12 @@ namespace Requestarr.Core.Test.Announcements
                 var adminRest = (IMessageChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
                 FakeInteraction AsOwner(FakeInteraction i) => i.By(guild.OwnerId, "owner").InGuild(guild.Id).InChannel(adminChannel);
                 var restGuild = await host.Client.Rest.GetGuildAsync(guild.Id);
-                string Name(ulong id) => id == guild.Id ? "@everyone" : id == host.Client.CurrentUser.Id ? "the bot" : restGuild.GetRole(id)?.Name ?? id.ToString();
+                string Name(ulong id) => id switch
+                {
+                    _ when id == guild.Id => "@everyone",
+                    _ when id == host.Client.CurrentUser.Id => "the bot",
+                    _ => restGuild.GetRole(id)?.Name ?? id.ToString()
+                };
 
                 // 1. The channel and its permissions, read back from Discord.
                 var membersRole = guildSetup.MembersRoleId.Value;
@@ -211,9 +220,11 @@ namespace Requestarr.Core.Test.Announcements
                 var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
-                var next = new Version(current.Major, current.Minor, current.Build + 1);
-                announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
+                // The simulated upgrade is to a version above every shipped one, so it can't collide with a real one.
                 var shipped = announcements.ChangelogText();
+                var newest = Changelog.Parse(shipped).Max(v => v.Version);
+                var next = new Version(newest.Major, newest.Minor, newest.Build + 1);
+                announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
                 announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
@@ -322,24 +333,8 @@ namespace Requestarr.Core.Test.Announcements
             return output;
         }
 
-        private static Task<InteractionRun> Press(InteractionDispatcher dispatcher, Func<FakeInteraction, FakeInteraction> asOwner, InteractionReply card, string label) =>
-            Send(dispatcher, asOwner(FakeInteraction.Button(card.Buttons.Single(b => b.Label == label).CustomId)));
-
-        private static void LogCard(string tag, InteractionReply card) =>
-            Log($"[{tag}] {card.Content.Replace("\n", " | ")}{(card.Embeds?.Count > 0 ? $" embed=\"{card.Embeds[0].Title}\"" : string.Empty)} buttons=[{string.Join("] [", card.Buttons.Select(b => b.Label))}]");
-
         private static List<string> Buttons(IMessage message) =>
             message.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.Label).ToList();
-
-        // Posts the request's message as the bot (as /request leaves it), then presses Request on it.
-        private static async Task RequestInRealMessage(InteractionDispatcher dispatcher, IDiscordGuildGateway gateway, ulong guild, ulong channel, ulong user, int tmdbId)
-        {
-            var message = await gateway.SendMessageAsync(channel, new InteractionReply { Content = $"🎬 **Movies request** · details (tmdb:{tmdbId})" });
-            var responder = new RecordingResponder(null, channel, message, false);
-            await dispatcher.DispatchAsync(FakeInteraction.Button($"req-make:movie:{tmdbId}").By(user).InGuild(guild).InChannel(channel).OnMessage(message).Build(), responder);
-            await gateway.EditMessageAsync(channel, message, responder.LastReply);
-            Log($"[request] tmdb:{tmdbId} -> {responder.LastReply.Content.Replace("\n", " | ")}");
-        }
 
         private static async Task<InteractionRun> Send(InteractionDispatcher dispatcher, FakeInteraction interaction)
         {

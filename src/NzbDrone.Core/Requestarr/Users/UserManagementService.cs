@@ -124,6 +124,45 @@ namespace Requestarr.Core.Users
                 return ServiceResult.Fail(DiscordText.RoleLimit);
             }
 
+            if (await GiveRoleAndChannelAsync(discordUserId, member, user) is not { } discord)
+            {
+                return ServiceResult.Fail(DiscordText.AddFailed);
+            }
+
+            var (roleId, channelId) = discord;
+            var now = DateTime.UtcNow;
+            user ??= new RequestarrUser { Added = now };
+            user.DisplayName = member.DisplayName;
+            user.Status = UserStatus.Active;
+            user.StatusChanged = now;
+            user.DiscordRoleId = roleId.ToString();
+            user.PrivateChannelId = channelId.ToString();
+            _users.Upsert(user);
+
+            identity ??= new UserIdentity { Provider = UserIdentity.DiscordProvider, ExternalId = discordUserId.ToString(), Linked = now };
+            identity.UserId = user.Id;
+            identity.Username = member.Username;
+            identity.DisplayName = member.DisplayName;
+            identity.AvatarUrl = member.AvatarUrl;
+            _identities.Upsert(identity);
+
+            var rows = SaveAccess(user.Id, access);
+
+            // The pinned panel is the welcome: one message, kept in step with the user's access.
+            await _panels.RefreshUserPanelAsync(user);
+
+            var accessSummary = string.Join(", ", rows.Where(r => ContentTypes.IsOffered(r.ContentType)).Select(r => $"{r.ContentType}={r.State}"));
+            _audit.Record(actor, "user.add", "user", user.Id.ToString(), $"discord {discordUserId}, role {roleId}, channel {channelId}, access {accessSummary}");
+
+            return ServiceResult.Ok(DiscordText.UserAdded(member.DisplayName, channelId, rows));
+        }
+
+        // The member's role and private channel in Discord, or null when a step failed (anything this created is then
+        // rolled back). Someone who was here before gets their role and their one channel back (kept, with its
+        // messages, when they were removed), found by ID or else by name, so nothing is ever duplicated (a restart
+        // with a new database, a reset).
+        private async Task<(ulong Role, ulong Channel)?> GiveRoleAndChannelAsync(ulong discordUserId, GuildMember member, RequestarrUser user)
+        {
             ulong? roleId = null;
             ulong? channelId = null;
             var createdRole = false;
@@ -131,9 +170,6 @@ namespace Requestarr.Core.Users
 
             try
             {
-                // Someone who was here before gets their role and their one channel back (kept, with its messages, when
-                // they were removed), found by ID or else by name, so nothing is ever duplicated (a restart with a new
-                // database, a reset).
                 var roleName = ChannelLayout.UserRoleName(member.Username);
                 roleId = ulong.TryParse(user?.DiscordRoleId, out var storedRole) && await _gateway.RoleExistsAsync(storedRole) ? storedRole : await _gateway.FindRoleAsync(roleName);
 
@@ -160,40 +196,16 @@ namespace Requestarr.Core.Users
                 {
                     await ReopenChannelAsync(channelId.Value, name, overwrites);
                 }
+
+                return (roleId.Value, channelId.Value);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Adding Discord member {0} failed, rolling back", discordUserId);
                 await RollBack(createdRole ? roleId : null, createdChannel ? channelId : null);
 
-                return ServiceResult.Fail(DiscordText.AddFailed);
+                return null;
             }
-
-            var now = DateTime.UtcNow;
-            user ??= new RequestarrUser { Added = now };
-            user.DisplayName = member.DisplayName;
-            user.Status = UserStatus.Active;
-            user.StatusChanged = now;
-            user.DiscordRoleId = roleId.ToString();
-            user.PrivateChannelId = channelId.ToString();
-            _users.Upsert(user);
-
-            identity ??= new UserIdentity { Provider = UserIdentity.DiscordProvider, ExternalId = discordUserId.ToString(), Linked = now };
-            identity.UserId = user.Id;
-            identity.Username = member.Username;
-            identity.DisplayName = member.DisplayName;
-            identity.AvatarUrl = member.AvatarUrl;
-            _identities.Upsert(identity);
-
-            var rows = SaveAccess(user.Id, access);
-
-            // The pinned panel is the welcome: one message, kept in step with the user's access.
-            await _panels.RefreshUserPanelAsync(user);
-
-            var accessSummary = string.Join(", ", rows.Where(r => ContentTypes.IsOffered(r.ContentType)).Select(r => $"{r.ContentType}={r.State}"));
-            _audit.Record(actor, "user.add", "user", user.Id.ToString(), $"discord {discordUserId}, role {roleId}, channel {channelId}, access {accessSummary}");
-
-            return ServiceResult.Ok(DiscordText.UserAdded(member.DisplayName, channelId.Value, rows));
         }
 
         public async Task<ServiceResult> RemoveAsync(ulong discordUserId, Actor actor)

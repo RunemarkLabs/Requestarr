@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Requestarr.Core.Access;
+using Requestarr.Core.Audit;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.Users;
 
@@ -50,17 +51,7 @@ namespace Requestarr.Core.Discord.Handlers
 
             if (interaction.Route == AccessRoutes.Unblock)
             {
-                var member = ulong.TryParse(args.ElementAtOrDefault(0), out var id) ? id : 0;
-                var result = await _access.UnblockAsync(member, actor);
-
-                if (result.Success)
-                {
-                    // The block notice (or the member card) shows the outcome instead, without the button.
-                    await responder.UpdateMessageAsync(new InteractionReply { Content = result.Message });
-                    return;
-                }
-
-                await responder.Ephemeral(result.Message);
+                await UnblockAsync(interaction, responder, actor);
                 return;
             }
 
@@ -78,56 +69,71 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            switch (interaction.Route)
+            await (interaction.Route switch
             {
                 // A private chooser: one menu per type, starting from what they asked for.
-                case AccessRoutes.Approve:
-                {
-                    var levels = ContentTypes.Offered.ToDictionary(t => t, t => request.ContentTypes.Contains(t) ? AccessState.NeedsApproval : AccessState.Off);
-                    await responder.RespondAsync(Chooser(request, levels));
-                    return;
-                }
-
-                case AccessRoutes.Level:
-                {
-                    var levels = Decode(args.ElementAtOrDefault(1));
-
-                    if (HandlerSupport.ParseType(args.ElementAtOrDefault(2)) is { } type && HandlerSupport.ParseLevel(interaction.Values.Count > 0 ? interaction.Values[0] : null) is { } level)
-                    {
-                        levels[type] = level;
-                    }
-
-                    await responder.UpdateMessageAsync(Chooser(request, levels));
-                    return;
-                }
-
-                case AccessRoutes.Confirm:
-                {
-                    await responder.DeferAsync();
-                    var result = await _access.ApproveAsync(request.Id, Decode(args.ElementAtOrDefault(1)), actor, adminName);
-                    await responder.EditAsync(new InteractionReply { Content = result.Message });
-                    return;
-                }
-
-                case AccessRoutes.Deny:
-                    await responder.ShowModalAsync(new InteractionModal
-                    {
-                        CustomId = $"{AccessRoutes.DenyForm}:{request.Id}",
-                        Title = DiscordText.DenyReasonTitle,
-                        Fields = new List<InteractionTextField> { new(AccessRoutes.ReasonField, DiscordText.DenyAccessReasonLabel, Required: false) }
-                    });
-                    return;
-
-                case AccessRoutes.DenyForm:
-                {
-                    interaction.Fields.TryGetValue(AccessRoutes.ReasonField, out var reason);
-                    await responder.DeferAsync(ephemeral: true);
-                    var result = await _access.DenyAsync(request.Id, reason, actor, adminName);
-                    await responder.Ephemeral(result.Message);
-                    return;
-                }
-            }
+                AccessRoutes.Approve => responder.RespondAsync(Chooser(request, AskedLevels(request))),
+                AccessRoutes.Level => responder.UpdateMessageAsync(Chooser(request, ChosenLevels(interaction))),
+                AccessRoutes.Confirm => ApproveAsync(responder, request, Decode(args.ElementAtOrDefault(1)), actor, adminName),
+                AccessRoutes.Deny => responder.ShowModalAsync(DenyForm(request)),
+                AccessRoutes.DenyForm => DenyAsync(interaction, responder, request, actor, adminName),
+                _ => Task.CompletedTask
+            });
         }
+
+        private async Task UnblockAsync(DiscordInteraction interaction, IInteractionResponder responder, Actor actor)
+        {
+            var member = ulong.TryParse(interaction.CustomIdArgs.ElementAtOrDefault(0), out var id) ? id : 0;
+            var result = await _access.UnblockAsync(member, actor);
+
+            if (result.Success)
+            {
+                // The block notice (or the member card) shows the outcome instead, without the button.
+                await responder.UpdateMessageAsync(new InteractionReply { Content = result.Message });
+                return;
+            }
+
+            await responder.Ephemeral(result.Message);
+        }
+
+        private async Task ApproveAsync(IInteractionResponder responder, AccessRequest request, IDictionary<ContentType, AccessState> levels, Actor actor, string adminName)
+        {
+            await responder.DeferAsync();
+            var result = await _access.ApproveAsync(request.Id, levels, actor, adminName);
+            await responder.EditAsync(new InteractionReply { Content = result.Message });
+        }
+
+        private async Task DenyAsync(DiscordInteraction interaction, IInteractionResponder responder, AccessRequest request, Actor actor, string adminName)
+        {
+            interaction.Fields.TryGetValue(AccessRoutes.ReasonField, out var reason);
+            await responder.DeferAsync(ephemeral: true);
+            var result = await _access.DenyAsync(request.Id, reason, actor, adminName);
+            await responder.Ephemeral(result.Message);
+        }
+
+        private static Dictionary<ContentType, AccessState> AskedLevels(AccessRequest request) =>
+            ContentTypes.Offered.ToDictionary(t => t, t => request.ContentTypes.Contains(t) ? AccessState.NeedsApproval : AccessState.Off);
+
+        // The levels the chooser carries, with the one its menu just changed.
+        private static Dictionary<ContentType, AccessState> ChosenLevels(DiscordInteraction interaction)
+        {
+            var args = interaction.CustomIdArgs;
+            var levels = Decode(args.ElementAtOrDefault(1));
+
+            if (HandlerSupport.ParseType(args.ElementAtOrDefault(2)) is { } type && HandlerSupport.ParseLevel(interaction.Values.Count > 0 ? interaction.Values[0] : null) is { } level)
+            {
+                levels[type] = level;
+            }
+
+            return levels;
+        }
+
+        private static InteractionModal DenyForm(AccessRequest request) => new()
+        {
+            CustomId = $"{AccessRoutes.DenyForm}:{request.Id}",
+            Title = DiscordText.DenyReasonTitle,
+            Fields = new List<InteractionTextField> { new(AccessRoutes.ReasonField, DiscordText.DenyAccessReasonLabel, Required: false) }
+        };
 
         private static InteractionReply Chooser(AccessRequest request, IDictionary<ContentType, AccessState> levels)
         {

@@ -256,8 +256,18 @@ namespace Requestarr.Core.Qa
             return new InteractionReply
             {
                 Quiet = true,
-                Cards = { new InteractionCard { Color = failing > 0 ? QaText.FailingColor : last != null ? QaText.PassedColor : QaText.ChecklistColor, Text = QaText.Summary(Versions().Select(v => v.Version).ToList(), entries.Count, passed, failing, last?.ByName, last?.At) } }
+                Cards = { new InteractionCard { Color = SummaryColor(failing, complete: last != null), Text = QaText.Summary(Versions().Select(v => v.Version).ToList(), entries.Count, passed, failing, last?.ByName, last?.At) } }
             };
+        }
+
+        private static uint SummaryColor(int failing, bool complete)
+        {
+            if (failing > 0)
+            {
+                return QaText.FailingColor;
+            }
+
+            return complete ? QaText.PassedColor : QaText.ChecklistColor;
         }
 
         private InteractionReply ItemCard(QaChecklistEntry entry, QaChecklistItem record)

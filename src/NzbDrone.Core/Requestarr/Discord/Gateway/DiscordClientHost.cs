@@ -369,19 +369,30 @@ namespace Requestarr.Core.Discord.Gateway
             var member = interaction.User as SocketGuildUser;
             var roles = member?.Roles.Select(r => r.Id).ToList() ?? new List<ulong>();
 
-            DiscordInteraction Base(InteractionKind kind, string command, string customId, Dictionary<string, object> options, IReadOnlyList<string> values) => new()
+            // Who and where are the same for every kind; the rest is what that kind carries.
+            DiscordInteraction Base(InteractionKind kind,
+                                    string command = null,
+                                    string customId = null,
+                                    Dictionary<string, object> options = null,
+                                    IReadOnlyList<string> values = null,
+                                    IReadOnlyDictionary<string, string> fields = null,
+                                    string focusedOption = null,
+                                    ulong? messageId = null) => new()
             {
                 Kind = kind,
                 CommandName = command,
                 CustomId = customId,
                 Options = options ?? new Dictionary<string, object>(),
+                FocusedOption = focusedOption,
                 Values = values ?? new List<string>(),
+                Fields = fields ?? new Dictionary<string, string>(),
                 UserId = interaction.User.Id,
                 Username = interaction.User.Username,
                 DisplayName = member?.DisplayName ?? interaction.User.GlobalName ?? interaction.User.Username,
                 RoleIds = roles,
                 GuildId = interaction.GuildId ?? 0,
-                ChannelId = interaction.ChannelId ?? 0
+                ChannelId = interaction.ChannelId ?? 0,
+                MessageId = messageId
             };
 
             switch (interaction)
@@ -391,64 +402,25 @@ namespace Requestarr.Core.Discord.Gateway
                     var path = new List<string> { command.Data.Name };
                     var options = new Dictionary<string, object>();
                     Flatten(command.Data.Options, path, options);
-                    return Base(InteractionKind.SlashCommand, string.Join(' ', path), null, options, null);
+                    return Base(InteractionKind.SlashCommand, command: string.Join(' ', path), options: options);
                 }
 
                 case SocketMessageComponent component:
                 {
                     var kind = component.Data.Type == ComponentType.Button ? InteractionKind.Button : InteractionKind.SelectMenu;
-                    var mapped = Base(kind, null, component.Data.CustomId, null, component.Data.Values?.ToList());
-                    return new DiscordInteraction
-                    {
-                        Kind = mapped.Kind,
-                        CustomId = mapped.CustomId,
-                        Values = mapped.Values,
-                        UserId = mapped.UserId,
-                        Username = mapped.Username,
-                        DisplayName = mapped.DisplayName,
-                        RoleIds = mapped.RoleIds,
-                        GuildId = mapped.GuildId,
-                        ChannelId = mapped.ChannelId,
-                        MessageId = component.Message?.Id
-                    };
+                    return Base(kind, customId: component.Data.CustomId, values: component.Data.Values?.ToList(), messageId: component.Message?.Id);
                 }
 
                 case SocketAutocompleteInteraction autocomplete:
                 {
                     var options = autocomplete.Data.Options.ToDictionary(o => o.Name, o => o.Value);
-                    var mapped = Base(InteractionKind.Autocomplete, autocomplete.Data.CommandName, null, options, null);
-                    return new DiscordInteraction
-                    {
-                        Kind = mapped.Kind,
-                        CommandName = mapped.CommandName,
-                        Options = mapped.Options,
-                        FocusedOption = autocomplete.Data.Current?.Name,
-                        UserId = mapped.UserId,
-                        Username = mapped.Username,
-                        DisplayName = mapped.DisplayName,
-                        RoleIds = mapped.RoleIds,
-                        GuildId = mapped.GuildId,
-                        ChannelId = mapped.ChannelId
-                    };
+                    return Base(InteractionKind.Autocomplete, command: autocomplete.Data.CommandName, options: options, focusedOption: autocomplete.Data.Current?.Name);
                 }
 
                 case SocketModal modal:
                 {
                     var fields = modal.Data.Components.ToDictionary(c => c.CustomId, c => c.Value);
-                    var mapped = Base(InteractionKind.ModalSubmit, null, modal.Data.CustomId, null, null);
-                    return new DiscordInteraction
-                    {
-                        Kind = mapped.Kind,
-                        CustomId = mapped.CustomId,
-                        Fields = fields,
-                        UserId = mapped.UserId,
-                        Username = mapped.Username,
-                        DisplayName = mapped.DisplayName,
-                        RoleIds = mapped.RoleIds,
-                        GuildId = mapped.GuildId,
-                        ChannelId = mapped.ChannelId,
-                        MessageId = modal.Message?.Id
-                    };
+                    return Base(InteractionKind.ModalSubmit, customId: modal.Data.CustomId, fields: fields, messageId: modal.Message?.Id);
                 }
 
                 default:

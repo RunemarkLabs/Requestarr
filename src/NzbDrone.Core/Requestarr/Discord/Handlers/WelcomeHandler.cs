@@ -44,107 +44,109 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var args = interaction.CustomIdArgs;
-
-            switch (interaction.Route)
+            await (interaction.Route switch
             {
-                case WelcomeRoutes.Request:
-                {
-                    var answer = await _access.ClickAsync(interaction.UserId, caller.IsAdmin);
+                WelcomeRoutes.Request => RequestAccessAsync(interaction, responder),
+                WelcomeRoutes.Types => PickAsync(interaction, responder),
+                WelcomeRoutes.Continue => ContinueAsync(interaction, responder),
+                WelcomeRoutes.Form => SubmitAsync(interaction, responder, caller.IsAdmin),
+                WelcomeRoutes.Media => RequestMediaAsync(interaction, responder),
+                WelcomeRoutes.MediaForm => SubmitMediaAsync(interaction, responder),
+                _ => Task.CompletedTask
+            });
+        }
 
-                    if (!answer.OpenForm)
-                    {
-                        await responder.Ephemeral(answer.Message);
-                        return;
-                    }
+        private async Task RequestAccessAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            var answer = await _access.ClickAsync(interaction.UserId);
 
-                    // Nothing to pick from: straight to the note.
-                    if (!_access.OfferedTypes().Any() && !_mediaServers.Connected().Any())
-                    {
-                        await responder.ShowModalAsync(Form(Array.Empty<ContentType>(), null, fromWelcome: true));
-                        return;
-                    }
-
-                    await responder.RespondAsync(FormMessage(Array.Empty<ContentType>(), null, true));
-                    return;
-                }
-
-                case WelcomeRoutes.Types:
-                {
-                    var types = interaction.Values.Select(HandlerSupport.ParseType).Where(t => t.HasValue).Select(t => t.Value).ToList();
-                    var media = interaction.Values.Select(v => v.StartsWith("media:") ? ParseProvider(v.Substring(6)) : null).FirstOrDefault(p => p.HasValue);
-                    await responder.UpdateMessageAsync(FormMessage(types, media, true));
-                    return;
-                }
-
-                case WelcomeRoutes.Continue:
-                {
-                    var (types, media) = Parse(args);
-                    await responder.ShowModalAsync(Form(types, media, fromWelcome: false));
-                    return;
-                }
-
-                case WelcomeRoutes.Form:
-                {
-                    var (types, media) = Parse(args);
-                    interaction.Fields.TryGetValue(WelcomeRoutes.NoteField, out var note);
-                    interaction.Fields.TryGetValue(WelcomeRoutes.UsernameField, out var username);
-
-                    await responder.DeferAsync(ephemeral: true);
-                    var result = await _access.SubmitAsync(interaction.UserId, interaction.Username, interaction.DisplayName, types, note, media, username, caller.IsAdmin);
-
-                    // From the private form: the form becomes the answer. Opened straight from the welcome message
-                    // (nothing to pick): a private answer, and the welcome message stays as it is.
-                    if (args.ElementAtOrDefault(2) == "f")
-                    {
-                        await responder.EditAsync(new InteractionReply { Content = result.Message, Ephemeral = true });
-                    }
-                    else
-                    {
-                        await responder.Ephemeral(result.Message);
-                    }
-
-                    return;
-                }
-
-                case WelcomeRoutes.Media:
-                {
-                    if (ParseProvider(args.ElementAtOrDefault(0)) is not { } provider || !_mediaServers.IsConnected(provider))
-                    {
-                        await responder.Ephemeral(DiscordText.MediaServerNotConnected(ParseProvider(args.ElementAtOrDefault(0)) ?? MediaServerProvider.Plex));
-                        return;
-                    }
-
-                    var answer = await _access.ClickAsync(interaction.UserId, caller.IsAdmin, provider);
-
-                    if (!answer.OpenForm)
-                    {
-                        await responder.Ephemeral(answer.Message);
-                        return;
-                    }
-
-                    await responder.ShowModalAsync(new InteractionModal
-                    {
-                        CustomId = $"{WelcomeRoutes.MediaForm}:{Key(provider)}",
-                        Title = DiscordText.MediaFormTitle(provider),
-                        Fields = new List<InteractionTextField> { new(WelcomeRoutes.UsernameField, DiscordText.MediaUsernameLabel(provider), Required: true, MaxLength: 100, Paragraph: false) }
-                    });
-                    return;
-                }
-
-                case WelcomeRoutes.MediaForm:
-                {
-                    interaction.Fields.TryGetValue(WelcomeRoutes.UsernameField, out var username);
-                    await responder.DeferAsync(ephemeral: true);
-
-                    var result = ParseProvider(args.ElementAtOrDefault(0)) is { } provider
-                        ? await _access.SubmitMediaAsync(interaction.UserId, interaction.Username, interaction.DisplayName, provider, username)
-                        : ServiceResult.Fail(DiscordText.MediaServerNotConnected(MediaServerProvider.Plex));
-
-                    await responder.Ephemeral(result.Message);
-                    return;
-                }
+            if (!answer.OpenForm)
+            {
+                await responder.Ephemeral(answer.Message);
+                return;
             }
+
+            // Nothing to pick from: straight to the note.
+            if (!_access.OfferedTypes().Any() && !_mediaServers.Connected().Any())
+            {
+                await responder.ShowModalAsync(Form(Array.Empty<ContentType>(), null, fromWelcome: true));
+                return;
+            }
+
+            await responder.RespondAsync(FormMessage(Array.Empty<ContentType>(), null, true));
+        }
+
+        private async Task PickAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            var types = interaction.Values.Select(HandlerSupport.ParseType).Where(t => t.HasValue).Select(t => t.Value).ToList();
+            var media = interaction.Values.Select(v => v.StartsWith("media:") ? ParseProvider(v.Substring(6)) : null).FirstOrDefault(p => p.HasValue);
+            await responder.UpdateMessageAsync(FormMessage(types, media, true));
+        }
+
+        private static async Task ContinueAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            var (types, media) = Parse(interaction.CustomIdArgs);
+            await responder.ShowModalAsync(Form(types, media, fromWelcome: false));
+        }
+
+        private async Task SubmitAsync(DiscordInteraction interaction, IInteractionResponder responder, bool isAdmin)
+        {
+            var args = interaction.CustomIdArgs;
+            var (types, media) = Parse(args);
+            interaction.Fields.TryGetValue(WelcomeRoutes.NoteField, out var note);
+            interaction.Fields.TryGetValue(WelcomeRoutes.UsernameField, out var username);
+
+            await responder.DeferAsync(ephemeral: true);
+            var result = await _access.SubmitAsync(interaction.UserId, interaction.Username, interaction.DisplayName, types, note, media, username, isAdmin);
+
+            // From the private form: the form becomes the answer. Opened straight from the welcome message
+            // (nothing to pick): a private answer, and the welcome message stays as it is.
+            if (args.ElementAtOrDefault(2) == "f")
+            {
+                await responder.EditAsync(new InteractionReply { Content = result.Message, Ephemeral = true });
+            }
+            else
+            {
+                await responder.Ephemeral(result.Message);
+            }
+        }
+
+        private async Task RequestMediaAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            var asked = ParseProvider(interaction.CustomIdArgs.ElementAtOrDefault(0));
+
+            if (asked is not { } provider || !_mediaServers.IsConnected(provider))
+            {
+                await responder.Ephemeral(DiscordText.MediaServerNotConnected(asked ?? MediaServerProvider.Plex));
+                return;
+            }
+
+            var answer = await _access.ClickAsync(interaction.UserId, provider);
+
+            if (!answer.OpenForm)
+            {
+                await responder.Ephemeral(answer.Message);
+                return;
+            }
+
+            await responder.ShowModalAsync(new InteractionModal
+            {
+                CustomId = $"{WelcomeRoutes.MediaForm}:{Key(provider)}",
+                Title = DiscordText.MediaFormTitle(provider),
+                Fields = new List<InteractionTextField> { new(WelcomeRoutes.UsernameField, DiscordText.MediaUsernameLabel(provider), Required: true, MaxLength: 100, Paragraph: false) }
+            });
+        }
+
+        private async Task SubmitMediaAsync(DiscordInteraction interaction, IInteractionResponder responder)
+        {
+            interaction.Fields.TryGetValue(WelcomeRoutes.UsernameField, out var username);
+            await responder.DeferAsync(ephemeral: true);
+
+            var result = ParseProvider(interaction.CustomIdArgs.ElementAtOrDefault(0)) is { } provider
+                ? await _access.SubmitMediaAsync(interaction.UserId, interaction.Username, interaction.DisplayName, provider, username)
+                : ServiceResult.Fail(DiscordText.MediaServerNotConnected(MediaServerProvider.Plex));
+
+            await responder.Ephemeral(result.Message);
         }
 
         // The private form: one menu with the types (and connected media servers), and Continue once something's picked.

@@ -72,85 +72,13 @@ namespace Requestarr.Core.Discord
             config.AdminRoleId = adminRoleId.ToString();
             var group = ChannelLayout.Group(_gateway.GuildId, _gateway.BotUserId, adminRoleId);
 
-            // The Requestarr Admin group: its permissions are set once, and the admin channel and the feed follow them.
-            var adminGroup = await ExistingOrNull(Parse(config.AdminCategoryId)) ?? await _gateway.FindCategoryAsync(ChannelLayout.AdminCategoryName);
-
-            if (adminGroup == null)
-            {
-                adminGroup = await _gateway.CreateCategoryAsync(ChannelLayout.AdminCategoryName, group);
-                _logger.Info("Created Discord group '{0}' ({1})", ChannelLayout.AdminCategoryName, adminGroup);
-                _audit.Record(Actor.System, "discord.category.create", "channel", adminGroup.ToString(), ChannelLayout.AdminCategoryName);
-            }
-
-            await SyncOverwrites(adminGroup.Value, group);
-            config.AdminCategoryId = adminGroup.ToString();
-
-            var adminChannel = await ExistingOrNull(Parse(config.AdminChannelId)) ??
-                               await ExistingOrNull(settings.AdminChannelId) ??
-                               await _gateway.FindTextChannelAsync(ChannelLayout.AdminChannelName);
-
-            if (adminChannel == null)
-            {
-                adminChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.AdminChannelName, adminGroup, "Requestarr admin commands and approvals", group);
-                _logger.Info("Created Discord admin channel {0}", adminChannel);
-                _audit.Record(Actor.System, "discord.admin-channel.create", "channel", adminChannel.ToString());
-            }
-
-            await PlaceAsync(adminChannel.Value, adminGroup.Value, group);
-            config.AdminChannelId = adminChannel.ToString();
-            config.AdminQueueChannelId = adminChannel.ToString();
-
-            // The admin feed sits next to the admin channel; a new (or different) one is seeded again.
-            var feedChannel = await ExistingOrNull(Parse(config.FeedChannelId)) ?? await _gateway.FindTextChannelAsync(ChannelLayout.FeedChannelName);
-
-            if (feedChannel == null)
-            {
-                feedChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.FeedChannelName, adminGroup, DiscordText.FeedChannelTopic, group);
-                _logger.Info("Created Discord admin feed channel {0}", feedChannel);
-                _audit.Record(Actor.System, "discord.feed-channel.create", "channel", feedChannel.ToString());
-            }
-
-            await PlaceAsync(feedChannel.Value, adminGroup.Value, group);
-
-            if (config.FeedChannelId != feedChannel.ToString())
-            {
-                config.FeedChannelId = feedChannel.ToString();
-                config.FeedSeeded = false;
-            }
+            await EnsureAdminGroupAsync(config, settings, group);
 
             // QA and dev only: the QA checklist, admin-only, in a Requestarr QA group of its own, so testing stays apart
-            // from running the server. An existing checklist channel moves there with its cards; a new (or different)
-            // one is posted again.
+            // from running the server.
             if (Qa.QaChecklist.HasChecklist(_environment))
             {
-                var qaGroup = await ExistingOrNull(Parse(config.QaCategoryId)) ?? await _gateway.FindCategoryAsync(ChannelLayout.QaCategoryName);
-
-                if (qaGroup == null)
-                {
-                    qaGroup = await _gateway.CreateCategoryAsync(ChannelLayout.QaCategoryName, group);
-                    _logger.Info("Created Discord group '{0}' ({1})", ChannelLayout.QaCategoryName, qaGroup);
-                    _audit.Record(Actor.System, "discord.category.create", "channel", qaGroup.ToString(), ChannelLayout.QaCategoryName);
-                }
-
-                await SyncOverwrites(qaGroup.Value, group);
-                config.QaCategoryId = qaGroup.ToString();
-
-                var checklist = await ExistingOrNull(Parse(config.QaChecklistChannelId)) ?? await _gateway.FindTextChannelAsync(Qa.QaText.ChecklistChannelName);
-
-                if (checklist == null)
-                {
-                    checklist = await _gateway.CreateTextChannelAsync(Qa.QaText.ChecklistChannelName, qaGroup, Qa.QaText.ChecklistChannelTopic, group);
-                    _logger.Info("Created Discord QA checklist channel {0}", checklist);
-                    _audit.Record(Actor.System, "discord.qa-checklist-channel.create", "channel", checklist.ToString());
-                }
-
-                await PlaceAsync(checklist.Value, qaGroup.Value, group);
-
-                if (config.QaChecklistChannelId != checklist.ToString())
-                {
-                    config.QaChecklistChannelId = checklist.ToString();
-                    config.QaChecklistSummaryMessageId = null;
-                }
+                await EnsureQaGroupAsync(config, group);
             }
 
             // One shared role for every member (it costs one of the server's 250 roles, not one each) reads the
@@ -180,9 +108,99 @@ namespace Requestarr.Core.Discord
             config.RequestCategoryIds = GetConfig()?.RequestCategoryIds ?? config.RequestCategoryIds;
             _repository.Upsert(config);
 
-            // Members' channels left outside the users groups (a group was deleted, so Discord put them at the top level)
-            // go back in: the ones Requestarr knows, and any loose one with a request channel's name, live or archived,
-            // even when the database doesn't know it (a reset, a new install with the channels kept).
+            config = await ReturnMemberChannelsAsync(config);
+            await RemoveOldRequestGroupAsync(config);
+
+            return config;
+        }
+
+        // The Requestarr Admin group: its permissions are set once, and the admin channel and the feed follow them.
+        private async Task EnsureAdminGroupAsync(DiscordGuildConfig config, DiscordSettings settings, IReadOnlyList<PermissionOverwrite> group)
+        {
+            var adminGroup = await EnsureGroupAsync(config.AdminCategoryId, ChannelLayout.AdminCategoryName, group);
+            config.AdminCategoryId = adminGroup.ToString();
+
+            var adminChannel = await ExistingOrNull(Parse(config.AdminChannelId)) ??
+                               await ExistingOrNull(settings.AdminChannelId) ??
+                               await _gateway.FindTextChannelAsync(ChannelLayout.AdminChannelName);
+
+            if (adminChannel == null)
+            {
+                adminChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.AdminChannelName, adminGroup, "Requestarr admin commands and approvals", group);
+                _logger.Info("Created Discord admin channel {0}", adminChannel);
+                _audit.Record(Actor.System, "discord.admin-channel.create", "channel", adminChannel.ToString());
+            }
+
+            await PlaceAsync(adminChannel.Value, adminGroup, group);
+            config.AdminChannelId = adminChannel.ToString();
+            config.AdminQueueChannelId = adminChannel.ToString();
+
+            // The admin feed sits next to the admin channel; a new (or different) one is seeded again.
+            var feedChannel = await ExistingOrNull(Parse(config.FeedChannelId)) ?? await _gateway.FindTextChannelAsync(ChannelLayout.FeedChannelName);
+
+            if (feedChannel == null)
+            {
+                feedChannel = await _gateway.CreateTextChannelAsync(ChannelLayout.FeedChannelName, adminGroup, DiscordText.FeedChannelTopic, group);
+                _logger.Info("Created Discord admin feed channel {0}", feedChannel);
+                _audit.Record(Actor.System, "discord.feed-channel.create", "channel", feedChannel.ToString());
+            }
+
+            await PlaceAsync(feedChannel.Value, adminGroup, group);
+
+            if (config.FeedChannelId != feedChannel.ToString())
+            {
+                config.FeedChannelId = feedChannel.ToString();
+                config.FeedSeeded = false;
+            }
+        }
+
+        // The Requestarr QA group and its checklist channel. An existing checklist channel moves there with its cards,
+        // and a new (or different) one is posted again.
+        private async Task EnsureQaGroupAsync(DiscordGuildConfig config, IReadOnlyList<PermissionOverwrite> group)
+        {
+            var qaGroup = await EnsureGroupAsync(config.QaCategoryId, ChannelLayout.QaCategoryName, group);
+            config.QaCategoryId = qaGroup.ToString();
+
+            var checklist = await ExistingOrNull(Parse(config.QaChecklistChannelId)) ?? await _gateway.FindTextChannelAsync(Qa.QaText.ChecklistChannelName);
+
+            if (checklist == null)
+            {
+                checklist = await _gateway.CreateTextChannelAsync(Qa.QaText.ChecklistChannelName, qaGroup, Qa.QaText.ChecklistChannelTopic, group);
+                _logger.Info("Created Discord QA checklist channel {0}", checklist);
+                _audit.Record(Actor.System, "discord.qa-checklist-channel.create", "channel", checklist.ToString());
+            }
+
+            await PlaceAsync(checklist.Value, qaGroup, group);
+
+            if (config.QaChecklistChannelId != checklist.ToString())
+            {
+                config.QaChecklistChannelId = checklist.ToString();
+                config.QaChecklistSummaryMessageId = null;
+            }
+        }
+
+        // A group found again (stored ID, then name) or created, with exactly these permissions.
+        private async Task<ulong> EnsureGroupAsync(string storedId, string name, IReadOnlyList<PermissionOverwrite> group)
+        {
+            var groupId = await ExistingOrNull(Parse(storedId)) ?? await _gateway.FindCategoryAsync(name);
+
+            if (groupId == null)
+            {
+                groupId = await _gateway.CreateCategoryAsync(name, group);
+                _logger.Info("Created Discord group '{0}' ({1})", name, groupId);
+                _audit.Record(Actor.System, "discord.category.create", "channel", groupId.ToString(), name);
+            }
+
+            await SyncOverwrites(groupId.Value, group);
+            return groupId.Value;
+        }
+
+        // Members' channels left outside the users groups (a group was deleted, so Discord put them at the top level)
+        // go back in: the ones Requestarr knows, and any loose one with a request channel's name, live or archived,
+        // even when the database doesn't know it (a reset, a new install with the channels kept). Returns the
+        // configuration as the moves left it.
+        private async Task<DiscordGuildConfig> ReturnMemberChannelsAsync(DiscordGuildConfig config)
+        {
             var known = _users.All().Where(u => u.PrivateChannelId != null).Select(u => u.PrivateChannelId).ToHashSet();
             var textChannels = await _gateway.GetTextChannelsAsync();
 
@@ -201,7 +219,12 @@ namespace Requestarr.Core.Discord
                 }
             }
 
-            // The old request group, if one is left over and empty, goes.
+            return config;
+        }
+
+        // The old request group, if one is left over and empty, goes.
+        private async Task RemoveOldRequestGroupAsync(DiscordGuildConfig config)
+        {
             if (await _gateway.FindCategoryAsync(ChannelLayout.OldRequestCategoryName) is { } old && !config.RequestCategoryIds.Contains(old.ToString()) &&
                 await _gateway.GetChannelCountInCategoryAsync(old) == 0)
             {
@@ -209,8 +232,6 @@ namespace Requestarr.Core.Discord
                 _logger.Info("Removed the empty '{0}' group", ChannelLayout.OldRequestCategoryName);
                 _audit.Record(Actor.System, "discord.category.delete", "channel", old.ToString(), ChannelLayout.OldRequestCategoryName);
             }
-
-            return config;
         }
 
         // The users groups in order, each named for its place and admin-only; the first is created if there's none.

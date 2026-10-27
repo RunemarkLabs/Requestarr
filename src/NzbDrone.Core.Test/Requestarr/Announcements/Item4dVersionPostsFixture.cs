@@ -54,7 +54,15 @@ namespace Requestarr.Core.Test.Announcements
 
         private void Environment(string name, string staged = null)
         {
-            var environment = new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? name : v == ReleaseEnvironment.StagedVersionsVariable ? staged : null };
+            var environment = new ReleaseEnvironment
+            {
+                Variable = v => v switch
+                {
+                    ReleaseEnvironment.EnvironmentVariable => name,
+                    ReleaseEnvironment.StagedVersionsVariable => staged,
+                    _ => null
+                }
+            };
             Mocker.GetMock<IReleaseEnvironment>().SetupGet(e => e.VersionPosts).Returns(environment.VersionPosts);
             Mocker.GetMock<IReleaseEnvironment>().SetupGet(e => e.Staged).Returns(environment.Staged);
         }

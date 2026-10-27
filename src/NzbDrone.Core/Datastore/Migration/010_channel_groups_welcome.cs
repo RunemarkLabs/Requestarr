@@ -3,9 +3,9 @@ using NzbDrone.Core.Datastore.Migration.Framework;
 
 namespace NzbDrone.Core.Datastore.Migration
 {
-    // Requestarr: the two channel groups (the admin group; the request groups become the users groups), the
-    // welcome channel and its message, the blocked role and channel; access requests from the welcome channel;
-    // one row per person for the welcome buttons' spam guard; and a lasting record of every outage.
+    // Requestarr: the two channel groups (the admin group, and the request groups that become the users groups),
+    // the welcome channel and its message, and the blocked role and channel. Also access requests from the welcome
+    // channel, one row per person for the welcome buttons' spam guard, and a lasting record of every outage.
     [Migration(10)]
     public class channel_groups_welcome : NzbDroneMigrationBase
     {

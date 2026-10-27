@@ -132,57 +132,76 @@ namespace Requestarr.Core.Backends
 
             if (reachable)
             {
-                instance.FirstConnected ??= now;
+                await ApplyReachableAsync(instance, now);
+            }
+            else
+            {
+                await ApplyUnreachableAsync(instance, now);
+            }
+        }
 
-                if (instance.DownSince.HasValue)
-                {
-                    var downFor = now - instance.DownSince.Value;
-                    var alerted = instance.DownAlertMessageId != null;
+        // A first connection is recorded. After an outage it's over: the admins are told if they were
+        // alerted, and the outage record is closed.
+        private async Task ApplyReachableAsync(BackendInstance instance, DateTime now)
+        {
+            instance.FirstConnected ??= now;
 
-                    if (alerted)
-                    {
-                        // The pinned alert goes; if it can't be removed, it loses its button and says it's over.
-                        if (!await RemoveAsync(AdminChannel(), instance.DownAlertMessageId) && (instance.DownAnnounceOffered || instance.DownAnnounceMessageId != null))
-                        {
-                            await EditAlertAsync(instance, DiscordText.InstanceDownAlert(instance) + "\n" + DiscordText.AlertNowBack(downFor, instance.DownAnnounceMessageId != null), null);
-                        }
-
-                        await PostAsync(new InteractionReply { Content = DiscordText.InstanceBackAlert(instance, downFor) });
-                        _logger.Info("{0} is reachable again after {1:N0} minutes", instance.Name, downFor.TotalMinutes);
-
-                        // An announced outage: its pinned notice goes, and the recovery is announced.
-                        if (instance.DownAnnounceMessageId != null)
-                        {
-                            await RemoveAsync(_guildSetup.AnnouncementsChannelId, instance.DownAnnounceMessageId);
-                            await _announcements.PostAsync(DiscordText.OutageOverNotice(TypeOf(instance), downFor));
-                        }
-                    }
-
-                    if (_outages.Ongoing(instance.Id) is { } outage)
-                    {
-                        outage.Ended = now;
-                        _outages.Update(outage);
-                    }
-
-                    instance.DownSince = null;
-                    instance.DownAlertMessageId = null;
-                    instance.DownAnnounceOffered = false;
-                    instance.DownAnnounceMessageId = null;
-                    Save(instance, i => i.DownAnnounceMessageId);
-                    _events.PublishEvent(new InstanceRecoveredEvent(instance, downFor, alerted));
-
-                    if (alerted)
-                    {
-                        _events.PublishEvent(new AdminQueueChangedEvent());
-                    }
-
-                    return;
-                }
-
+            if (!instance.DownSince.HasValue)
+            {
                 Save(instance);
                 return;
             }
 
+            var downFor = now - instance.DownSince.Value;
+            var alerted = instance.DownAlertMessageId != null;
+
+            if (alerted)
+            {
+                await PostRecoveryAsync(instance, downFor);
+            }
+
+            if (_outages.Ongoing(instance.Id) is { } outage)
+            {
+                outage.Ended = now;
+                _outages.Update(outage);
+            }
+
+            instance.DownSince = null;
+            instance.DownAlertMessageId = null;
+            instance.DownAnnounceOffered = false;
+            instance.DownAnnounceMessageId = null;
+            Save(instance, i => i.DownAnnounceMessageId);
+            _events.PublishEvent(new InstanceRecoveredEvent(instance, downFor, alerted));
+
+            if (alerted)
+            {
+                _events.PublishEvent(new AdminQueueChangedEvent());
+            }
+        }
+
+        // The end of an outage the admins were alerted to: the pinned alert goes (if it can't be
+        // removed, it loses its button and says it's over) and the "back" message is posted.
+        private async Task PostRecoveryAsync(BackendInstance instance, TimeSpan downFor)
+        {
+            if (!await RemoveAsync(AdminChannel(), instance.DownAlertMessageId) && (instance.DownAnnounceOffered || instance.DownAnnounceMessageId != null))
+            {
+                await EditAlertAsync(instance, DiscordText.InstanceDownAlert(instance) + "\n" + DiscordText.AlertNowBack(downFor, instance.DownAnnounceMessageId != null), null);
+            }
+
+            await PostAsync(new InteractionReply { Content = DiscordText.InstanceBackAlert(instance, downFor) });
+            _logger.Info("{0} is reachable again after {1:N0} minutes", instance.Name, downFor.TotalMinutes);
+
+            // An announced outage: its pinned notice goes, and the recovery is announced.
+            if (instance.DownAnnounceMessageId != null)
+            {
+                await RemoveAsync(_guildSetup.AnnouncementsChannelId, instance.DownAnnounceMessageId);
+                await _announcements.PostAsync(DiscordText.OutageOverNotice(TypeOf(instance), downFor));
+            }
+        }
+
+        // Down: alerted once it has lasted AlertAfter, and offered for announcing after AnnounceAfter.
+        private async Task ApplyUnreachableAsync(BackendInstance instance, DateTime now)
+        {
             // Never connected: nothing was lost, and its type is hidden from users anyway.
             if (!instance.FirstConnected.HasValue)
             {

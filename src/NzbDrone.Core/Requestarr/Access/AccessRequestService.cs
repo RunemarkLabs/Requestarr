@@ -56,7 +56,7 @@ namespace Requestarr.Core.Access
         IReadOnlyList<ContentType> OfferedTypes();
 
         // A click on a welcome button. Clicks that can't do anything count towards the spam guard.
-        Task<WelcomeAnswer> ClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media = null);
+        Task<WelcomeAnswer> ClickAsync(ulong discordUserId, MediaServerProvider? media = null);
 
         // An admin's request is approved straight away: their channel, the types they picked on auto-approve, the rest off.
         Task<ServiceResult> SubmitAsync(ulong discordUserId, string username, string displayName, IReadOnlyList<ContentType> types, string note, MediaServerProvider? media, string mediaUsername, bool isAdmin = false);
@@ -135,14 +135,14 @@ namespace Requestarr.Core.Access
 
         public bool IsBlocked(ulong discordUserId) => _guards.Find(discordUserId.ToString())?.Blocked != null;
 
-        public async Task<WelcomeAnswer> ClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media = null)
+        public async Task<WelcomeAnswer> ClickAsync(ulong discordUserId, MediaServerProvider? media = null)
         {
             var gate = _memberLocks.GetOrAdd(discordUserId, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync();
 
             try
             {
-                return await CountClickAsync(discordUserId, isAdmin, media);
+                return await CountClickAsync(discordUserId, media);
             }
             finally
             {
@@ -150,7 +150,7 @@ namespace Requestarr.Core.Access
             }
         }
 
-        private async Task<WelcomeAnswer> CountClickAsync(ulong discordUserId, bool isAdmin, MediaServerProvider? media)
+        private async Task<WelcomeAnswer> CountClickAsync(ulong discordUserId, MediaServerProvider? media)
         {
             var now = Clock();
             var guard = _guards.Find(discordUserId.ToString());
@@ -211,18 +211,7 @@ namespace Requestarr.Core.Access
                 return result.Success ? ServiceResult.Ok(DiscordText.AdminChannelReady(_users.FindByDiscordId(discordUserId)?.PrivateChannelId)) : result;
             }
 
-            if (ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
-            {
-                try
-                {
-                    request.CardMessageId = (await _gateway.SendMessageAsync(adminChannel, AdminCard(request))).ToString();
-                    _requests.Update(request);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn(ex, "Could not post the access request card for {0}", request.DisplayName);
-                }
-            }
+            await PostCardAsync(request);
 
             var detail = string.Join(", ", request.ContentTypes) + (media.HasValue ? $"; {media} {request.MediaUsername}" : string.Empty);
             _audit.Record(Actor.Discord(discordUserId, username, null), "access.request", "access-request", request.Id.ToString(), detail);
@@ -300,7 +289,7 @@ namespace Requestarr.Core.Access
                 await _users.RequestMediaServerAccessAsync(user, discordId, provider, request.MediaUsername);
             }
 
-            var outcome = DiscordText.AccessRequestApprovedCard(request, adminName, user?.PrivateChannelId);
+            var outcome = DiscordText.AccessRequestApprovedCard(adminName, user?.PrivateChannelId);
             await CloseCardAsync(request, outcome);
             if (tellMember)
             {
@@ -420,22 +409,7 @@ namespace Requestarr.Core.Access
 
             if (media is { } provider)
             {
-                if (user != null && _accounts.GetForUser(user.Id).Any(a => a.Provider == provider))
-                {
-                    return DiscordText.WelcomeMediaLinked(provider);
-                }
-
-                if (user != null && _mediaRequests.GetPendingForUser(user.Id).Any(r => r.Provider == provider))
-                {
-                    return DiscordText.AccessRequestAlreadyPending;
-                }
-
-                if (PendingFor(discordUserId) is { MediaProvider: { } asked } open && asked == provider)
-                {
-                    return DiscordText.WelcomePending(open.Requested);
-                }
-
-                return null;
+                return MediaStatus(discordUserId, user, provider);
             }
 
             if (member)
@@ -453,6 +427,27 @@ namespace Requestarr.Core.Access
             if (last?.Status == AccessRequestState.Denied && AskAgainFrom(last) is { } from && from > now)
             {
                 return DiscordText.WelcomeDeniedWait(last.Reason, from);
+            }
+
+            return null;
+        }
+
+        // Why this click can't open the media server form, or null when it can.
+        private string MediaStatus(ulong discordUserId, RequestarrUser user, MediaServerProvider provider)
+        {
+            if (user != null && _accounts.GetForUser(user.Id).Any(a => a.Provider == provider))
+            {
+                return DiscordText.WelcomeMediaLinked(provider);
+            }
+
+            if (user != null && _mediaRequests.GetPendingForUser(user.Id).Any(r => r.Provider == provider))
+            {
+                return DiscordText.AccessRequestAlreadyPending;
+            }
+
+            if (PendingFor(discordUserId) is { MediaProvider: { } asked } open && asked == provider)
+            {
+                return DiscordText.WelcomePending(open.Requested);
             }
 
             return null;
@@ -548,6 +543,24 @@ namespace Requestarr.Core.Access
             guard.ClicksSinceLong = 0;
             guard.RecentClicks = null;
             _guards.Update(guard);
+        }
+
+        private async Task PostCardAsync(AccessRequest request)
+        {
+            if (!ulong.TryParse(_guildSetup.GetConfig()?.AdminChannelId, out var adminChannel))
+            {
+                return;
+            }
+
+            try
+            {
+                request.CardMessageId = (await _gateway.SendMessageAsync(adminChannel, AdminCard(request))).ToString();
+                _requests.Update(request);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not post the access request card for {0}", request.DisplayName);
+            }
         }
 
         // The card in the admin channel shows the outcome and loses its buttons.

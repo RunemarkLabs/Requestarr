@@ -140,6 +140,9 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             var dispatcher = new InteractionDispatcher(handlers, LogManager.GetLogger("LiveDiscord"));
             var http = Mocker.Resolve<IHttpClient>();
 
+            // The dev server's feed keeps other checks' cards, so this check counts only the cards posted while it runs.
+            var startedAt = DateTimeOffset.UtcNow;
+
             try
             {
                 await host.StartAsync(settings.Current);
@@ -154,9 +157,22 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 var feedRest = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(feedChannel);
                 var adminRest = (global::Discord.Rest.RestTextChannel)await host.Client.Rest.GetChannelAsync(adminChannel);
                 Log($"[feed] #{feedRest.Name} topic=\"{feedRest.Topic}\" category={feedRest.CategoryId?.ToString() ?? "none"} (admin channel category {adminRest.CategoryId?.ToString() ?? "none"})");
+                string Target(ulong id) => id switch
+                {
+                    _ when id == guild.Id => "@everyone",
+                    _ when id == guildSetup.AdminRoleId => "admin role",
+                    _ when id == host.Client.CurrentUser.Id => "bot",
+                    _ => id.ToString()
+                };
                 foreach (var o in feedRest.PermissionOverwrites)
                 {
-                    Log($"[feed]   overwrite {o.TargetType} {(o.TargetId == guild.Id ? "@everyone" : o.TargetId == guildSetup.AdminRoleId ? "admin role" : o.TargetId == host.Client.CurrentUser.Id ? "bot" : o.TargetId.ToString())}: view {(o.Permissions.ViewChannel == global::Discord.PermValue.Allow ? "allow" : o.Permissions.ViewChannel == global::Discord.PermValue.Deny ? "deny" : "inherit")}");
+                    var view = o.Permissions.ViewChannel switch
+                    {
+                        global::Discord.PermValue.Allow => "allow",
+                        global::Discord.PermValue.Deny => "deny",
+                        _ => "inherit"
+                    };
+                    Log($"[feed]   overwrite {o.TargetType} {Target(o.TargetId)}: view {view}");
                 }
 
                 feedRest.Name.Should().Be(ChannelLayout.FeedChannelName);
@@ -229,7 +245,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
                 (await userChannel.GetMessageAsync(movieMessage)).Should().BeNull("the old message was deleted when it was reposted");
                 (await userChannel.GetMessageAsync(tvMessage)).Should().BeNull();
 
-                var cards = await LogFeed(host, feedChannel, "after the poll found them");
+                var cards = (await LogFeed(host, feedChannel, "after the poll found them")).Where(c => c.Timestamp >= startedAt).ToList();
                 cards.Should().HaveCount(2, "one card per request");
                 cards.Should().OnlyContain(c => c.Embeds.First().Description.StartsWith(DiscordText.FinalReady));
                 Log($"[audit] {string.Join("; ", Mocker.Resolve<IAuditRepository>().All().Where(a => a.Action.StartsWith("request.")).Select(a => $"{a.Action} #{a.TargetId}"))}");

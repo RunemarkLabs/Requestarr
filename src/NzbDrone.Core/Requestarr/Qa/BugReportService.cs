@@ -170,7 +170,15 @@ namespace Requestarr.Core.Qa
         }
 
         // Why a report can't be filed now (filing off, or no access key), or null when it can.
-        private BugReportFiling? CanFile() => !_settings.FileIssues ? BugReportFiling.Off : _settings.Token == null ? BugReportFiling.NoToken : null;
+        private BugReportFiling? CanFile()
+        {
+            if (!_settings.FileIssues)
+            {
+                return BugReportFiling.Off;
+            }
+
+            return _settings.Token == null ? BugReportFiling.NoToken : null;
+        }
 
         // Files one report if it isn't on GitHub yet, or records why it can't be; its card (and its checklist item)
         // follow when that changed. Returns the report as it is now.

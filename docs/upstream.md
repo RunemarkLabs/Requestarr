@@ -52,6 +52,7 @@ Small upstream-file changes worth knowing when merging:
 - `AppFolderFactory.Register` creates the app data folder before the legacy DB migration (it failed on fresh installs)
 - `HealthCheckReason.ProvisioningFailed`
 - `TagService` and `CleanupUnusedTags` only consider the `Backends` table
+- Requestarr's backend analyzer checks are additions only: a block at the end of `.editorconfig` ("Requestarr additions"), the Sonar analyzer and two files (`src/Sonar.globalconfig`, `src/SonarLint.xml`) in `src/Directory.Build.props`. Upstream's `.editorconfig` sections are unchanged; merge upstream changes above the additions.
 - The web app's lint configuration moved from `frontend/.eslintrc.js` to `frontend/eslint.config.js` (2026-10-27), because ESLint 10 dropped the old format and ESLint 8 gets no updates. Upstream's rules are in it unchanged (less `valid-jsdoc` and `require-jsdoc`, which ESLint 9 removed and upstream had off). Apply an upstream change to `.eslintrc.js` to the matching rule in `eslint.config.js` by hand; Requestarr's own checks are in the block at its end.
 
 ## Target framework divergence (.NET 10)

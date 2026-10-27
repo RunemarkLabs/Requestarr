@@ -27,7 +27,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task approve_from_the_card_edits_the_message_and_removes_its_buttons()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             var before = ChannelFor(Alice).Messages.Count;
 
             await AdminButton("req-approve:1");
@@ -42,7 +42,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task approve_from_the_command_edits_the_message_too()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
 
             await Harness.SendAsync(AdminSlash("approve").WithOption("id", 1L));
 
@@ -53,7 +53,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task deny_edits_the_message_with_the_reason_and_removes_its_buttons()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
 
             await AdminModal("req-deny-reason:1", RequestRoutes.ReasonField, "not in English");
 
@@ -67,7 +67,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task cancel_from_the_admin_side_edits_the_message_and_the_card()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             var card = ulong.Parse(RequestStore.Get(1).AdminMessageId);
 
             var run = await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L).WithOption("reason", "duplicate"));
@@ -167,7 +167,7 @@ namespace Requestarr.Core.Test.Gaps
             Latest(Alice).Content.Should().StartWith($"<@{Alice}>");
         }
 
-        private void ShowsAlreadyAvailable(ulong message)
+        private void ShowsAlreadyAvailable()
         {
             RequestStore.Get(1).Status.Should().Be(RequestStatus.Available);
             Latest(Alice).Content.Should().StartWith($"<@{Alice}> " + DiscordText.FinalAvailable).And.Contain(DiscordText.RequestAlreadyAvailableStatus("Dune (2021)", 1));
@@ -179,12 +179,12 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task denying_a_title_that_is_already_in_the_library_ends_as_already_available()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             NowInLibrary(Dune);
 
             var run = await AdminModal("req-deny-reason:1", RequestRoutes.ReasonField, "already have it");
 
-            ShowsAlreadyAvailable(message);
+            ShowsAlreadyAvailable();
             run.LastReply.Content.Should().StartWith("**Request #1: already available**");
             Latest(Alice).Content.Should().NotContain(DiscordText.FinalDenied);
         }
@@ -192,35 +192,35 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task approving_a_title_that_is_already_in_the_library_ends_as_already_available()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             NowInLibrary(Dune);
 
             await AdminButton("req-approve:1");
 
-            ShowsAlreadyAvailable(message);
+            ShowsAlreadyAvailable();
         }
 
         [Test]
         public async Task an_admin_cancel_of_a_title_already_in_the_library_ends_as_already_available()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             NowInLibrary(Dune);
 
             (await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.AdminMarkedAvailable(RequestStore.Get(1)));
 
-            ShowsAlreadyAvailable(message);
+            ShowsAlreadyAvailable();
         }
 
         [Test]
         public async Task the_already_available_button_closes_a_request_the_admin_knows_is_covered()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             var card = Discord.Channels[AdminChannel].Messages.Last();
             card.Buttons.Select(b => b.Label).Should().Equal(DiscordText.ApproveLabel, DiscordText.DenyLabel, DiscordText.AlreadyAvailableLabel);
 
             var run = await AdminButton("req-available:1");
 
-            ShowsAlreadyAvailable(message);
+            ShowsAlreadyAvailable();
             run.Responder.Replies.First().Content.Should().StartWith("**Request #1: already available**").And.Contain("closed by owner");
             run.Responder.Replies.First().Buttons.Should().BeEmpty();
         }
@@ -228,10 +228,10 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task the_available_command_does_the_same_and_refuses_decided_requests()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
 
             (await Harness.SendAsync(AdminSlash("available").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.AdminMarkedAvailable(RequestStore.Get(1)));
-            ShowsAlreadyAvailable(message);
+            ShowsAlreadyAvailable();
 
             (await Harness.SendAsync(AdminSlash("available").WithOption("id", 1L))).LastReply.Content.Should().Be(DiscordText.NotPending(1, RequestStatus.Available));
         }
@@ -264,7 +264,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task an_admin_cancel_of_a_title_now_in_the_library_tells_the_user_good_news()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             NowInLibrary(Dune);
 
             await Harness.SendAsync(AdminSlash("cancel").WithOption("id", 1L).WithOption("reason", "we have it"));
@@ -276,7 +276,7 @@ namespace Requestarr.Core.Test.Gaps
         [Test]
         public async Task an_add_that_finds_the_title_already_there_is_a_win_not_a_failure()
         {
-            var message = await PendingMovie(Alice, Dune);
+            await PendingMovie(Alice, Dune);
             Radarr.AlreadyAdded = true;
 
             await AdminButton("req-approve:1");
