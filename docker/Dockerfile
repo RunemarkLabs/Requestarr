@@ -5,7 +5,7 @@
 # (linux-x64 or linux-arm64), so a multi-platform build (.github/workflows/image.yml) only emulates the last stage.
 # Nothing secret goes in: the build context is the committed files only (secrets.env is never committed).
 
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim AS frontend
 WORKDIR /src
 COPY package.json yarn.lock .yarnrc tsconfig.json ./
 RUN yarn install --frozen-lockfile --network-timeout 120000
