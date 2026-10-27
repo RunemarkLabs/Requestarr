@@ -139,6 +139,16 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <AdditionalFiles Include="$(SolutionDir)stylecop.json" />
+
+    <!-- Requestarr's clean-code checks (docs/development.md#clean-code): Sonar's rules for unused code, complexity,
+         method length and nesting, the last LGPL-3.0 release (10.x is under Sonar's own license, so Dependabot skips
+         it). Every Sonar rule is off (Sonar.globalconfig) except the few .editorconfig switches on for Requestarr code. -->
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="9.32.0.97167">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)Sonar.globalconfig" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)SonarLint.xml" />
   </ItemGroup>
 
   <!--

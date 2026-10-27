@@ -72,21 +72,30 @@ def grown_baseline(base, head):
 
 
 def severities(editorconfig):
-    """{rule: severity} in the Requestarr additions section."""
+    """{(section, rule): severity} in the Requestarr additions, or None when the file has no such section."""
     if not editorconfig or ADDITIONS not in editorconfig:
-        return {}
-    found = {}
+        return None
+    found, section = {}, ""
     for row in editorconfig.split(ADDITIONS, 1)[1].splitlines():
+        if row.startswith("["):
+            section = row.strip()
         match = re.match(r"\s*(dotnet_diagnostic\.\w+\.severity|dotnet_naming_rule\.\w+\.severity)\s*=\s*(\w+)", row)
         if match:
-            found[match.group(1)] = match.group(2).lower()
+            found[(section, match.group(1))] = match.group(2).lower()
     return found
 
 
 def lowered(base, head):
-    before, after = severities(base), severities(head)
-    return ["%s: %s -> %s" % (rule, level, after.get(rule, "removed")) for rule, level in sorted(before.items())
-            if SEVERITY.get(after.get(rule, "none"), 0) < SEVERITY.get(level, 0)]
+    """A rule turned down or removed; and, once the additions exist, a new setting that switches a rule off."""
+    before, after = severities(base), severities(head) or {}
+    if before is None:
+        return []
+    down = ["%s %s: %s -> %s" % (section, rule, level, after.get((section, rule), "removed"))
+            for (section, rule), level in sorted(before.items())
+            if SEVERITY.get(after.get((section, rule), "none"), 0) < SEVERITY.get(level, 0)]
+    added = ["%s %s: new, %s" % (section, rule, level) for (section, rule), level in sorted(after.items())
+             if (section, rule) not in before and SEVERITY.get(level, 0) < SEVERITY["warning"]]
+    return down + added
 
 
 def limits(xml):
@@ -146,6 +155,10 @@ def self_test():
         (lowered(editor, editor.replace("warning", "error")) == [], "a raised severity passes"),
         (lowered(editor, editor.replace("# Requestarr additions. Everything above\n", "")) != [],
          "removing the whole section fails"),
+        (lowered(editor, editor + "[{tests}]\ndotnet_diagnostic.S138.severity = none\n") != [],
+         "a new section switching a rule off fails"),
+        (lowered("[*.cs]\n", editor + "[{tests}]\ndotnet_diagnostic.S138.severity = none\n") == [],
+         "the change that creates the additions may set exemptions"),
         (raised(xml, xml.replace("60", "80")) != [] and raised(xml, xml.replace("60", "40")) == [], "a raised limit fails"),
     ]
     failed = [name for ok, name in cases if not ok]
