@@ -300,7 +300,7 @@ namespace Requestarr.Core.Access
                 await _users.RequestMediaServerAccessAsync(user, discordId, provider, request.MediaUsername);
             }
 
-            var outcome = DiscordText.AccessRequestApprovedCard(request, adminName, user?.PrivateChannelId);
+            var outcome = DiscordText.AccessRequestApprovedCard(adminName, user?.PrivateChannelId);
             await CloseCardAsync(request, outcome);
             if (tellMember)
             {

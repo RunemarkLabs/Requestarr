@@ -64,11 +64,7 @@ namespace Requestarr.Core.Announcements
                 if (line.StartsWith("## "))
                 {
                     Flush();
-                    var heading = line.Substring(3).Trim().Split(' ', 2);
-                    version = Version.TryParse(heading[0], out var parsed) ? parsed : null;
-                    date = heading.Length > 1 && DateTime.TryParseExact(heading[1].Trim('(', ')'), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
-                        ? day
-                        : null;
+                    (version, date) = ParseHeading(line.Substring(3));
                 }
                 else if (line.StartsWith("### ") && version != null)
                 {
@@ -84,6 +80,18 @@ namespace Requestarr.Core.Announcements
             Flush();
 
             return versions.OrderByDescending(v => v.Version).ToList();
+        }
+
+        // "x.y.z (YYYY-MM-DD)": the version, null when it isn't one, and the day, null when it's missing.
+        private static (Version Version, DateTime? Date) ParseHeading(string heading)
+        {
+            var parts = heading.Trim().Split(' ', 2);
+            var version = Version.TryParse(parts[0], out var parsed) ? parsed : null;
+            DateTime? date = parts.Length > 1 && DateTime.TryParseExact(parts[1].Trim('(', ')'), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day)
+                ? day
+                : null;
+
+            return (version, date);
         }
 
         // The version a build announces: major.minor.build (the revision is the build number).

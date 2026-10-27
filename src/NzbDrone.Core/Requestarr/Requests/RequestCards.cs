@@ -148,14 +148,21 @@ namespace Requestarr.Core.Requests
                 return null;
             }
 
-            return state.CallerOwnsActive ? DiscordText.StateYours(state.Active.Status, state.Active.Id)
-                : state.CallerFollows ? DiscordText.StateFollowing(state.Active.Id)
-                : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id);
+            if (state.CallerOwnsActive)
+            {
+                return DiscordText.StateYours(state.Active.Status, state.Active.Id);
+            }
+
+            return state.CallerFollows ? DiscordText.StateFollowing(state.Active.Id) : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id);
         }
 
         // In the library with nothing on its way. A sent request still downloading is listed by
         // Sonarr / Radarr already, but isn't there yet: others can follow it to hear when it is.
         public static bool InLibraryAndDone(TitleState state) => state.Item.LibraryId.HasValue && state.Active?.IsTracked != true;
+
+        // Anime already in the library or requested: the card shows its language, and a switch when that would win.
+        private static bool ShowsAnimeLanguage(TitleState state) =>
+            state.Anime != null && state.Language.HasValue && (state.Item.LibraryId.HasValue || state.Active != null);
 
         public static InteractionReply Detail(ContentType type, TitleState state, string query = null)
         {
@@ -170,19 +177,8 @@ namespace Requestarr.Core.Requests
             }
             else if (state.Active != null)
             {
-                lines.Add(state.CallerOwnsActive ? DiscordText.StateYours(state.Active.Status, state.Active.Id)
-                    : state.CallerFollows ? DiscordText.StateFollowing(state.Active.Id)
-                    : DiscordText.StateRequested(state.ActiveOwner, state.Active.Status, state.Active.Id));
-
-                if (state.CallerOwnsActive && state.Active.Status == RequestStatus.Pending)
-                {
-                    buttons.Add(CancelButton(state.Active.Id));
-                }
-
-                if (!state.CallerOwnsActive && !state.CallerFollows)
-                {
-                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.Follow}:{TypeKey(type)}:{externalId}", Label = DiscordText.FollowLabel, Style = ButtonStyle.Primary });
-                }
+                lines.Add(StateLine(state));
+                buttons.AddRange(RequestedButtons(type, state, externalId));
             }
             else
             {
@@ -209,16 +205,16 @@ namespace Requestarr.Core.Requests
                 }
             }
 
-            // Anime already in the library or requested: its language, and a switch when that would win.
-            if (state.Anime != null && state.Language.HasValue && (item.LibraryId.HasValue || state.Active != null))
+            if (ShowsAnimeLanguage(state))
             {
-                lines.Add(DiscordText.CurrentlySetTo(state.Language.Value));
+                var language = state.Language.Value;
+                lines.Add(DiscordText.CurrentlySetTo(language));
                 lines.Add(DiscordText.PriorityRule(state.Anime.Priority, state.Instance?.Name));
-                var other = state.Language == AnimeLanguage.Dub ? AnimeLanguage.Sub : AnimeLanguage.Dub;
+                var winner = AnimeDefaults.Winner(state.Anime.Priority, language);
 
-                if (AnimeDefaults.Winner(state.Anime.Priority, state.Language.Value, other) == other)
+                if (winner != language)
                 {
-                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvLanguage}:{externalId}:{AnimeDefaults.Key(other)}", Label = DiscordText.SwitchLabel(other), Style = ButtonStyle.Primary });
+                    buttons.Add(new InteractionButton { CustomId = $"{RequestRoutes.TvLanguage}:{externalId}:{AnimeDefaults.Key(winner)}", Label = DiscordText.SwitchLabel(winner), Style = ButtonStyle.Primary });
                 }
             }
 
@@ -235,6 +231,20 @@ namespace Requestarr.Core.Requests
                 Embeds = new List<InteractionEmbed> { Card(type, item, state.Instance?.Name, DetailColor) },
                 Buttons = buttons
             };
+        }
+
+        // A title someone already requested: Cancel for its owner while it's pending, Follow for anyone else.
+        private static IEnumerable<InteractionButton> RequestedButtons(ContentType type, TitleState state, int externalId)
+        {
+            if (state.CallerOwnsActive && state.Active.Status == RequestStatus.Pending)
+            {
+                yield return CancelButton(state.Active.Id);
+            }
+
+            if (!state.CallerOwnsActive && !state.CallerFollows)
+            {
+                yield return new InteractionButton { CustomId = $"{RequestRoutes.Follow}:{TypeKey(type)}:{externalId}", Label = DiscordText.FollowLabel, Style = ButtonStyle.Primary };
+            }
         }
 
         public static InteractionReply LanguageChosen(TitleState state, AnimeLanguage language)
@@ -316,11 +326,7 @@ namespace Requestarr.Core.Requests
                 Placeholder = DiscordText.SeasonsPlaceholder,
                 MinValues = 0,
                 MaxValues = onPage.Count,
-                Options = onPage.Select(s => new InteractionSelectOption(
-                    s == 0 ? DiscordText.Specials : DiscordText.SeasonLabel(s),
-                    $"s{s}",
-                    s == 0 ? DiscordText.SpecialsHint : null,
-                    picks.Seasons.Contains(s))).ToList()
+                Options = onPage.Select(s => SeasonOption(s, picks.Seasons.Contains(s))).ToList()
             };
 
             return new InteractionReply
@@ -331,6 +337,11 @@ namespace Requestarr.Core.Requests
                 Buttons = buttons
             };
         }
+
+        // One season in a season menu, shown as already selected when it's picked; season 0 is the specials.
+        private static InteractionSelectOption SeasonOption(int season, bool picked) => season == 0
+            ? new InteractionSelectOption(DiscordText.Specials, "s0", DiscordText.SpecialsHint, picked)
+            : new InteractionSelectOption(DiscordText.SeasonLabel(season), $"s{season}", null, picked);
 
         // A pick on one page replaces that page's picks and keeps the others.
         public static SeasonChoice WithPagePicks(SeasonChoice picks, IReadOnlyCollection<int> pageSeasons, IEnumerable<string> values)
@@ -416,27 +427,7 @@ namespace Requestarr.Core.Requests
         // (for example a sub/dub switch); followerOf: the owner's name when the message is a follower's.
         public static InteractionReply Status(Request request, MediaLookupResult item, string instance, string mention, string note, string followerOf)
         {
-            var (status, color, message) = request.Status switch
-            {
-                RequestStatus.Pending => (DiscordText.FinalPending, PendingColor, DiscordText.RequestPending(request.Label, request.Id)),
-                RequestStatus.Approved => request.Progress switch
-                {
-                    DownloadProgress.Downloading => (DiscordText.FinalDownloading, SentColor, DiscordText.RequestDownloadingStatus(request, instance)),
-                    DownloadProgress.Stalled => (DiscordText.FinalStalled, PendingColor, DiscordText.RequestStalledStatus(request, instance)),
-                    DownloadProgress.Failed => (DiscordText.FinalDownloadFailed, PendingColor, DiscordText.RequestDownloadFailedStatus(request, instance)),
-                    _ when request.AvailableSeasons?.Any() == true => (DiscordText.FinalPartlyAvailable, SentColor, DiscordText.RequestSearchingStatus(request, instance)),
-                    _ => (DiscordText.FinalApproved, SentColor, DiscordText.RequestApprovedStatus(request.Label, request.Id, instance))
-                },
-                RequestStatus.Available when request.Progress == DownloadProgress.Imported => (DiscordText.FinalReady, SentColor, DiscordText.RequestReadyStatus(request)),
-                RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id)),
-                RequestStatus.Denied => (DiscordText.FinalDenied, RefusedColor, DiscordText.RequestDeniedStatus(request.Label, request.Id, request.DecisionReason)),
-                RequestStatus.Removed => (DiscordText.FinalRemoved, CancelledColor, DiscordText.RequestRemovedStatus(request)),
-                RequestStatus.Cancelled => (DiscordText.FinalCancelled, CancelledColor, request.DecidedByUserId.HasValue
-                    ? DiscordText.RequestCancelledByAdmin(request.Label, request.Id, request.DecisionReason)
-                    : DiscordText.RequestCancelled(request.Label, request.Id)),
-                _ => (DiscordText.FinalFailed, RefusedColor, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason))
-            };
-
+            var (status, color, message) = Headline(request, instance);
             var lines = new List<string> { $"{(mention != null ? mention + " " : string.Empty)}{status}{DiscordText.Dot}{message}" };
 
             if (followerOf != null)
@@ -485,6 +476,28 @@ namespace Requestarr.Core.Requests
 
             return reply;
         }
+
+        // The request message's first line (its status and what it means) and the card's color.
+        private static (string Status, uint Color, string Message) Headline(Request request, string instance) => request.Status switch
+        {
+            RequestStatus.Pending => (DiscordText.FinalPending, PendingColor, DiscordText.RequestPending(request.Label, request.Id)),
+            RequestStatus.Approved => request.Progress switch
+            {
+                DownloadProgress.Downloading => (DiscordText.FinalDownloading, SentColor, DiscordText.RequestDownloadingStatus(request, instance)),
+                DownloadProgress.Stalled => (DiscordText.FinalStalled, PendingColor, DiscordText.RequestStalledStatus(request, instance)),
+                DownloadProgress.Failed => (DiscordText.FinalDownloadFailed, PendingColor, DiscordText.RequestDownloadFailedStatus(request, instance)),
+                _ when request.AvailableSeasons?.Any() == true => (DiscordText.FinalPartlyAvailable, SentColor, DiscordText.RequestSearchingStatus(request, instance)),
+                _ => (DiscordText.FinalApproved, SentColor, DiscordText.RequestApprovedStatus(request.Label, request.Id, instance))
+            },
+            RequestStatus.Available when request.Progress == DownloadProgress.Imported => (DiscordText.FinalReady, SentColor, DiscordText.RequestReadyStatus(request)),
+            RequestStatus.Available => (DiscordText.FinalAvailable, SentColor, DiscordText.RequestAlreadyAvailableStatus(request.Label, request.Id)),
+            RequestStatus.Denied => (DiscordText.FinalDenied, RefusedColor, DiscordText.RequestDeniedStatus(request.Label, request.Id, request.DecisionReason)),
+            RequestStatus.Removed => (DiscordText.FinalRemoved, CancelledColor, DiscordText.RequestRemovedStatus(request)),
+            RequestStatus.Cancelled => (DiscordText.FinalCancelled, CancelledColor, request.DecidedByUserId.HasValue
+                ? DiscordText.RequestCancelledByAdmin(request.Label, request.Id, request.DecisionReason)
+                : DiscordText.RequestCancelled(request.Label, request.Id)),
+            _ => (DiscordText.FinalFailed, RefusedColor, DiscordText.RequestFailedNotice(request.Label, request.Id, request.DecisionReason))
+        };
 
         public static InteractionButton AddSeasonsButton(int requestId) =>
             new() { CustomId = $"{RequestRoutes.AddSeasons}:{requestId}", Label = DiscordText.AddSeasonsLabel, Style = ButtonStyle.Secondary };
@@ -672,7 +685,7 @@ namespace Requestarr.Core.Requests
                         Placeholder = DiscordText.SeasonsPlaceholder,
                         MinValues = 0,
                         MaxValues = onPage.Count,
-                        Options = onPage.Select(n => new InteractionSelectOption(n == 0 ? DiscordText.Specials : DiscordText.SeasonLabel(n), $"s{n}", n == 0 ? DiscordText.SpecialsHint : null, picks.Seasons.Contains(n))).ToList()
+                        Options = onPage.Select(n => SeasonOption(n, picks.Seasons.Contains(n))).ToList()
                     }
                     : null,
                 Buttons = buttons
@@ -738,32 +751,43 @@ namespace Requestarr.Core.Requests
             }
 
             var future = spec.EndsWith("f");
+            var seasons = spec.StartsWith("b") ? FromBitset(spec.Substring(1).TrimEnd('f')) : FromRanges(spec.TrimEnd('f'));
+
+            return seasons != null && (seasons.Any() || future) ? new SeasonChoice(false, seasons, future) : null;
+        }
+
+        // The base64url bitset EncodeSeasons writes for scattered picks; null when it isn't valid base64.
+        private static List<int> FromBitset(string data)
+        {
             var seasons = new List<int>();
 
-            if (spec.StartsWith("b"))
+            try
             {
-                try
-                {
-                    var data = spec.Substring(1).TrimEnd('f').Replace('-', '+').Replace('_', '/');
-                    var bits = Convert.FromBase64String(data.PadRight(data.Length + ((4 - (data.Length % 4)) % 4), '='));
+                var base64 = data.Replace('-', '+').Replace('_', '/');
+                var bits = Convert.FromBase64String(base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '='));
 
-                    for (var i = 0; i < bits.Length * 8 && i <= 2000; i++)
+                for (var i = 0; i < bits.Length * 8 && i <= 2000; i++)
+                {
+                    if ((bits[i / 8] & (1 << (i % 8))) != 0)
                     {
-                        if ((bits[i / 8] & (1 << (i % 8))) != 0)
-                        {
-                            seasons.Add(i);
-                        }
+                        seasons.Add(i);
                     }
                 }
-                catch (FormatException)
-                {
-                    return null;
-                }
-
-                return seasons.Any() || future ? new SeasonChoice(false, seasons, future) : null;
+            }
+            catch (FormatException)
+            {
+                return null;
             }
 
-            foreach (var part in spec.TrimEnd('f').Split('.', StringSplitOptions.RemoveEmptyEntries))
+            return seasons;
+        }
+
+        // "1-3.5" as seasons 1, 2, 3 and 5; null when any part isn't a valid range.
+        private static List<int> FromRanges(string text)
+        {
+            var seasons = new List<int>();
+
+            foreach (var part in text.Split('.', StringSplitOptions.RemoveEmptyEntries))
             {
                 var bounds = part.Split('-');
 
@@ -775,7 +799,7 @@ namespace Requestarr.Core.Requests
                 seasons.AddRange(Enumerable.Range(from, to - from + 1));
             }
 
-            return seasons.Any() || future ? new SeasonChoice(false, seasons, future) : null;
+            return seasons;
         }
 
         // Values from the "Choose seasons" menu: s{n} and "future". "All" can't be picked there.

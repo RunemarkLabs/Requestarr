@@ -74,12 +74,20 @@ namespace Requestarr.Core.Discord.Handlers
                 return;
             }
 
-            var page = interaction.Route == HelpCatalog.RouteHome ? HelpCatalog.Home(tree, viewer)
-                : tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything.WithTmdb(_metadata.CastEnabled))
-                : HelpCatalog.Topic(tree, viewer, picked);
+            if (interaction.Route == HelpCatalog.RouteHome)
+            {
+                await responder.UpdateMessageAsync(HelpCatalog.Home(tree, viewer));
+                return;
+            }
 
-            await responder.UpdateMessageAsync(page);
+            await responder.UpdateMessageAsync(Topic(tree, viewer, picked));
         }
+
+        // The admin tree's users branch opens as a tree of its own.
+        private InteractionReply Topic(HelpTree tree, HelpViewer viewer, string picked) =>
+            tree == HelpTree.Admin && picked == HelpCatalog.UsersBranchKey
+                ? HelpCatalog.Home(HelpTree.AdminUser, HelpViewer.Everything.WithTmdb(_metadata.CastEnabled))
+                : HelpCatalog.Topic(tree, viewer, picked);
 
         // An active user sees topics for their own access; an admin who isn't a user sees everything.
         private HelpViewer Viewer(CallerContext caller)

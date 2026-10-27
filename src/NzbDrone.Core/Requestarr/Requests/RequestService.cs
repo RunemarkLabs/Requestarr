@@ -337,7 +337,7 @@ namespace Requestarr.Core.Requests
 
                 if (existing.HasValue && existing != language)
                 {
-                    return AnimeDefaults.Winner(state.Anime.Priority, existing.Value, language.Value) == existing.Value
+                    return AnimeDefaults.Winner(state.Anime.Priority, existing.Value) == existing.Value
                         ? await StaysAs(caller, state, existing.Value, state.Anime.Priority)
                         : await SwitchTo(caller, state, language.Value);
                 }

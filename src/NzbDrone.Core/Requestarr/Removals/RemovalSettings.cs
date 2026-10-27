@@ -44,7 +44,18 @@ namespace Requestarr.Core.Removals
 
         public TimeSpan RequesterTimeout => FastVotes ? DevFastVotes.RequesterTimeout : TimeSpan.FromDays(RequesterTimeoutDays);
 
-        public TimeSpan? ReminderAfter => FastVotes ? DevFastVotes.Reminder : ReminderDay > 0 ? TimeSpan.FromDays(ReminderDay) : null;
+        public TimeSpan? ReminderAfter
+        {
+            get
+            {
+                if (FastVotes)
+                {
+                    return DevFastVotes.Reminder;
+                }
+
+                return ReminderDay > 0 ? TimeSpan.FromDays(ReminderDay) : null;
+            }
+        }
 
         public int VoteDays => AtLeastOne(_config.RemovalVoteDays, DefaultVoteDays);
 

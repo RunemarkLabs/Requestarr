@@ -161,7 +161,13 @@ namespace Requestarr.Core.Anime
             }
 
             var list = seriesTags.ToList();
-            return list.Contains(tags.Dub) ? AnimeLanguage.Dub : list.Contains(tags.Sub) ? AnimeLanguage.Sub : null;
+
+            if (list.Contains(tags.Dub))
+            {
+                return AnimeLanguage.Dub;
+            }
+
+            return list.Contains(tags.Sub) ? AnimeLanguage.Sub : null;
         }
 
         public async Task SetLanguageAsync(BackendInstance instance, int seriesId, IReadOnlyCollection<int> currentTags, AnimeLanguage language)

@@ -266,7 +266,7 @@ namespace Requestarr.Core.Removals
                 Save(proposal);
                 await Changed(proposal);
 
-                return ServiceResult.Ok(DiscordText.RemovalAskedRequester(proposal, target.Value.Requester.DisplayName, proposal.AnswerBy.Value));
+                return ServiceResult.Ok(DiscordText.RemovalAskedRequester(target.Value.Requester.DisplayName, proposal.AnswerBy.Value));
             }
 
             // Never requested through Requestarr, or the requester was removed: straight to the vote.

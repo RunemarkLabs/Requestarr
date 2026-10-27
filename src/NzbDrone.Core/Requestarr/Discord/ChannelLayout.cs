@@ -57,8 +57,8 @@ namespace Requestarr.Core.Discord
             return overwrites;
         }
 
-        // Every onboarded member (the shared members role) can read it but not post or start threads;
-        // admins and the bot post. Hidden from everyone else.
+        // Every onboarded member (the shared members role) can read it but not post or start threads.
+        // Admins and the bot post. Hidden from everyone else.
         public static IReadOnlyList<PermissionOverwrite> Announcements(ulong guildId, ulong botUserId, ulong? adminRoleId, ulong membersRoleId)
         {
             var overwrites = AdminOnly(guildId, botUserId, adminRoleId).ToList();
