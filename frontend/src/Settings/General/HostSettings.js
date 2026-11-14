@@ -5,6 +5,7 @@ import FormGroup from 'Components/Form/FormGroup';
 import FormInputGroup from 'Components/Form/FormInputGroup';
 import FormLabel from 'Components/Form/FormLabel';
 import { inputTypes, sizes } from 'Helpers/Props';
+import { disabledIfProvisioned, readOnlyIfProvisioned } from 'Settings/provisionedSetting';
 import translate from 'Utilities/String/translate';
 
 function HostSettings(props) {
@@ -12,6 +13,7 @@ function HostSettings(props) {
     advancedSettings,
     settings,
     isWindows,
+    isDocker,
     mode,
     onInputChange
   } = props;
@@ -56,6 +58,8 @@ function HostSettings(props) {
           name="port"
           min={1}
           max={65535}
+          readOnly={isDocker}
+          helpText={isDocker ? translate('PortInDockerHelpText') : undefined}
           helpTextWarning={translate('RestartRequiredHelpTextWarning')}
           onChange={onInputChange}
           {...port}
@@ -68,7 +72,7 @@ function HostSettings(props) {
         <FormInputGroup
           type={inputTypes.TEXT}
           name="urlBase"
-          helpText={translate('UrlBaseHelpText')}
+          {...readOnlyIfProvisioned(settings, 'urlBase', translate('UrlBaseHelpText'))}
           helpTextWarning={translate('RestartRequiredHelpTextWarning')}
           onChange={onInputChange}
           {...urlBase}
@@ -80,7 +84,7 @@ function HostSettings(props) {
         <FormInputGroup
           type={inputTypes.TEXT}
           name="allowedHosts"
-          helpText={translate('AllowedHostsHelpText')}
+          {...readOnlyIfProvisioned(settings, 'allowedHosts', translate('AllowedHostsHelpText'))}
           helpTextWarning={translate('RestartRequiredHelpTextWarning')}
           onChange={onInputChange}
           {...allowedHosts}
@@ -96,7 +100,7 @@ function HostSettings(props) {
         <FormInputGroup
           type={inputTypes.TEXT}
           name="instanceName"
-          helpText={translate('InstanceNameHelpText')}
+          {...readOnlyIfProvisioned(settings, 'instanceName', translate('InstanceNameHelpText'))}
           helpTextWarning={translate('RestartRequiredHelpTextWarning')}
           onChange={onInputChange}
           {...instanceName}
@@ -203,7 +207,7 @@ function HostSettings(props) {
             <FormInputGroup
               type={inputTypes.CHECK}
               name="launchBrowser"
-              helpText={translate('LaunchBrowserHelpText')}
+              {...disabledIfProvisioned(settings, 'launchBrowser', translate('LaunchBrowserHelpText'))}
               onChange={onInputChange}
               {...launchBrowser}
             />
@@ -218,6 +222,7 @@ HostSettings.propTypes = {
   advancedSettings: PropTypes.bool.isRequired,
   settings: PropTypes.object.isRequired,
   isWindows: PropTypes.bool.isRequired,
+  isDocker: PropTypes.bool.isRequired,
   mode: PropTypes.string.isRequired,
   onInputChange: PropTypes.func.isRequired
 };

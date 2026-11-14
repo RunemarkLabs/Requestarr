@@ -5,6 +5,7 @@ import FormGroup from 'Components/Form/FormGroup';
 import FormInputGroup from 'Components/Form/FormInputGroup';
 import FormLabel from 'Components/Form/FormLabel';
 import { inputTypes } from 'Helpers/Props';
+import { disabledIfProvisioned } from 'Settings/provisionedSetting';
 import translate from 'Utilities/String/translate';
 
 const logLevelOptions = [
@@ -34,6 +35,7 @@ function LoggingSettings(props) {
           type={inputTypes.SELECT}
           name="logLevel"
           values={logLevelOptions}
+          {...disabledIfProvisioned(settings, 'logLevel')}
           helpTextWarning={logLevel.value === 'trace' ? translate('LogLevelTraceHelpTextWarning') : undefined}
           onChange={onInputChange}
           {...logLevel}

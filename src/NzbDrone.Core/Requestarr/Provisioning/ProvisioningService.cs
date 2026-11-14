@@ -16,6 +16,11 @@ namespace Requestarr.Core.Provisioning
     public interface IProvisioningService
     {
         ProvisioningResult LastResult { get; }
+
+        // The web app's settings the file set on this start, by their names in the settings API (instanceName,
+        // username, ...): the settings pages show them read-only, since a change there would be undone on restart.
+        IReadOnlyCollection<string> ProvisionedSettings { get; }
+
         ProvisioningResult Apply();
     }
 
@@ -68,6 +73,8 @@ namespace Requestarr.Core.Provisioning
 
         public ProvisioningResult LastResult { get; private set; } = ProvisioningResult.NotRun();
 
+        public IReadOnlyCollection<string> ProvisionedSettings { get; private set; } = Array.Empty<string>();
+
         public void Handle(ApplicationStartedEvent message)
         {
             Apply();
@@ -114,6 +121,7 @@ namespace Requestarr.Core.Provisioning
         {
             var applied = new List<string>();
             var config = ConfigFileSettings(document.General, document.Auth);
+            ProvisionedSettings = SettingNames(config.Keys, document.Auth);
 
             if (config.Any())
             {
@@ -177,6 +185,24 @@ namespace Requestarr.Core.Provisioning
             return ProvisioningResult.Succeeded(path, applied, Deferred(document));
         }
 
+        // config.xml's keys are the settings API's names, capitalized; the login and the API key are stored elsewhere.
+        private static IReadOnlyCollection<string> SettingNames(IEnumerable<string> configKeys, AuthProvisioning auth)
+        {
+            var names = configKeys.Select(k => char.ToLowerInvariant(k[0]) + k.Substring(1)).ToList();
+
+            if (auth?.Username.IsNotNullOrWhiteSpace() == true)
+            {
+                names.AddRange(new[] { "username", "password", "passwordConfirmation" });
+            }
+
+            if (auth?.ApiKey.IsNotNullOrWhiteSpace() == true)
+            {
+                names.Add("apiKey");
+            }
+
+            return names;
+        }
+
         // The general and auth sections' values for config.xml; keys left out of the file are left out here too.
         private static Dictionary<string, object> ConfigFileSettings(GeneralProvisioning general, AuthProvisioning auth)
         {
@@ -188,6 +214,7 @@ namespace Requestarr.Core.Provisioning
                 AddIfSet(config, "LogLevel", general.LogLevel?.ToLowerInvariant());
                 AddIfSet(config, "UrlBase", general.UrlBase);
                 AddIfSet(config, "Theme", general.Theme);
+                AddIfSet(config, "AllowedHosts", general.AllowedHosts);
 
                 if (general.AnalyticsEnabled.HasValue)
                 {

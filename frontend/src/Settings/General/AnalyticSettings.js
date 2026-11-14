@@ -5,6 +5,7 @@ import FormGroup from 'Components/Form/FormGroup';
 import FormInputGroup from 'Components/Form/FormInputGroup';
 import FormLabel from 'Components/Form/FormLabel';
 import { inputTypes, sizes } from 'Helpers/Props';
+import { disabledIfProvisioned } from 'Settings/provisionedSetting';
 import translate from 'Utilities/String/translate';
 
 function AnalyticSettings(props) {
@@ -25,7 +26,7 @@ function AnalyticSettings(props) {
         <FormInputGroup
           type={inputTypes.CHECK}
           name="analyticsEnabled"
-          helpText={translate('AnalyticsEnabledHelpText')}
+          {...disabledIfProvisioned(settings, 'analyticsEnabled', translate('AnalyticsEnabledHelpText'))}
           helpTextWarning={translate('RestartRequiredHelpTextWarning')}
           onChange={onInputChange}
           {...analyticsEnabled}

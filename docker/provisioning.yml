@@ -8,10 +8,15 @@ general:
   instanceName: Requestarr (${REQUESTARR_STACK:-dev})
   logLevel: debug
   analyticsEnabled: false
+  # Every name Requestarr is reached by: the browser on this PC, and Sonarr and Radarr in the stack, which call it by its
+  # service name. A request for any other name is turned away.
+  allowedHosts: localhost, 127.0.0.1, requestarr
 
 auth:
   method: forms
-  required: disabledForLocalAddresses
+  # QA requires sign-in, so signing in and out is tested the way an admin meets it; dev doesn't, so automated checks
+  # don't sign in (the scripts set it per stack: STACK_AUTH_REQUIRED).
+  required: ${REQUESTARR_AUTH_REQUIRED:-disabledForLocalAddresses}
   username: ${REQUESTARR_ADMIN_USERNAME}
   password: ${REQUESTARR_ADMIN_PASSWORD}
   apiKey: ${REQUESTARR_API_KEY}

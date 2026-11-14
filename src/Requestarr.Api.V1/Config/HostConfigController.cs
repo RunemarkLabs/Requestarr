@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Network;
 using NzbDrone.Core.Authentication;
@@ -11,6 +12,7 @@ using NzbDrone.Core.Update;
 using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
 using NzbDrone.Http.REST.Attributes;
+using Requestarr.Core.Provisioning;
 using Requestarr.Http;
 using Requestarr.Http.REST;
 
@@ -22,21 +24,32 @@ namespace Requestarr.Api.V1.Config
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IConfigService _configService;
         private readonly IUserService _userService;
+        private readonly IProvisioningService _provisioning;
 
         public HostConfigController(IConfigFileProvider configFileProvider,
                                     IConfigService configService,
                                     IUserService userService,
+                                    IProvisioningService provisioning,
+                                    IOsInfo osInfo,
                                     FileExistsValidator fileExistsValidator)
         {
             _configFileProvider = configFileProvider;
             _configService = configService;
             _userService = userService;
+            _provisioning = provisioning;
 
             SharedValidator.RuleFor(c => c.BindAddress)
                            .ValidIpAddress()
                            .When(c => c.BindAddress != "*" && c.BindAddress != "localhost");
 
             SharedValidator.RuleFor(c => c.Port).ValidPort();
+
+            // Requestarr: in Docker the port inside the container is fixed by the image and compose file; the address
+            // people browse comes from Docker's published port, so a change here would only break the stack.
+            SharedValidator.RuleFor(c => c.Port)
+                           .Must(port => port == _configFileProvider.Port)
+                           .When(_ => osInfo.IsDocker)
+                           .WithMessage("In Docker, change the published port in your compose file instead");
 
             SharedValidator.RuleFor(c => c.AllowedHosts).NotNull();
 
@@ -120,6 +133,7 @@ namespace Requestarr.Api.V1.Config
             resource.Username = user?.Username ?? string.Empty;
             resource.Password = user?.Password ?? string.Empty;
             resource.PasswordConfirmation = string.Empty;
+            resource.Provisioned = _provisioning.ProvisionedSettings;
 
             return resource;
         }
