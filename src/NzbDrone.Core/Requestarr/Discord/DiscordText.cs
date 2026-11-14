@@ -1059,19 +1059,21 @@ namespace Requestarr.Core.Discord
         public const string ReadChangesLabel = "Read changes";
         public const string VersionNotesContinued = " (continued)";
 
-        public static string VersionCardAdminTitle(string version, int admins, int users)
+        // A version's card in the channels: the version and the day it was made, the way Discord readers write dates
+        // (the year only when it isn't this one), then its main change and how many more there are.
+        public static string VersionCardTitle(string version, DateTime? date, int thisYear)
         {
-            if (admins <= 0)
+            if (!date.HasValue)
             {
-                return $"Requestarr {version} · {Plural(users, "change")} for users";
+                return $"Requestarr {version}";
             }
 
-            var forUsers = users > 0 ? $", {users} for users" : string.Empty;
-            return $"Requestarr {version} · {Plural(admins, "change")} for admins{forUsers}";
+            var format = date.Value.Year == thisYear ? "MMMM d" : "MMMM d, yyyy";
+            return $"Requestarr {version} · {date.Value.ToString(format, System.Globalization.CultureInfo.InvariantCulture)}";
         }
 
-        public static string VersionCardUsersTitle(string version, int count) =>
-            $"Requestarr {version} · {Plural(count, "new thing")} for you";
+        public static string VersionCardSummary(string mainChange, int others) =>
+            others > 0 ? $"{mainChange}, and {others} more" : mainChange;
 
         public static string VersionCardFullTitle(string version, DateTime? date) =>
             $"Requestarr {version}{(date.HasValue ? $" · {date.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty)}";

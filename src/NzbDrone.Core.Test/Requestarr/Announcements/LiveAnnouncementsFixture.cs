@@ -206,9 +206,13 @@ namespace Requestarr.Core.Test.Announcements
                 var current = Changelog.Release(announcements.CurrentVersion());
                 await announcements.PostVersionNotesAsync();
 
-                // Since task 4e each version is a one-line card, found by its title.
+                // Since task 4e each version is a one-line card, found by its Read changes button; read back as
+                // "title | description".
+                static IEnumerable<string> ButtonIds(IMessage m) => m.Components.OfType<ActionRowComponent>().SelectMany(r => r.Components).OfType<ButtonComponent>().Select(b => b.CustomId);
+                async Task<List<IMessage>> CardMessages(IMessageChannel c, VersionAudience audience) =>
+                    (await Recent(c)).Where(m => VersionCards.Parse(ButtonIds(m), audience) != null).ToList();
                 async Task<List<string>> Cards(IMessageChannel c, VersionAudience audience) =>
-                    (await Recent(c)).Select(m => m.Embeds.FirstOrDefault()?.Title).Where(t => VersionCards.Parse(t, audience) != null).ToList();
+                    (await CardMessages(c, audience)).Select(m => $"{m.Embeds.First().Title} | {m.Embeds.First().Description}").ToList();
                 var adminNotes = await Cards(adminRest, VersionAudience.Admins);
                 var userNotes = await Cards(channel, VersionAudience.Users);
                 Log($"[upgrade] start on {current}: {adminNotes.Count} admin card(s), {userNotes.Count} user card(s)");
@@ -216,7 +220,24 @@ namespace Requestarr.Core.Test.Announcements
                 userNotes.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
                 var running = Changelog.Parse(announcements.ChangelogText()).SingleOrDefault(v => v.Version == current);
                 adminNotes.Should().HaveCount(running?.HasNews == true ? 1 : 0, "only the version running now, and a version with nothing for anyone posts nothing");
-                adminNotes.Should().OnlyContain(t => t.StartsWith($"Requestarr {current} · "));
+                adminNotes.Should().OnlyContain(t => t.StartsWith($"Requestarr {current}"));
+
+                // A card an earlier Requestarr posted ("· 2 changes for admins") is brought up to date in place on the
+                // next start: the same message, the new title (version 0.6.0).
+                if (running?.HasNews == true)
+                {
+                    var posted = (await CardMessages(adminRest, VersionAudience.Admins)).Single();
+                    var fresh = VersionCards.Collapsed(running, VersionAudience.Admins, DateTime.UtcNow.Year);
+                    var stale = new InteractionReply { Embeds = new List<InteractionEmbed> { new() { Title = $"Requestarr {current} · {running.Admins.Count + running.Users.Count} changes for admins", Color = VersionCards.AdminsColor } }, Buttons = fresh.Reply.Buttons };
+                    await gateway.EditMessageAsync(adminChannel, posted.Id, stale);
+                    Log($"[titles] set the posted card back to an old title: \"{(await adminRest.GetMessageAsync(posted.Id)).Embeds.First().Title}\"");
+                    await announcements.PostVersionNotesAsync();
+                    var after = (await CardMessages(adminRest, VersionAudience.Admins)).Single();
+                    Log($"[titles] next start: message {(after.Id == posted.Id ? "kept" : "replaced")}, read back: \"{after.Embeds.First().Title} | {after.Embeds.First().Description}\"");
+                    after.Id.Should().Be(posted.Id, "the card is edited, not posted again");
+                    after.Embeds.First().Title.Should().Be(fresh.Title);
+                }
+
                 var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
@@ -225,7 +246,8 @@ namespace Requestarr.Core.Test.Announcements
                 var newest = Changelog.Parse(shipped).Max(v => v.Version);
                 var next = new Version(newest.Major, newest.Minor, newest.Build + 1);
                 announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
-                announcements.ChangelogText = () => $"## {next}\n\n### For users\n- Live check: this is how something new is announced to you.\n\n### For admins\n- Live check: admins get the full list.\n\n" + shipped;
+                var today = DateTime.UtcNow.Date;
+                announcements.ChangelogText = () => $"## {next} ({today:yyyy-MM-dd})\n\n### For users\n- **Live check:** this is how something new is announced to you.\n- **Several changes:** a card names the main one and says how many more.\n\n### For admins\n- **Full list:** admins get every line.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
                 var adminAfter = await Cards(adminRest, VersionAudience.Admins);
@@ -233,9 +255,10 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] simulated upgrade to {next}, started twice: admin cards {adminAfter.Count}, user cards {usersAfter.Count}; stored version {guildSetup.GetConfig().AnnouncedVersion}");
                 adminAfter.ForEach(t => Log($"[upgrade]   admin, read back: \"{t}\""));
                 usersAfter.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
+                var dated = $"Requestarr {next} · {today.ToString("MMMM d", System.Globalization.CultureInfo.InvariantCulture)}";
                 adminAfter.Should().ContainSingle("the new version replaces the old card, once, even across restarts")
-                    .Which.Should().Be($"Requestarr {next} · 1 change for admins, 1 for users");
-                usersAfter.Should().ContainSingle().Which.Should().Be($"Requestarr {next} · 1 new thing for you");
+                    .Which.Should().Be($"{dated} | Full list, and 2 more");
+                usersAfter.Should().ContainSingle().Which.Should().Be($"{dated} | Live check, and 1 more");
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
                 Docker("stop");

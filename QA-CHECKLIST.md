@@ -4,7 +4,12 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
-## 0.5.7 (2026-11-14)
+## 0.6.1 (2026-11-14)
+
+## 0.6.0 (2026-11-13)
+- **Update card titles:** In the announcements channel, look at the update cards. You should see each one titled Requestarr, its version and a day such as November 13, with the main change underneath, and "and 2 more" after it when that version has several changes.
+- **Admin channel update cards:** In the admin channel, look at the update cards. You should see the same kind of title, and under it the main change and how many more, counting both users' and admins' changes.
+- **Read changes unchanged:** Press Read changes on any update card. You should see the full list for that version, as before, only to you.
 
 ## 0.5.6 (2026-11-13)
 - **Project links:** In the web app, open System, then Status, and look at More Info. You should see the home page and issue links open the Requestarr project in the Requestarr organization on GitHub.
