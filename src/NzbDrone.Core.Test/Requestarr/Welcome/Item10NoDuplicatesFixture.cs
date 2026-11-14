@@ -49,6 +49,20 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
+        public async Task the_blocked_channel_set_up_again_has_only_the_paused_message_and_its_new_topic()
+        {
+            // How it read before November 14, 2026: another title and topic.
+            var blocked = Discord.Channels[BlockedChannel];
+            blocked.Topic = "Why you can't request access through Requestarr any more.";
+            await Discord.SendMessageAsync(BlockedChannel, new InteractionReply { Cards = { new InteractionCard { Text = "## You can't request access through Requestarr any more\nThe buttons..." } } });
+
+            await StartWithANewDatabase();
+
+            blocked.Topic.Should().Be(DiscordText.BlockedChannelTopic);
+            blocked.Messages.Select(m => m.Cards.Single().Text).Should().Equal(DiscordText.BlockedMessage);
+        }
+
+        [Test]
         public async Task copies_of_a_panel_are_removed_leaving_exactly_one()
         {
             await Discord.SendMessageAsync(AdminChannel, PanelService.AdminPanel());

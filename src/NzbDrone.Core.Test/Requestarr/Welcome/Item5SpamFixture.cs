@@ -97,8 +97,8 @@ namespace Requestarr.Core.Test.Welcome
             // The owner's words (November 14): a pause an admin lifts, not a verdict.
             DiscordText.BlockedMessage.Should().Be("## Access requests paused\nThe request button was pressed too many times in a short while, so Requestarr has paused access requests from you. " +
                                                    "An admin can lift the pause; send them a message and they'll take a look.");
-            DiscordText.WelcomeBlockedNow.Should().Be(DiscordText.BlockedExplanation, "the answer to the click that pauses them says the same");
-            DiscordText.WelcomeBlocked.Should().Contain("paused").And.Contain("An admin can lift the pause");
+            DiscordText.WelcomeBlockedNow.Should().StartWith("The request button was pressed too many times", "the answer to the click that pauses them says the same");
+            DiscordText.WelcomeBlocked.Should().Be("Requestarr has paused access requests from you. An admin can lift the pause; send them a message and they'll take a look.");
         }
 
         [Test]

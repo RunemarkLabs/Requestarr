@@ -1113,9 +1113,9 @@ namespace Requestarr.Core.Discord
         // the block is a pause an admin lifts (Unblock), not a verdict.
         public const string BlockedTitle = "Access requests paused";
 
-        public const string BlockedExplanation =
-            "The request button was pressed too many times in a short while, so Requestarr has paused access requests from you. " +
-            "An admin can lift the pause; send them a message and they'll take a look.";
+        public const string BlockedExplanation = "The request button was pressed too many times in a short while, so Requestarr has paused access requests from you. " + BlockedLift;
+
+        private const string BlockedLift = "An admin can lift the pause; send them a message and they'll take a look.";
 
         public const string BlockedMessage = "## " + BlockedTitle + "\n" + BlockedExplanation;
 
@@ -1123,7 +1123,7 @@ namespace Requestarr.Core.Discord
         public const uint BlockedColor = 0xD9534F;
 
         // Answers to a welcome button click, privately.
-        public const string WelcomeBlocked = "Requestarr has paused access requests from you. An admin can lift the pause; send them a message and they'll take a look.";
+        public const string WelcomeBlocked = "Requestarr has paused access requests from you. " + BlockedLift;
         public const string WelcomeBlockedNow = BlockedExplanation;
         public const string WelcomeSuspended = "Your Requestarr access is paused right now. If you think that's a mistake, message the server admin.";
 
