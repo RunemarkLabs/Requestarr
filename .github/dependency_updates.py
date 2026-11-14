@@ -193,10 +193,19 @@ def sort():
 
 
 def build_state(repo, number):
-    """The pull request's build check: SUCCESS, one of FAILED, or "" while it hasn't finished."""
+    """The pull request's build check: SUCCESS, one of FAILED, or "" while it hasn't finished. It can have several runs
+    (an older one from before build numbers, one started again): one that passed is enough, and one still running is
+    waited for."""
     checks = json.loads(gh("pr", "checks", str(number), "--repo", repo, "--json", "name,state", check=False) or "[]")
-    states = [c["state"] for c in checks if c["name"] == "build"]
-    return states[0] if states and (states[0] == "SUCCESS" or states[0] in FAILED) else ""
+    return decide_build([c["state"] for c in checks if c["name"] == "build"])
+
+
+def decide_build(states):
+    if "SUCCESS" in states:
+        return "SUCCESS"
+    if not states or any(state not in FAILED for state in states):
+        return ""
+    return states[0]
 
 
 def wait_for_build(repo, number, minutes=45):
@@ -299,6 +308,9 @@ def self_test():
         (group_from_text(GROUPED) == "npm_and_yarn" and group_from_text("Bump x") == "", "the group from the message"),
         (hold_marker("build failed on it.") != hold_marker("it conflicts with dev in a.cs.")
          and hold_marker("build failed on it.") == hold_marker("Build failed on it"), "a hold comment per reason"),
+        (decide_build(["FAILURE", "SUCCESS"]) == "SUCCESS", "one passing build is enough"),
+        (decide_build(["FAILURE", "IN_PROGRESS"]) == "" and decide_build([]) == "", "a build still running is waited for"),
+        (decide_build(["CANCELLED", "FAILURE"]) == "CANCELLED", "every build failing holds the update"),
     ]
     failed = [what for ok, what in checks if not ok]
     for what in failed:
