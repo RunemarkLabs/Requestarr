@@ -31,7 +31,7 @@ SHARED_ROLES = ("Requestarr Members", "Requestarr Blocked")
 def call(method, path):
     request = urllib.request.Request(API + path, method=method, headers={
         "Authorization": "Bot " + os.environ["STACK_DISCORD_BOT_TOKEN"],
-        "User-Agent": "DiscordBot (https://github.com/RunemarkLabs/Requestarr, 1.0)",
+        "User-Agent": "DiscordBot (https://github.com/Requestarr/Requestarr, 1.0)",
     })
     while True:
         try:

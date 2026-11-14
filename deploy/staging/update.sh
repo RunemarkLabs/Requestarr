@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 HERE="$(pwd -W 2>/dev/null || pwd)"
 
 VOLUME=requestarr-beta_requestarr-config
-IMAGE=ghcr.io/runemarklabs/requestarr
+IMAGE=ghcr.io/requestarr/requestarr
 
 die() {
     echo "update.sh: $*" >&2

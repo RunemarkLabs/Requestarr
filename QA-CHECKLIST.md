@@ -4,6 +4,10 @@ What admins on the QA server test, in Discord, before a version goes to staging.
 
 Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
 
+## 0.5.6 (2026-11-13)
+- **Project links:** In the web app, open System, then Status, and look at More Info. You should see the home page and issue links lead to github.com/Requestarr/Requestarr.
+- **Bug report at the new home:** In the bug reports channel, press Report a problem and send a short test report. You should see its card link to an issue at github.com/Requestarr/Requestarr.
+
 ## 0.5.5 (2026-10-27)
 
 ## 0.5.4 (2026-10-27)

@@ -1,7 +1,7 @@
 name: Image
 
 # Publishes Requestarr's container image to GitHub's container registry (docs/development.md#published-images):
-#   push to staging (a promotion, or a fix into staging): ghcr.io/runemarklabs/requestarr:staging and :x.y.z-beta.N,
+#   push to staging (a promotion, or a fix into staging): ghcr.io/requestarr/requestarr:staging and :x.y.z-beta.N,
 #     and the commit is tagged vx.y.z-beta.N: N counts the line's (x.y) publishes to staging (docs/development.md#versions)
 #   push to main (a release, only on the owner's "ship it"):  :x.y.z, :x.y and :latest
 #   Run workflow on any branch with a tag starting "test-": that tag only, for trying the workflow (delete it after).
@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/runemarklabs/requestarr
+  IMAGE: ghcr.io/requestarr/requestarr
 
 jobs:
   publish:

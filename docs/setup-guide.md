@@ -42,12 +42,12 @@ Do not verify a self-hosted bot. Verification is only for bots in 100 or more se
 
 ## 3. Install Requestarr (Docker Compose)
 
-Requestarr's image is published to GitHub's container registry as `ghcr.io/runemarklabs/requestarr` for x86-64 and ARM servers, but only the early access `staging` tag so far; `latest` and version tags arrive with the first release. Until then you build it from source. This needs Git and Docker with Compose v2.
+Requestarr's image is published to GitHub's container registry as `ghcr.io/requestarr/requestarr` for x86-64 and ARM servers, but only the early access `staging` tag so far; `latest` and version tags arrive with the first release. Until then you build it from source. This needs Git and Docker with Compose v2.
 
 ### 3.1 Build the image
 
 ```bash
-git clone https://github.com/RunemarkLabs/Requestarr.git
+git clone https://github.com/Requestarr/Requestarr.git
 cd Requestarr
 docker build -f docker/Dockerfile -t requestarr:latest .
 ```
@@ -729,7 +729,7 @@ The access key can also come from the `REQUESTARR_GITHUB_ISSUES_TOKEN` environme
 bugReports:
   fileIssues: false                    # true: each report becomes a public GitHub issue
   githubToken: ${GITHUB_ISSUES_TOKEN}  # in secrets.env, never here
-  repository: RunemarkLabs/Requestarr
+  repository: Requestarr/Requestarr
   reportsPerDay: 5                     # per person
   minutesBetween: 2                    # per person, between two reports
 ```
@@ -764,16 +764,16 @@ Do the steps in order; each ends with what to check before going on.
 - Your download client and indexer manager (for example Prowlarr), as production uses them.
 - Your Plex server.
 - The Requestarr Beta Discord server, and a Discord application with a bot for it, set up as in [section 2](#2-create-your-discord-bot) (Server Members Intent on, invited with the same permissions). You need its bot token, application ID and the server's ID.
-- The image: `ghcr.io/runemarklabs/requestarr` downloads without a login once the package is public on GitHub. While it's private, log Docker in on the server once with a GitHub token that can only read packages (GitHub → Settings → Developer settings → Personal access tokens → classic, **read:packages**): `docker login ghcr.io -u <your GitHub user>`, with the token as the password.
+- The image: `ghcr.io/requestarr/requestarr` downloads without a login once the package is public on GitHub. While it's private, log Docker in on the server once with a GitHub token that can only read packages (GitHub → Settings → Developer settings → Personal access tokens → classic, **read:packages**): `docker login ghcr.io -u <your GitHub user>`, with the token as the password. The project moved to the Requestarr organization in November 2026: the first image at this address is published with the next beta release, and beta images published before the move stay at the old address without updates.
 
-**Check:** `docker compose version` prints 2.17 or newer, and `docker pull ghcr.io/runemarklabs/requestarr:staging` downloads the image.
+**Check:** `docker compose version` prints 2.17 or newer, and `docker pull ghcr.io/requestarr/requestarr:staging` downloads the image.
 
 ### B.2 Get the files
 
 The beta stack is the `deploy/staging` folder of the repository. Put it in a folder of its own, outside any media folder:
 
 ```bash
-git clone --depth 1 --branch staging https://github.com/RunemarkLabs/Requestarr.git requestarr-src
+git clone --depth 1 --branch staging https://github.com/Requestarr/Requestarr.git requestarr-src
 cp -r requestarr-src/deploy/staging requestarr-beta
 cd requestarr-beta
 ```

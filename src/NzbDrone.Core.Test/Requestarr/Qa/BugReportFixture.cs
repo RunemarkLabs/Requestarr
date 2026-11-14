@@ -64,14 +64,14 @@ namespace Requestarr.Core.Test.Qa
         {
             Settings(file: true, token: "secret");
             Mocker.GetMock<IGitHubIssues>()
-                .Setup(g => g.CreateAsync("RunemarkLabs/Requestarr", "secret", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new IssueResult(new FiledIssue(77, "https://github.com/RunemarkLabs/Requestarr/issues/77"), null));
+                .Setup(g => g.CreateAsync("Requestarr/Requestarr", "secret", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new IssueResult(new FiledIssue(77, "https://github.com/Requestarr/Requestarr/issues/77"), null));
 
             var result = await Subject.SubmitAsync(42, "Alex", "web-app", "The logo is missing", null, null);
 
-            result.Report.Should().BeEquivalentTo(new { Filing = BugReportFiling.Filed, IssueNumber = 77, IssueUrl = "https://github.com/RunemarkLabs/Requestarr/issues/77" });
+            result.Report.Should().BeEquivalentTo(new { Filing = BugReportFiling.Filed, IssueNumber = 77, IssueUrl = "https://github.com/Requestarr/Requestarr/issues/77" });
             var labels = new[] { "bug report", "env: qa", $"version: {Changelog.Release(NzbDrone.Common.EnvironmentInfo.BuildInfo.Version)}", "component: web-app" };
-            Mocker.GetMock<IGitHubIssues>().Verify(g => g.CreateAsync("RunemarkLabs/Requestarr", "secret", "[QA] Web app: The logo is missing", It.IsAny<string>(), It.Is<IReadOnlyList<string>>(l => l.SequenceEqual(labels)), It.IsAny<CancellationToken>()));
+            Mocker.GetMock<IGitHubIssues>().Verify(g => g.CreateAsync("Requestarr/Requestarr", "secret", "[QA] Web app: The logo is missing", It.IsAny<string>(), It.Is<IReadOnlyList<string>>(l => l.SequenceEqual(labels)), It.IsAny<CancellationToken>()));
             Mocker.GetMock<IDiscordGuildGateway>().Verify(g => g.EditMessageAsync(500, 900, It.Is<InteractionReply>(m => m.Cards[0].Text.Contains("issue #77"))), Times.Once());
         }
 
@@ -148,7 +148,7 @@ namespace Requestarr.Core.Test.Qa
             QaText.ReportCard(report).Should().Contain("HTTP 401").And.Contain("tries again");
 
             github.Setup(g => g.CreateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new IssueResult(new FiledIssue(5, "https://github.com/RunemarkLabs/Requestarr/issues/5"), null));
+                .ReturnsAsync(new IssueResult(new FiledIssue(5, "https://github.com/Requestarr/Requestarr/issues/5"), null));
             await Subject.RetryUnfiledAsync();
             await Subject.RetryUnfiledAsync();
 
@@ -170,7 +170,7 @@ namespace Requestarr.Core.Test.Qa
             Settings(file: true, token: "secret");
             Mocker.GetMock<IGitHubIssues>()
                 .Setup(g => g.CreateAsync(It.IsAny<string>(), "secret", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new IssueResult(new FiledIssue(6, "https://github.com/RunemarkLabs/Requestarr/issues/6"), null));
+                .ReturnsAsync(new IssueResult(new FiledIssue(6, "https://github.com/Requestarr/Requestarr/issues/6"), null));
             await Subject.RetryUnfiledAsync();
 
             report.Filing.Should().Be(BugReportFiling.Filed);

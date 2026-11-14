@@ -6,6 +6,11 @@ with nothing in it is left out, and a version with nothing for either has only i
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
 
+## 0.5.6 (2026-11-13)
+
+### For admins
+- **New home on GitHub:** Requestarr moved to its own GitHub organization, also called Requestarr. Bug reports are filed there, the links in the web app's Status page lead there, and beta updates come from there: the beta setup guide shows the new image address to use.
+
 ## 0.5.5 (2026-10-27)
 
 ## 0.5.4 (2026-10-27)

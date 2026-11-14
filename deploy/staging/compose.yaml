@@ -96,7 +96,7 @@ services:
 
   requestarr:
     # The staging image; ./update.sh pulls the newest, ./update.sh rollback pins the one before (REQUESTARR_TAG in .env).
-    image: ghcr.io/runemarklabs/requestarr:${REQUESTARR_TAG:-staging}
+    image: ghcr.io/requestarr/requestarr:${REQUESTARR_TAG:-staging}
     environment:
       # Keeps every "what's new" post for good, like production (docs/development.md#version-posts).
       REQUESTARR_ENVIRONMENT: staging

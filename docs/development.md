@@ -204,7 +204,7 @@ QA takes `dev`'s current version as it is, so "promote to QA" means `dev`'s top 
 
 Without `--owner-override`, it runs the QA gate ([QA checklist](#qa-checklist)) and refuses unless it's clear; the pull request records the checklist and who completed it, or the owner's override.
 
-The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:` and the beta version it publishes (`Published to staging as: 0.3.0-beta.1`), then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/runemarklabs/requestarr:staging` and `:0.3.0-beta.1` and tags the commit `v0.3.0-beta.1` ([Versions](#versions)). `--dry-run` prints the versions that would move, the beta version and the QA gate's verdict, and changes nothing. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
+The same as a promotion to QA, one step up: only `qa`'s commits, a pull request into `staging` with `Requested by:` and the beta version it publishes (`Published to staging as: 0.3.0-beta.1`), then a fast-forward of `staging`. The push to `staging` runs the Image workflow, which publishes `ghcr.io/requestarr/requestarr:staging` and `:0.3.0-beta.1` and tags the commit `v0.3.0-beta.1` ([Versions](#versions)). `--dry-run` prints the versions that would move, the beta version and the QA gate's verdict, and changes nothing. Then `.\docker\dev.ps1 up` so the QA stack drops the versions staging now has from its posts, and on the owner's server `./update.sh` in the staging folder (the setup guide's "Running the beta (staging) environment").
 
 **Ship it** (staging to `main`, only on the owner's "ship it"): not scripted yet. It will be the same shape: a pull request into `main` with `Requested by:`, then a fast-forward of `main` to exactly `staging`'s commit. No new number and no changelog change: `main`'s top version is staging's (0.3.0), the beta suffix dropped. The push to `main` publishes `:0.3.0`, `:0.3` and `latest`, built from that same commit without the beta version, so production shows 0.3.0; the commit is tagged `v0.3.0`.
 
@@ -227,7 +227,7 @@ It lists any commit a lower branch is missing and fails; the Drift workflow runs
 
 ### Published images
 
-`.github/workflows/image.yml` builds `docker/Dockerfile` for **linux/amd64** (most home servers and NAS boxes) and **linux/arm64** (Raspberry Pi 4 and 5, ARM NAS boxes, Apple silicon), the same pair the other Servarr apps publish, and pushes it to GitHub's container registry as `ghcr.io/runemarklabs/requestarr`:
+`.github/workflows/image.yml` builds `docker/Dockerfile` for **linux/amd64** (most home servers and NAS boxes) and **linux/arm64** (Raspberry Pi 4 and 5, ARM NAS boxes, Apple silicon), the same pair the other Servarr apps publish, and pushes it to GitHub's container registry as `ghcr.io/requestarr/requestarr`:
 
 | When | Tags |
 |---|---|

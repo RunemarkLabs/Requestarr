@@ -14,7 +14,7 @@
     "stylelint-windows": "stylelint \"frontend/**/*.css\" --config frontend/.stylelintrc",
     "check-modules": "are-you-es5 check . -r"
   },
-  "repository": "https://github.com/RunemarkLabs/Requestarr",
+  "repository": "https://github.com/Requestarr/Requestarr",
   "author": "Requestarr contributors",
   "license": "GPL-3.0",
   "readmeFilename": "readme.md",
