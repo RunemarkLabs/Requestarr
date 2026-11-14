@@ -73,7 +73,7 @@ namespace Requestarr.Core.Qa
         }
 
         public IReadOnlyList<QaChecklistVersion> Versions() =>
-            QaChecklist.ForServer(QaChecklist.Parse(ChecklistText()), _environment, CurrentVersion());
+            QaChecklist.ForServer(QaChecklist.Parse(ChecklistText(), Changelog.Release(CurrentVersion())), _environment, CurrentVersion());
 
         public IReadOnlyList<QaChecklistEntry> Entries() => Versions().SelectMany(v => v.Items).ToList();
 
@@ -93,10 +93,10 @@ namespace Requestarr.Core.Qa
             {
                 var r = records[e.Key];
                 var report = r.BugReportId.HasValue && reports.TryGetValue(r.BugReportId.Value, out var found) ? found : null;
-                return new QaChecklistItemState(e.Key, e.Version.ToString(), e.Name, r.State.ToString(), r.ByName, r.At, r.BugReportId, report?.IssueUrl);
+                return new QaChecklistItemState(e.Key, Changelog.Display(e.Version), e.Name, r.State.ToString(), r.ByName, r.At, r.BugReportId, report?.IssueUrl);
             }).ToList();
 
-            return new QaChecklistState(_environment.IconSet, Versions().Select(v => v.Version.ToString()).ToList(), entries.Count, passed, failing, complete, last?.ByName, last?.At, items);
+            return new QaChecklistState(_environment.IconSet, Versions().Select(v => Changelog.Display(v.Version)).ToList(), entries.Count, passed, failing, complete, last?.ByName, last?.At, items);
         }
 
         public async Task EnsureAsync()
@@ -146,7 +146,7 @@ namespace Requestarr.Core.Qa
                     _items.SetFields(record, r => r.MessageId);
                 }
 
-                _logger.Info("QA checklist posted: {0} item(s) for {1}", entries.Count, string.Join(", ", Versions().Select(v => v.Version)));
+                _logger.Info("QA checklist posted: {0} item(s) for {1}", entries.Count, string.Join(", ", Versions().Select(v => Changelog.Display(v.Version))));
             }
             catch (Exception ex)
             {
@@ -238,7 +238,7 @@ namespace Requestarr.Core.Qa
 
                 if (record == null)
                 {
-                    record = _items.Insert(new QaChecklistItem { ItemKey = entry.Key, Version = entry.Version.ToString(), Name = entry.Name, State = QaItemState.Pending });
+                    record = _items.Insert(new QaChecklistItem { ItemKey = entry.Key, Version = Changelog.Display(entry.Version), Name = entry.Name, State = QaItemState.Pending });
                 }
 
                 records[entry.Key] = record;

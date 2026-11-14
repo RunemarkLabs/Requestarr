@@ -121,7 +121,7 @@ namespace Requestarr.Core.Qa
                     WhatHappened = Trim(whatHappened),
                     Expected = Trim(expected),
                     Environment = _environment.IconSet,
-                    Version = Changelog.Release(BuildInfo.Version).ToString(),
+                    Version = Changelog.Display(BuildInfo.Version),
                     ReporterDiscordId = discordUserId.ToString(),
                     ReporterName = reporterName,
                     Created = now.UtcDateTime,

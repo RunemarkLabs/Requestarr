@@ -42,6 +42,20 @@ namespace Requestarr.Core.Test.Announcements
 - **Requests:** ask for movies and TV.
 ";
 
+        // A dev or QA build's changelog: what changed since the last build sent to testers, above the numbered versions.
+        private const string Pending = @"# Changelog
+
+## Unreleased
+
+### For admins
+- **Build numbers:** each build sent to testers has one.
+
+## 0.6.0 (2026-11-13)
+
+### For admins
+- **Cards:** clearer.
+";
+
         private AnnouncementService Service => (AnnouncementService)Mocker.Resolve<IAnnouncementService>();
 
         private ulong UsersChannel => ulong.Parse(Config.AnnouncementsChannelId);
@@ -238,53 +252,56 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
-        public void the_beta_version_is_the_one_the_image_was_published_as_and_only_for_its_own_version()
+        public void a_version_shows_as_the_build_label_only_for_the_version_the_build_runs()
         {
-            string Beta(string variable, string version) =>
-                new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? variable : null }.BetaVersion(new Version(version));
+            string Shown(string label, string version) =>
+                new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? label : null }.Shown(new Version(version));
 
-            Beta("0.4.17-beta.1", "0.4.17.11354").Should().Be("0.4.17-beta.1");
-            Beta(" 0.4.18-beta.12 ", "0.4.18").Should().Be("0.4.18-beta.12");
-            Beta("0.4.17-beta.1", "0.4.16").Should().BeNull("an older version keeps its number");
-            Beta(null, "0.4.17").Should().BeNull("QA, dev and production builds have none");
-            Beta(string.Empty, "0.4.17").Should().BeNull();
-            Beta("0.4.17", "0.4.17").Should().BeNull("only a beta version counts");
-            Beta("0.4.17-beta.0", "0.4.17").Should().BeNull();
-            Beta("0.4.17-rc.1", "0.4.17").Should().BeNull();
+            Shown("0.7.0004-dev.4f2a9c1", "0.7.4.11354").Should().Be("0.7.0004-dev.4f2a9c1");
+            Shown(" 0.7.0004-qa.4f2a9c1 ", "0.7.4").Should().Be("0.7.0004-qa.4f2a9c1");
+            Shown("0.7.0004", "0.7.4").Should().Be("0.7.0004", "a build sent to testers shows its number");
+            Shown("0.7.0004-dev.4f2a9c1", "0.6.0").Should().Be("0.6.0", "an older version keeps its own number");
+            Shown(null, "0.7.12").Should().Be("0.7.0012", "a build without a label shows its number, four digits from 0.7 on");
+            Shown("0.7.0004-beta.1", "0.7.4").Should().Be("0.7.0004", "only the labels Requestarr's builds use count");
+            Shown("0.7.4-dev.4f2a9c1", "0.7.4").Should().Be("0.7.0004", "a label without the four digits isn't one");
         }
 
         [Test]
-        public async Task staging_shows_the_version_it_runs_as_its_beta_version()
+        public async Task dev_shows_unreleased_as_the_build_it_runs_under_its_label()
         {
-            Environment("staging");
-            var environment = new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? "0.3.0-beta.2" : null };
-            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.BetaVersion(It.IsAny<Version>())).Returns<Version>(environment.BetaVersion);
+            Environment("dev");
+            var environment = new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.ReleaseVersionVariable ? "0.7.0004-dev.4f2a9c1" : null };
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns<Version>(environment.Shown);
 
-            await StartOn("0.3.0");
+            await StartOn("0.7.4", Pending);
 
-            var titles = Discord.Channels[AdminChannel].Messages.Where(m => m.Embeds.Any()).Select(m => m.Embeds[0].Title).ToList();
-            titles.Should().Equal(new[] { "Requestarr 0.1.0", "Requestarr 0.2.0", "Requestarr 0.3.0-beta.2" }, "this changelog's headings have no date");
-            AdminHeaders.Should().Equal(new[] { Admin("0.1.0"), Admin("0.2.0"), Admin("0.3.0") }, "a beta title is still found as its version's card");
-            Service.FullCard(VersionAudience.Admins, new Version(0, 3, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.3.0-beta.2\n");
-            Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.2.0\n");
-
-            await StartOn("0.3.0");
-
-            Discord.Channels[AdminChannel].Messages.Count(m => m.Embeds.Any()).Should().Be(3, "a restart posts nothing again");
-            Discord.Channels[AdminChannel].Messages.Select(m => m.Embeds[0].Title).Should().Equal(titles, "a restart changes no title");
+            AdminHeaders.Should().Equal("0.7.4");
+            Discord.Channels[AdminChannel].Messages.Single(m => m.Embeds.Any()).Embeds[0].Title.Should().Be("Requestarr 0.7.0004-dev.4f2a9c1", "Unreleased has no day yet");
+            Service.FullCard(VersionAudience.Admins, new Version(0, 7, 4))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.7.0004-dev.4f2a9c1\n");
         }
 
         [Test]
-        public async Task staging_keeps_the_beta_version_an_older_card_was_posted_with()
+        public async Task qa_shows_unreleased_with_what_staging_does_not_have_yet()
+        {
+            Environment("qa", "0.6.0");
+
+            await StartOn("0.7.4", Pending);
+
+            AdminHeaders.Should().Equal("0.7.4");
+        }
+
+        [Test]
+        public async Task staging_shows_a_build_by_its_four_digit_number_and_never_unreleased()
         {
             Environment("staging");
-            await StartOn("0.2.0");
-            var admin = Discord.Channels[AdminChannel];
-            await Discord.EditMessageAsync(AdminChannel, admin.MessageIds[1], OldCard("0.2.0", "a", "Requestarr 0.2.0-beta.3 · 1 change for admins, 1 for users"));
+            var numbered = Pending.Replace("## Unreleased", $"## 0.7.0004 ({DateTime.UtcNow.Year}-11-20)");
 
-            await StartOn("0.3.0");
+            await StartOn("0.6.0", Pending);
+            AdminHeaders.Should().Equal("0.6.0");
 
-            admin.Messages.Select(m => m.Embeds[0].Title).Should().Equal("Requestarr 0.1.0", "Requestarr 0.2.0-beta.3", "Requestarr 0.3.0");
+            await StartOn("0.7.4", numbered);
+            AdminHeaders.Should().Equal("0.6.0", "0.7.4");
+            Discord.Channels[AdminChannel].Messages.Last(m => m.Embeds.Any()).Embeds[0].Title.Should().Be("Requestarr 0.7.0004 · November 20");
         }
 
         [Test]
@@ -296,17 +313,6 @@ namespace Requestarr.Core.Test.Announcements
             VersionCards.Parse(new[] { "whatsnew:a:soon" }, VersionAudience.Admins).Should().BeNull();
             VersionCards.Parse(new[] { "admin:panel" }, VersionAudience.Admins).Should().BeNull();
             VersionCards.Parse(null, VersionAudience.Admins).Should().BeNull("a message without buttons");
-        }
-
-        [Test]
-        public void a_cards_beta_version_is_read_from_its_title_in_any_wording()
-        {
-            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · 2 changes for admins", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
-            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · November 14", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
-            VersionCards.BetaShown("Requestarr 0.4.17-beta.3", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
-            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · November 14", new Version(0, 4, 16)).Should().BeNull("another version's beta");
-            VersionCards.BetaShown("Requestarr 0.4.17 · November 14", new Version(0, 4, 17)).Should().BeNull();
-            VersionCards.BetaShown("Requestarr 0.4.17-rc.1 · November 14", new Version(0, 4, 17)).Should().BeNull();
         }
 
         // A card as an earlier version of Requestarr posted it: the same button, an older title.

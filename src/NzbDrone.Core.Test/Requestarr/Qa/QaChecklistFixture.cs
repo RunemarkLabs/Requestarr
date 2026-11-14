@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Moq;
@@ -54,15 +53,15 @@ namespace Requestarr.Core.Test.Qa
         }
 
         [Test]
-        public void the_shipped_checklist_is_embedded_and_starts_at_the_build_version()
+        public void the_shipped_checklist_is_embedded_and_starts_at_the_changelogs_newest_version()
         {
             var file = File.ReadAllText(Item4To6Fixture.RepoFile("QA-CHECKLIST.md"));
-            var props = File.ReadAllText(Item4To6Fixture.RepoFile("src", "Directory.Build.props"));
-            var build = Regex.Match(props, @"<AssemblyVersion>(\d+\.\d+\.\d+)").Groups[1].Value;
-            var versions = QaChecklist.Parse(file);
+            var changelog = File.ReadAllText(Item4To6Fixture.RepoFile("CHANGELOG.md"));
+            var running = new Version(9, 9, 9);
+            var versions = QaChecklist.Parse(file, running);
 
             QaChecklist.Embedded().Replace("\r\n", "\n").Should().Be(file.Replace("\r\n", "\n"));
-            versions[0].Version.ToString().Should().Be(build, "every pull request adds its version's items (or heading) at the top");
+            QaChecklist.Parse(file)[0].Version.Should().Be(Changelog.Parse(changelog)[0].Version, "the staging promotion numbers both files together");
             versions.SelectMany(v => v.Items).Select(i => i.Key).Should().OnlyHaveUniqueItems();
             versions.SelectMany(v => v.Items).Should().OnlyContain(i => i.Text.Contains("You should see"));
         }
@@ -76,6 +75,20 @@ namespace Requestarr.Core.Test.Qa
             versions[0].Items.Select(i => i.Key).Should().Equal("0.4.15/passing-an-item", "0.4.15/failing-an-item");
             versions[1].Items.Should().BeEmpty();
             versions[2].Items.Single().Name.Should().Be("Sign-in logo");
+        }
+
+        [Test]
+        public void unreleased_items_are_the_build_qa_runs_and_keep_their_keys_once_numbered()
+        {
+            const string Pending = "# QA checklist\n\n## Unreleased\n- **Build number:** open System, then Status. You should see the build's number.\n\n## 0.6.0 (2026-11-13)\n";
+            var running = new Version(0, 7, 4);
+
+            var unreleased = QaChecklist.Parse(Pending, running);
+            var numbered = QaChecklist.Parse(Pending.Replace("## Unreleased", "## 0.7.0004 (2026-11-20)"));
+
+            unreleased.Select(v => v.Version).Should().Equal(running, new Version(0, 6, 0));
+            unreleased[0].Items.Single().Key.Should().Be(numbered[0].Items.Single().Key, "a pass recorded in QA is kept when staging numbers the build");
+            QaChecklist.Parse(Pending).Select(v => v.Version).Should().Equal(new[] { new Version(0, 6, 0) }, "without a running build Unreleased is left out");
         }
 
         [Test]

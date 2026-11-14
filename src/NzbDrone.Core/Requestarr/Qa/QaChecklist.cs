@@ -22,7 +22,7 @@ namespace Requestarr.Core.Qa
     {
         public const string ResourceName = "Requestarr.QA-CHECKLIST.md";
 
-        private static readonly Regex Heading = new(@"^## (?<version>\d+\.\d+\.\d+)(?: \(\d{4}-\d{2}-\d{2}\))?\s*$");
+        private static readonly Regex Heading = new(@"^## (?:(?<unreleased>Unreleased)|(?<version>\d+\.\d+\.\d+)(?: \(\d{4}-\d{2}-\d{2}\))?)\s*$");
         private static readonly Regex Item = new(@"^- \*\*(?<name>[^*:]+):\*\* (?<text>.+)$");
 
         public static string Embedded()
@@ -38,7 +38,9 @@ namespace Requestarr.Core.Qa
             return reader.ReadToEnd();
         }
 
-        public static IReadOnlyList<QaChecklistVersion> Parse(string text)
+        // unreleased: the version a dev or QA build runs as, which the "## Unreleased" items are read as (null leaves
+        // them out), the same as the changelog's.
+        public static IReadOnlyList<QaChecklistVersion> Parse(string text, Version unreleased = null)
         {
             var versions = new List<QaChecklistVersion>();
             Version current = null;
@@ -51,9 +53,14 @@ namespace Requestarr.Core.Qa
 
                 if (heading.Success)
                 {
-                    current = Version.Parse(heading.Groups["version"].Value);
+                    current = heading.Groups["unreleased"].Success ? unreleased : Version.Parse(heading.Groups["version"].Value);
                     items = new List<QaChecklistEntry>();
-                    versions.Add(new QaChecklistVersion(current, items));
+
+                    if (current != null)
+                    {
+                        versions.Add(new QaChecklistVersion(current, items));
+                    }
+
                     continue;
                 }
 

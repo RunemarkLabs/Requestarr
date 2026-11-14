@@ -276,10 +276,10 @@ namespace Requestarr.Core.Test.Announcements
 
             await Service.PostVersionNotesAsync();
 
-            AdminPosts.Should().Equal("Requestarr 0.9.0 · October 25" + (DateTime.UtcNow.Year == 2026 ? string.Empty : ", 2026"));
+            AdminPosts.Should().Equal("Requestarr 0.9.0000 · October 25" + (DateTime.UtcNow.Year == 2026 ? string.Empty : ", 2026"));
             var full = Service.FullCard(VersionAudience.Admins, new Version(0, 9, 0));
             full.Should().HaveCountGreaterThan(1, "more than 4,000 characters takes more than one message");
-            full[0].Cards[0].Text.Should().StartWith("## Requestarr 0.9.0 · 25 October 2026\n### For users\n");
+            full[0].Cards[0].Text.Should().StartWith("## Requestarr 0.9.0000 · 25 October 2026\n### For users\n");
 
             foreach (var reply in full)
             {
@@ -294,15 +294,16 @@ namespace Requestarr.Core.Test.Announcements
 
         // The shipped CHANGELOG.md: the process every pull request follows (docs/development.md).
         [Test]
-        public void the_shipped_changelog_matches_the_build_version_and_is_embedded()
+        public void the_shipped_changelog_is_embedded_and_the_build_number_is_stamped_when_built()
         {
             var file = File.ReadAllText(Item4To6Fixture.RepoFile("CHANGELOG.md"));
             var props = File.ReadAllText(Item4To6Fixture.RepoFile("src", "Directory.Build.props"));
-            var assembly = Regex.Match(props, @"<AssemblyVersion>(\d+\.\d+\.\d+)").Groups[1].Value;
             var versions = Changelog.Parse(file);
 
+            props.Should().Contain("<RequestarrVersion Condition=\"'$(RequestarrVersion)' == ''\">0.0.0</RequestarrVersion>", "a build without a number is 0.0.0");
+            Regex.IsMatch(props, @"<AssemblyVersion>\d").Should().BeFalse("the number is stamped at build time, never kept in the source");
             versions.Should().NotBeEmpty();
-            versions[0].Version.ToString().Should().Be(assembly, "the top entry is the version this build announces");
+            Changelog.Parse(file, new Version(9, 9, 9)).Count.Should().BeInRange(versions.Count, versions.Count + 1, "Unreleased, when there is one, is the build a dev or QA server runs");
             versions.Select(v => v.Version).Should().OnlyHaveUniqueItems();
             versions.Should().Contain(v => v.HasNews);
             Changelog.Embedded().Replace("\r", string.Empty).Should().Be(file.Replace("\r", string.Empty), "the build embeds the file");
@@ -311,7 +312,7 @@ namespace Requestarr.Core.Test.Announcements
         [Test]
         public void the_process_and_the_channel_are_documented()
         {
-            File.ReadAllText(Item4To6Fixture.RepoFile("docs", "development.md")).Should().Contain("## Changelog").And.Contain("Bump the version").And.Contain("### For users");
+            File.ReadAllText(Item4To6Fixture.RepoFile("docs", "development.md")).Should().Contain("## Changelog").And.Contain("Add its lines under `## Unreleased`").And.Contain("### For users");
             File.ReadAllText(Item4To6Fixture.RepoFile("CLAUDE.md")).Should().Contain("CHANGELOG.md");
             File.ReadAllText(Item4To6Fixture.RepoFile(".github", "pull_request_template.md")).Should().Contain("CHANGELOG.md");
             File.ReadAllText(Item4To6Fixture.RepoFile(".github", "workflows", "build.yml")).Should().Contain("name: Changelog").And.Contain("secrets, changelog, promotion]");

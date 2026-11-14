@@ -15,13 +15,19 @@ namespace Requestarr.Core.Announcements
     }
 
     // CHANGELOG.md at the repo root is the source of truth for what changed; it is embedded in the build.
-    // Format: "## x.y.z (YYYY-MM-DD)", then "### For users" and "### For admins", each a list of "- " lines; a section with
-    // nothing in it is left out, heading included. Any other section is ignored here (CI's changelog check refuses it).
+    // Format: "## 0.7.0004 (YYYY-MM-DD)" (up to 0.6.0 "x.y.z"), then "### For users" and "### For admins", each a list of
+    // "- " lines; a section with nothing in it is left out, heading included. "## Unreleased" on top holds what changed
+    // since the last build sent to testers (docs/development.md#versions). Any other section is ignored here (CI's
+    // changelog check refuses it).
     public static class Changelog
     {
         public const string ResourceName = "Requestarr.CHANGELOG.md";
         public const string UsersHeading = "For users";
         public const string AdminsHeading = "For admins";
+        public const string UnreleasedHeading = "Unreleased";
+
+        // From 0.7 a version's last part is a running build number people see with four digits; before, x.y.z.
+        private static readonly Version FirstBuildNumbered = new(0, 7);
 
         public static string Embedded()
         {
@@ -36,7 +42,9 @@ namespace Requestarr.Core.Announcements
             return reader.ReadToEnd();
         }
 
-        public static IReadOnlyList<ChangelogVersion> Parse(string text)
+        // unreleased: the version a dev or QA build runs as (the next build's number), which its Unreleased lines are
+        // read as; null leaves them out, as on staging and production, which only ever run numbered builds.
+        public static IReadOnlyList<ChangelogVersion> Parse(string text, Version unreleased = null)
         {
             var versions = new List<ChangelogVersion>();
             Version version = null;
@@ -64,7 +72,7 @@ namespace Requestarr.Core.Announcements
                 if (line.StartsWith("## "))
                 {
                     Flush();
-                    (version, date) = ParseHeading(line.Substring(3));
+                    (version, date) = line.Substring(3).Trim() == UnreleasedHeading ? (unreleased, null) : ParseHeading(line.Substring(3));
                 }
                 else if (line.StartsWith("### ") && version != null)
                 {
@@ -94,8 +102,16 @@ namespace Requestarr.Core.Announcements
             return (version, date);
         }
 
-        // The version a build announces: major.minor.build (the revision is the build number).
+        // The version a build announces: major.minor.build (.NET's revision is left out).
         public static Version Release(Version build) => new(build.Major, build.Minor, Math.Max(build.Build, 0));
+
+        // How people see a version: 0.7.0004 from 0.7 on (.NET reads it as 0.7.4), the old 0.6.0 before.
+        public static string Display(Version version)
+        {
+            var release = Release(version);
+
+            return $"{release.Major}.{release.Minor}.{release.Build.ToString(release >= FirstBuildNumbered ? "D4" : "D", CultureInfo.InvariantCulture)}";
+        }
     }
 
     // The versions a server has announced, stored as "0.2.1,0.2.3,0.2.4". Every version up to the lowest one counts as

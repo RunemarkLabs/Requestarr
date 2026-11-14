@@ -2,9 +2,9 @@ name: Dependency updates
 
 # Dependabot's pull requests into dev (docs/development.md#dependency-updates; .github/dependency_updates.py does the
 # work). A new update is labelled: patch and minor "automatic update", major "needs review" (held, with a comment).
-# Automatic updates go one at a time: the next version and its changelog section are added, build is started on that
-# commit and waited for, then the update is merged (or held if build failed) and the next one starts. It also runs when
-# dev moves and every hour, so a waiting update always carries dev's next version (docs/development.md#versions).
+# Automatic updates go one at a time, oldest first: the workflow waits for build on Dependabot's own commit, merges the
+# update once it passes (or holds it if it fails) and starts on the next. Nothing is committed to an update: it has no
+# version or changelog lines (docs/development.md#versions). It also runs when dev moves and every hour.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
@@ -15,11 +15,10 @@ on:
     - cron: "23 * * * *"
   workflow_dispatch:
 
-# Pull requests opened by Dependabot get a read-only token unless the workflow asks for more.
+# Pull requests opened by Dependabot get a read-only token unless the workflow asks for more: merging needs these two.
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 concurrency:
   group: dependency-updates
@@ -46,7 +45,7 @@ jobs:
         run: python3 .github/dependency_updates.py sort
 
   update:
-    name: Version and merge the next automatic update
+    name: Merge the next automatic update
     needs: sort
     if: >
       always() && needs.sort.result != 'failure' &&
@@ -57,14 +56,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: dev
-          fetch-depth: 0
       - name: Self-test
         run: python3 .github/dependency_updates.py --self-test
       - name: Next automatic update
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          python3 .github/dependency_updates.py update
+        run: python3 .github/dependency_updates.py update

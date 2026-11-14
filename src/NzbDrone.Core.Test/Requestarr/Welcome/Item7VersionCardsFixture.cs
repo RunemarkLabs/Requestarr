@@ -76,13 +76,14 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
-        public void a_card_with_one_change_names_it_alone_and_a_beta_keeps_its_label()
+        public void a_card_with_one_change_names_it_alone_and_a_build_keeps_its_label()
         {
-            var version = new ChangelogVersion(new Version(0, 5, 6), new[] { "**Softer logo:** easier on the eyes." }, Array.Empty<string>(), new DateTime(2026, 11, 14));
+            var version = new ChangelogVersion(new Version(0, 7, 4), new[] { "**Softer logo:** easier on the eyes." }, Array.Empty<string>(), new DateTime(2026, 11, 14));
 
-            var card = VersionCards.Collapsed(version, VersionAudience.Users, 2026, "0.5.6-beta.1");
+            var card = VersionCards.Collapsed(version, VersionAudience.Users, 2026, "0.7.0004-qa.4f2a9c1");
 
-            card.Title.Should().Be("Requestarr 0.5.6-beta.1 · November 14");
+            card.Title.Should().Be("Requestarr 0.7.0004-qa.4f2a9c1 · November 14");
+            VersionCards.Collapsed(version, VersionAudience.Users, 2026).Title.Should().Be("Requestarr 0.7.0004 · November 14", "a build number shows four digits");
             card.Description.Should().Be("Softer logo");
             VersionCards.Collapsed(version, VersionAudience.Admins, 2026).Description.Should().Be("Softer logo", "the admin card covers the users' lines too");
         }

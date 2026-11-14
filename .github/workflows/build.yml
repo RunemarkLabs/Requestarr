@@ -3,14 +3,10 @@ name: Build
 on:
   push:
     branches: ["**"]
+  # edited: a "No changelog:" line added to the description later is read again (docs/development.md#changelog).
   pull_request:
-  # Also started by the Dependency updates workflow on an update it has just versioned: commits that workflow pushes
-  # don't start workflows themselves. "base" is the branch the update goes into, for the Changelog job.
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
-    inputs:
-      base:
-        description: For a dependency update, the branch it goes into (checks its version against that branch)
-        default: ""
 
 concurrency:
   group: build-${{ github.ref }}
@@ -138,10 +134,10 @@ jobs:
           echo "Scanning commits $range"
           docker run --rm -v "$PWD:/repo" --entrypoint sh "$GITLEAKS" -c             "git config --global --add safe.directory /repo && gitleaks git /repo --log-opts='$range' --config /repo/.github/gitleaks.toml --gitleaks-ignore-path /repo/.github/gitleaksignore --no-banner --redact --verbose"
 
-  # Every pull request records its changes in CHANGELOG.md under a new version, written to the changelog rule
-  # (docs/development.md#changelog; .github/changelog_check.py says what it checks). Into dev, qa or staging, the
-  # version follows the version rules and no other branch has it (docs/development.md#versions,
-  # .github/version_rules.py; release.sh check-changelog).
+  # Every pull request records its changes in CHANGELOG.md under Unreleased (or says it has none), written to the
+  # changelog rule (docs/development.md#changelog; .github/changelog_check.py says what it checks). Numbered versions
+  # never change; a release commit or a fix into staging takes the next build number (docs/development.md#versions,
+  # .github/build_numbers.py; release.sh check-changelog).
   changelog:
     name: Changelog
     runs-on: ubuntu-latest
@@ -154,23 +150,19 @@ jobs:
         run: |
           python3 .github/changelog_check.py --self-test
           python3 .github/checklist_check.py --self-test
-          python3 .github/version_rules.py --self-test
+          python3 .github/build_numbers.py --self-test
           python3 .github/knip_check.py --self-test
           python3 .github/suppression_check.py --self-test
           python3 docker/qa-gate.py --self-test
-      - name: CHANGELOG.md has a new version for this change, written to the rule
+      - name: CHANGELOG.md says what this change does under Unreleased, written to the rule
         env:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          DISPATCH_BASE: ${{ inputs.base }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$DISPATCH_BASE" ]; then
-            ./release.sh check-changelog "origin/$DISPATCH_BASE" HEAD "$DISPATCH_BASE" HEAD "$GITHUB_REF_NAME"
-            exit 0
-          fi
           if [ "$EVENT" != "pull_request" ]; then
             python3 .github/changelog_check.py CHANGELOG.md
             python3 .github/checklist_check.py QA-CHECKLIST.md CHANGELOG.md
@@ -183,8 +175,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 .github/suppression_check.py "$BASE_SHA" HEAD
 
-  # A promotion into qa (dev's commits) or staging (qa's commits) happens only on the owner's word, and the pull
-  # request records it (docs/development.md#release-flow).
+  # A promotion into qa (dev's commits), staging (qa's build) or main (staging's build) happens only on the owner's word,
+  # and the pull request records it (docs/development.md#release-flow). So does the staging promotion's release commit.
   promotion:
     name: Promotion record
     runs-on: ubuntu-latest
@@ -198,22 +190,24 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
           case "$EVENT:$BASE_REF" in
             pull_request:qa) below=dev ;;
             pull_request:staging) below=qa ;;
+            pull_request:main) below=staging ;;
             *)
-              echo "Not a pull request into qa or staging: nothing to check."
+              echo "Not a pull request into qa, staging or main: nothing to check."
               exit 0
               ;;
           esac
-          if ! git merge-base --is-ancestor "$HEAD_SHA" "origin/$below"; then
+          if [[ "$HEAD_REF" != release/* ]] && ! git merge-base --is-ancestor "$HEAD_SHA" "origin/$below"; then
             echo "A fix into $BASE_REF, not a promotion: nothing to check."
             exit 0
           fi
           if ! printf '%s\n' "$BODY" | grep -qE '^Requested by: .+'; then
-            echo "::error::A promotion to $BASE_REF needs a 'Requested by:' line naming who asked and their words (./release.sh promote-$BASE_REF writes it)."
+            echo "::error::A promotion to $BASE_REF needs a 'Requested by:' line naming who asked and their words (./release.sh writes it)."
             exit 1
           fi
           printf '%s\n' "$BODY" | grep -m1 -E '^Requested by: '

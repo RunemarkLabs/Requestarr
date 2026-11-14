@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Core.Qa
 {
@@ -47,8 +49,8 @@ namespace Requestarr.Core.Qa
             var which = versions.Count switch
             {
                 0 => "nothing to test",
-                1 => $"version {versions[0]}",
-                _ => $"versions {string.Join(", ", versions)}"
+                1 => $"version {Changelog.Display(versions[0])}",
+                _ => $"versions {string.Join(", ", versions.Select(Changelog.Display))}"
             };
 
             return $"{ChecklistTitle}\nWhat to test here before {which} go{(versions.Count == 1 ? "es" : string.Empty)} to staging: **{passed} of {total} passed**{(failing > 0 ? $", {failing} failing" : string.Empty)}.\n" +
@@ -85,7 +87,7 @@ namespace Requestarr.Core.Qa
                 _ => "⏳ Not tested yet"
             };
 
-            return $"**{entry.Name}** · {entry.Version}\n{entry.Text}\n{state}";
+            return $"**{entry.Name}** · {Changelog.Display(entry.Version)}\n{entry.Text}\n{state}";
         }
 
         public static string BugReportsPanel(bool filed) =>

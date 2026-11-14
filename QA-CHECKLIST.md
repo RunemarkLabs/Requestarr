@@ -1,8 +1,12 @@
 # QA checklist
 
-What admins on the QA server test, in Discord, before a version goes to staging. Requestarr posts these items in the QA checklist channel for every version QA has that staging doesn't; admins press Passes or Failing on each. When every item has passed and no bug report from QA is still open, the version can go to staging.
+What admins on the QA server test, in Discord, before a build goes to staging. Requestarr posts these items in the QA checklist channel for the build QA runs and every version staging doesn't have yet; admins press Passes or Failing on each. When every item has passed and no bug report from QA is still open, the build can go to staging.
 
-Every pull request adds its version's items here, the way it adds its changelog entry: each one says what to do and what you should see, in plain words. A version with nothing anyone can test by hand has only its heading. See docs/development.md#qa-checklist.
+Every pull request adds its items under Unreleased, the way it adds its changelog lines: each one says what to do and what you should see, in plain words. The promotion to staging gives them the build's number. Numbering changed with build 0.7.0004: versions up to 0.6.0 keep their own numbers. See docs/development.md#qa-checklist.
+
+## Unreleased
+- **Build number on update cards:** In the admin channel, look at the newest update card. You should see its title start with Requestarr, then a number like 0.7.0004, then qa and a short code.
+- **Build number in the web app:** Open System, then Status. You should see the same number, qa and short code as the version, and the same number on the logo.
 
 ## 0.6.0 (2026-11-13)
 - **Update card titles:** In the announcements channel, look at the update cards. You should see each one titled Requestarr, its version and a day such as November 13, with the main change underneath, and "and 2 more" after it when that version has several changes.

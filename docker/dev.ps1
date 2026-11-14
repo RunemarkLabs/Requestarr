@@ -135,6 +135,18 @@ function Staged-Versions {
     return ("$out").Trim()
 }
 
+# The number the next build sent to testers takes (.github/build_numbers.py), which dev and QA builds show with their
+# commit; 0.0.0 without Python.
+function Next-Build-Number {
+    $python = Get-Python -Optional
+    if (-not $python) { return '0.0.0' }
+    $extra = @($python | Select-Object -Skip 1)
+    Push-Location $Repo
+    try { $out = & $python[0] @extra -I (Join-Path $Repo '.github/build_numbers.py') next } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0 -or -not $out) { return '0.0.0' }
+    return ("$out").Trim()
+}
+
 # What the chosen stack uses: its Compose project, ports, and its own Discord bot (QA: DISCORD_*, dev: DEV_DISCORD_*).
 function Get-StackInfo([string]$which) {
     $s = Read-Secrets
@@ -205,14 +217,15 @@ function Build-Image {
 
     $sha = git -C $Repo rev-parse --verify -q "$ref^{commit}"
     if ($LASTEXITCODE -ne 0 -or -not $sha) { Fail "no branch or commit '$ref' (git fetch first?)" }
-    $props = (git -C $Repo show "${sha}:src/Directory.Build.props") -join "`n"
-    $version = if ($props -match '<AssemblyVersion>(\d+\.\d+\.\d+)') { $Matches[1] } else { '?' }
+    # Dev and QA builds take no number: the next one, and their commit (docs/development.md#versions).
+    $number = Next-Build-Number
+    $version = "$number-$Stack.$($sha.Substring(0, 7))"
     Write-Host "Building requestarr:$Stack from $ref @ $($sha.Substring(0, 7)) (version $version)"
 
     # cmd's pipe keeps the archive binary (Windows PowerShell's pipe would turn it into text).
     Push-Location $Repo
     try {
-        cmd /c "git archive --format=tar $sha | docker build --quiet -t requestarr:$Stack -f docker/Dockerfile --label org.opencontainers.image.revision=$sha --label org.opencontainers.image.ref.name=$ref --label org.opencontainers.image.version=$version - >NUL"
+        cmd /c "git archive --format=tar $sha | docker build --quiet -t requestarr:$Stack -f docker/Dockerfile --build-arg BUILD_NUMBER=$number --build-arg RELEASE_VERSION=$version --label org.opencontainers.image.revision=$sha --label org.opencontainers.image.ref.name=$ref --label org.opencontainers.image.version=$version - >NUL"
         $code = $LASTEXITCODE
     } finally { Pop-Location }
     if ($code -ne 0) { Fail 'the image build failed' }

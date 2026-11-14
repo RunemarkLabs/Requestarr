@@ -30,9 +30,9 @@ namespace Requestarr.Core.Announcements
         // published image runs on staging and production, so this follows where it runs, not how it was built.
         string IconSet { get; }
 
-        // Staging's beta version of the version it was published as ("0.4.17-beta.1", docs/development.md#versions),
-        // or null: every other build, and every other version, shows its plain number.
-        string BetaVersion(Version version);
+        // How a version is shown: the version this build runs as its build label (0.7.0004, or 0.7.0004-dev.4f2a9c1 for
+        // a dev build, docs/development.md#versions), every other one as its number.
+        string Shown(Version version);
     }
 
     public class ReleaseEnvironment : IReleaseEnvironment
@@ -43,10 +43,11 @@ namespace Requestarr.Core.Announcements
         // QA only: staging's versions ("0.1.0,0.2.0,..."), from the staging branch's changelog when the QA stack starts.
         public const string StagedVersionsVariable = "REQUESTARR_STAGED_VERSIONS";
 
-        // Staging's image only: the beta version it was published as, set when the image is built.
+        // The build's label, set in the image when it is built: its number, and for a build that isn't sent to testers
+        // the stage and commit after it.
         public const string ReleaseVersionVariable = "REQUESTARR_RELEASE_VERSION";
 
-        private static readonly Regex Beta = new(@"^(?<version>\d+\.\d+\.\d+)-beta\.[1-9]\d*$");
+        private static readonly Regex Label = new(@"^(?<number>\d+\.\d+\.\d+)(?:-(?:dev|qa|test)\.[0-9a-f]{7,40})?$");
 
         public Func<string, string> Variable { get; set; } = Environment.GetEnvironmentVariable;
 
@@ -68,11 +69,12 @@ namespace Requestarr.Core.Announcements
             _ => "production"
         };
 
-        public string BetaVersion(Version version)
+        public string Shown(Version version)
         {
-            var match = Beta.Match((Variable(ReleaseVersionVariable) ?? string.Empty).Trim());
+            var number = Changelog.Display(version);
+            var match = Label.Match((Variable(ReleaseVersionVariable) ?? string.Empty).Trim());
 
-            return match.Success && version != null && match.Groups["version"].Value == Changelog.Release(version).ToString() ? match.Value : null;
+            return match.Success && match.Groups["number"].Value == number ? match.Value : number;
         }
 
         public IReadOnlySet<Version> Staged => (Variable(StagedVersionsVariable) ?? string.Empty)
