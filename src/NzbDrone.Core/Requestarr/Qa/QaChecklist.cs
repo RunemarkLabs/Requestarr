@@ -11,7 +11,8 @@ using Requestarr.Core.Announcements;
 namespace Requestarr.Core.Qa
 {
     // One thing to test in a version: "- **Name:** what to do. You should see what happens." Key: "0.4.15/name-in-words",
-    // stable across releases, so a pass is kept when the checklist is posted again.
+    // stable across releases, so a pass is kept when the checklist is posted again. An Unreleased item's key has the
+    // build count it will be ("build-5/name-in-words"), which stays when shipping moves the minor (0.7.0005 to 0.8.0005).
     public record QaChecklistEntry(Version Version, string Key, string Name, string Text);
 
     public record QaChecklistVersion(Version Version, IReadOnlyList<QaChecklistEntry> Items);
@@ -44,6 +45,7 @@ namespace Requestarr.Core.Qa
         {
             var versions = new List<QaChecklistVersion>();
             Version current = null;
+            string keyPrefix = null;
             List<QaChecklistEntry> items = null;
 
             foreach (var raw in (text ?? string.Empty).Split('\n'))
@@ -54,6 +56,7 @@ namespace Requestarr.Core.Qa
                 if (heading.Success)
                 {
                     current = heading.Groups["unreleased"].Success ? unreleased : Version.Parse(heading.Groups["version"].Value);
+                    keyPrefix = heading.Groups["unreleased"].Success ? $"build-{unreleased?.Build}" : current.ToString();
                     items = new List<QaChecklistEntry>();
 
                     if (current != null)
@@ -69,7 +72,7 @@ namespace Requestarr.Core.Qa
                 if (current != null && item.Success)
                 {
                     var name = item.Groups["name"].Value.Trim();
-                    items.Add(new QaChecklistEntry(current, $"{current}/{Slug(name)}", name, item.Groups["text"].Value.Trim()));
+                    items.Add(new QaChecklistEntry(current, $"{keyPrefix}/{Slug(name)}", name, item.Groups["text"].Value.Trim()));
                 }
             }
 

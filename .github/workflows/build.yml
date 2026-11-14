@@ -8,9 +8,11 @@ on:
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
+# A new push cancels the build it replaces; an edited description waits instead, so it never turns a build that was
+# going to pass into a cancelled one.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event.action != 'edited' }}
 
 permissions:
   contents: read

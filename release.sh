@@ -176,8 +176,12 @@ check_changelog() {
     if [[ "$pr_branch" == dependabot/* ]] || printf '%s\n' "${PR_BODY:-}" | grep -qE '^No changelog: .{5,}'; then
         flags+=(--no-changelog)
     fi
+    # The next number as it was before this pull request (its branches may already have moved to it); a major when the
+    # promotion recorded the owner's word, or from 1.0 a "Before you upgrade" line asks for one.
     if [ "$kind" = release ] || [ "$kind" = staging-fix ]; then
-        flags+=(--number "$(numbers next)")
+        local major=()
+        printf '%s\n' "${PR_BODY:-}" | grep -qE '^Major roll-up: .+' && major=(--major)
+        flags+=(--number "$(numbers next --before "$pr_head" --changelog "$work/base/CHANGELOG.md" "${major[@]}")")
     fi
     local status=0
     numbers check "$kind" "$work/base" "$work/head" ${upper:+"$work/upper"} "${flags[@]}" || status=1

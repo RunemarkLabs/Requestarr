@@ -15,6 +15,7 @@ Exit 0: clear (staging may have these versions). 1: blocked. 2: couldn't tell (s
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -39,8 +40,21 @@ def checklist():
 def open_issues(environment, versions):
     out = subprocess.run(["gh", "issue", "list", "--repo", REPOSITORY, "--state", "open", "--label", "env: " + environment,
                           "--limit", "500", "--json", "number,title,url,labels"], capture_output=True, text=True, check=True).stdout
-    wanted = {"version: " + v for v in versions}
-    return [i for i in json.loads(out) if wanted & {label["name"] for label in i["labels"]}]
+    return [i for i in json.loads(out) if covers(versions, {label["name"] for label in i["labels"]})]
+
+
+def build_count(version):
+    """A build number's count (0.7.0005: 5), or None for an older x.y.z version."""
+    match = re.fullmatch(r"\d+\.\d+\.(\d{4,})", version)
+    return int(match.group(1)) if match else None
+
+
+def covers(versions, labels):
+    """Whether an issue's "version: ..." label is one of the checklist's versions. A build number counts by its count:
+    shipping moves the minor of the build QA is testing (0.7.0005 becomes 0.8.0005), not which build it is."""
+    filed = {label[len("version: "):] for label in labels if label.startswith("version: ")}
+    builds = {build_count(v) for v in versions} - {None}
+    return bool(filed & set(versions)) or any(build_count(v) in builds for v in filed)
 
 
 def decide(data, issues):
@@ -73,6 +87,14 @@ def self_test():
         ("a failing item", {"checklist": dict(state, failing=1, passed=1), "unfiledReports": []}, [], False),
     ]
     wrong = [name for name, data, issues, clear in cases if decide(data, issues)[0]["clear"] != clear]
+    labels = [
+        ("a report on a version the checklist has", ["0.6.0"], {"version: 0.6.0", "env: qa"}, True),
+        ("a report on another version", ["0.6.0"], {"version: 0.5.6"}, False),
+        ("a report on QA's build from before a ship moved its minor", ["0.8.0005", "0.6.0"], {"version: 0.7.0005"}, True),
+        ("a report on another build", ["0.8.0005"], {"version: 0.7.0004"}, False),
+    ]
+    wrong += [name for name, versions, issue_labels, expected in labels if covers(versions, issue_labels) != expected]
+    cases += labels
     for name in wrong:
         print("qa-gate self-test: wrong verdict for %s" % name, file=sys.stderr)
     print("qa-gate self-test: %d of %d cases right" % (len(cases) - len(wrong), len(cases)))

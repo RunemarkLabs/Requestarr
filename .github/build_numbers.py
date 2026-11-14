@@ -14,9 +14,10 @@ Versions up to 0.6.0 kept their x.y.z numbers, one per pull request; three of th
 CHANGELOG.md and QA-CHECKLIST.md: pull requests add their lines under "## Unreleased"; the staging promotion turns
 it into "## 0.7.0004 (YYYY-MM-DD)". Numbered sections never change after that.
 
-  python3 .github/build_numbers.py next [--major] [--changelog <file>] [--shipped <x.y.zzzz>]
+  python3 .github/build_numbers.py next [--major] [--changelog <file>] [--shipped <x.y.zzzz>] [--before <commit>]
         the number the next build sent to testers takes (from 1.0, a major when that changelog's Unreleased has a
-        "Before you upgrade" line for admins; --shipped: as if that build had shipped)
+        "Before you upgrade" line for admins; --shipped: as if that build had shipped; --before: as it was before
+        that commit, for checking a pull request whose branch has already moved to it)
   python3 .github/build_numbers.py image <event> <branch> <commit> [<test tag>]
         what the Image workflow publishes, from CHANGELOG.md here: key=value lines (mode build or retag, tags, ...)
   python3 .github/build_numbers.py label <dev|qa|test> <commit>   a build that isn't sent: 0.7.0004-dev.4f2a9c1
@@ -92,8 +93,11 @@ def git(*args):
 
 def remote_tags():
     """{tag name: commit} from origin; an annotated tag is read by the commit it points to."""
+    listed = git("ls-remote", "--tags", "origin")
+    if listed.returncode != 0:
+        raise SystemExit("couldn't read origin's tags, so the next number isn't known: %s" % listed.stderr.strip())
     tags = {}
-    for row in git("ls-remote", "--tags", "origin").stdout.splitlines():
+    for row in listed.stdout.splitlines():
         sha, _, ref = row.partition("\t")
         name = ref[len("refs/tags/"):]
         peeled = name.endswith("^{}")
@@ -103,17 +107,25 @@ def remote_tags():
     return tags
 
 
-def shipped_builds(tags):
-    """The numbered builds production (origin/main) has."""
-    return {v for v, sha in tagged_builds(tags).items()
-            if git("merge-base", "--is-ancestor", sha, "origin/main").returncode == 0}
+def branch_builds(branch, before=None):
+    """The numbered builds (from 0.7) in a branch's changelog on origin. A build is taken once its release commit is
+    on qa or staging, before its image is published and tagged, so a publish that fails never frees its number.
+    before: a commit whose own numbers don't count (a pull request checked while its branch has already moved to it)."""
+    ref = "origin/" + branch
+    if before and git("rev-parse", ref).stdout.strip() == git("rev-parse", before).stdout.strip():
+        ref = ref + "^"
+    shown = git("show", ref + ":CHANGELOG.md")
+    return {v for v in parse(shown.stdout)[2] if v[:2] >= FIRST_NUMBERED} if shown.returncode == 0 else set()
 
 
-def next_from_git(major=False, shipping=None):
-    """shipping: a build about to ship, counted as shipped (what ship-it's dry run shows)."""
-    tags = remote_tags()
+def next_from_git(major=False, shipping=None, before=None):
+    """shipping: a build about to ship, counted as shipped (what ship-it's dry run shows). Production has shipped
+    what main's changelog numbers."""
+    git("fetch", "-q", "origin", "qa", "staging", "main")
+    tags = {name: sha for name, sha in remote_tags().items() if not before or sha != git("rev-parse", before).stdout.strip()}
     shipping = {shipping} if shipping else set()
-    return next_number(built(tags) | shipping, shipped_builds(tags) | shipping, major)
+    taken = built(tags) | branch_builds("qa", before) | branch_builds("staging", before) | shipping
+    return next_number(taken, branch_builds("main") | shipping, major)
 
 
 # ---- published images ---------------------------------------------------------------------------------------------
@@ -137,10 +149,13 @@ def image_plan(event, branch, sha, changelog, tags, upcoming, test_tag=""):
         if pending or top is None:
             return {"error": "staging's changelog has Unreleased on top: a build sent to testers has a number "
                              "(./release.sh promote-staging, or a fix into staging with the next number)"}
+        if top[:2] < FIRST_NUMBERED:
+            return {"error": "staging's top version is %s, from before build numbers: a build sent to testers takes "
+                             "the next number (./release.sh next-version)" % text(top)}
         if tagged.get(top) not in (None, sha):
             return {"error": "%s was already published from another commit: a number is never reused" % text(top)}
-        if top not in tagged and top != upcoming:
-            return {"error": "staging's top version is %s, but the next build takes %s" % (text(top), text(upcoming))}
+        if top not in tagged and tagged and top < max(tagged):
+            return {"error": "%s is below %s, already published: numbers only go up" % (text(top), text(max(tagged)))}
         number = text(top)
         return {"mode": "build", "number": number, "label": number, "source": "",
                 "tags": "%s:staging,%s:%s" % (IMAGE, IMAGE, number), "record": "" if top in tagged else "v" + number}
@@ -234,20 +249,26 @@ def release(document, number, day, extra_admin_line=None):
 
 def merge(ours, theirs):
     """Every numbered section of both, highest first (one both have must read the same); Unreleased keeps the lines of
-    both, ours first, that no numbered section has yet."""
+    both, ours first, except those the other side has since released (an older build with the same words doesn't
+    count)."""
     preamble, mine, own = parse(ours)
     _, other, others = parse(theirs)
     for version in own.keys() & others.keys():
         if own[version].rstrip() != others[version].rstrip():
             raise ValueError("%s reads differently on the two branches: merge it by hand" % text(version))
     sections = {**others, **own}
-    done = released_lines(sections)
     unreleased = {}
-    for side in (mine or {}, other or {}):
+    for side, newer in ((mine or {}, newly_released(own, others)), (other or {}, newly_released(others, own))):
+        done = released_lines(newer)
         for sub, rows in side.items():
             kept = unreleased.setdefault(sub, [])
             kept.extend(row for row in rows if row not in done and row not in kept)
     return render(preamble, unreleased, sections)
+
+
+def newly_released(known, merged):
+    """The numbered sections of `merged` that `known` doesn't have yet."""
+    return {v: s for v, s in merged.items() if v not in known}
 
 
 def upgrade_needs_admins(document):
@@ -316,7 +337,7 @@ def check_merge_back(base, upper, head):
                 if sections.get(version) != section:
                     problems.append("%s: %s is missing or changed; a merge-back keeps every version" % (name, text(version)))
         known = lines_of(parse(base[name])[1]) | lines_of(parse(upper[name])[1])
-        if lines_of(unreleased) - known or lines_of(unreleased) & released_lines(sections):
+        if lines_of(unreleased) - known or lines_of(unreleased) & released_lines(newly_released(parse(base[name])[2], sections)):
             problems.append("%s: Unreleased keeps only the lines of both branches that no version has yet" % name)
     return sorted(set(problems))
 
@@ -383,6 +404,8 @@ def self_test():
          "the merge-back passes its check"),
         (bool(check("merge-back", base, base, released)), "a merge-back that loses a version fails"),
         (merge(released["CHANGELOG.md"], staged_fix["CHANGELOG.md"]) == staged_fix["CHANGELOG.md"], "a staging fix merges down whole"),
+        ("- **Cards:** clearer." in merge(log("## Unreleased\n\n### For users\n- **Cards:** clearer.\n\n" + old), released["CHANGELOG.md"]).split("## 0.7.0004")[0],
+         "a merge-back keeps an Unreleased line that only an older build has the same words as"),
         (upgrade_needs_admins(log("## Unreleased\n\n### For admins\n- **Before you upgrade:** move it.\n\n")), "an upgrade admins must act on"),
         (render(*parse(change["CHANGELOG.md"])) == change["CHANGELOG.md"], "a file reads back as it was"),
     ]
@@ -396,6 +419,12 @@ def self_test():
         ("error" in image_plan("push", "staging", "abc1234", change["CHANGELOG.md"], {}, first), "staging never builds Unreleased"),
         ("error" in image_plan("push", "staging", "def5678", released["CHANGELOG.md"], {"v0.7.0004": "abc1234"}, (0, 7, 5)),
          "a number is never published twice"),
+        (image_plan("push", "staging", "def5678", staged_fix["CHANGELOG.md"], {}, first).get("record") == "v0.7.0005",
+         "after a publish that failed, the fix's number publishes: a number is taken by its release commit, not its tag"),
+        ("error" in image_plan("push", "staging", "def5678", released["CHANGELOG.md"], {"v0.7.0005": "abc1234"}, (0, 7, 6)),
+         "numbers only go up"),
+        ("error" in image_plan("push", "staging", "def5678", base["CHANGELOG.md"], {}, first),
+         "staging never publishes a number from before build numbers"),
         (ship.get("mode") == "retag" and ship["source"] == IMAGE + ":0.7.0004" and ship["tags"] == IMAGE + ":0.7," + IMAGE + ":latest",
          "ship it retags the image staging published, without building"),
         ("error" in image_plan("push", "main", "def5678", released["CHANGELOG.md"], {"v0.7.0004": "abc1234"}, (0, 8, 5)),
@@ -444,9 +473,10 @@ def main(argv):
             with open(changelog, encoding="utf-8") as handle:
                 upgrade = upgrade_needs_admins(handle.read())
         shipping = parse_version(args[args.index("--shipped") + 1]) if "--shipped" in args else None
-        upcoming = next_from_git(shipping=shipping)
+        before = args[args.index("--before") + 1] if "--before" in args else None
+        upcoming = next_from_git(shipping=shipping, before=before)
         if "--major" in args or (upgrade and upcoming[0] >= 1):
-            upcoming = next_from_git(major=True)
+            upcoming = next_from_git(major=True, before=before)
         print(text(upcoming))
         return 0
     if len(args) in (4, 5) and args[0] == "image":

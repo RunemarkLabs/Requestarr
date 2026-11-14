@@ -78,16 +78,17 @@ namespace Requestarr.Core.Test.Qa
         }
 
         [Test]
-        public void unreleased_items_are_the_build_qa_runs_and_keep_their_keys_once_numbered()
+        public void unreleased_items_are_the_build_qa_runs_keyed_by_its_build_count()
         {
             const string Pending = "# QA checklist\n\n## Unreleased\n- **Build number:** open System, then Status. You should see the build's number.\n\n## 0.6.0 (2026-11-13)\n";
-            var running = new Version(0, 7, 4);
+            var running = new Version(0, 7, 5);
 
             var unreleased = QaChecklist.Parse(Pending, running);
-            var numbered = QaChecklist.Parse(Pending.Replace("## Unreleased", "## 0.7.0004 (2026-11-20)"));
 
             unreleased.Select(v => v.Version).Should().Equal(running, new Version(0, 6, 0));
-            unreleased[0].Items.Single().Key.Should().Be(numbered[0].Items.Single().Key, "a pass recorded in QA is kept when staging numbers the build");
+            unreleased[0].Items.Single().Key.Should().Be("build-5/build-number");
+            QaChecklist.Parse(Pending, new Version(0, 8, 5))[0].Items.Single().Key.Should().Be("build-5/build-number", "shipping 0.7.0004 moves QA's minor, and a pass recorded in QA is kept");
+            QaChecklist.Parse(Pending, new Version(0, 7, 6))[0].Items.Single().Key.Should().NotBe("build-5/build-number", "the next build's items start untested");
             QaChecklist.Parse(Pending).Select(v => v.Version).Should().Equal(new[] { new Version(0, 6, 0) }, "without a running build Unreleased is left out");
         }
 
