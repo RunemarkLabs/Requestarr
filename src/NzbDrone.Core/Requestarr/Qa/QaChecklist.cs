@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
@@ -10,10 +12,12 @@ using Requestarr.Core.Announcements;
 
 namespace Requestarr.Core.Qa
 {
-    // One thing to test in a version: "- **Name:** what to do. You should see what happens." Key: "0.4.15/name-in-words",
-    // stable across releases, so a pass is kept when the checklist is posted again. An Unreleased item's key has the
-    // build count it will be ("build-5/name-in-words"), which stays when shipping moves the minor (0.7.0005 to 0.8.0005).
-    public record QaChecklistEntry(Version Version, string Key, string Name, string Text);
+    // One thing to test in a version: "- **Name:** what to do. You should see what happens." Key: its name and wording
+    // ("name-in-words.3f9a2c1d"), so a result stays with the same words wherever they move (a promotion, a fold into
+    // Unreleased, a build number replacing Unreleased) and new words start untested. EarlierKey is the key results were
+    // recorded under before (its heading and name: "0.4.15/name-in-words", or "build-5/name-in-words" under Unreleased),
+    // which a result recorded then is moved from.
+    public record QaChecklistEntry(Version Version, string Key, string Name, string Text, string EarlierKey);
 
     public record QaChecklistVersion(Version Version, IReadOnlyList<QaChecklistEntry> Items);
 
@@ -72,7 +76,8 @@ namespace Requestarr.Core.Qa
                 if (current != null && item.Success)
                 {
                     var name = item.Groups["name"].Value.Trim();
-                    items.Add(new QaChecklistEntry(current, $"{keyPrefix}/{Slug(name)}", name, item.Groups["text"].Value.Trim()));
+                    var itemText = item.Groups["text"].Value.Trim();
+                    items.Add(new QaChecklistEntry(current, WordingKey(name, itemText), name, itemText, $"{keyPrefix}/{Slug(name)}"));
                 }
             }
 
@@ -96,6 +101,15 @@ namespace Requestarr.Core.Qa
         public static bool HasChecklist(IReleaseEnvironment environment) => environment.VersionPosts != VersionPostMode.Standing;
 
         private static string Slug(string name) => Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+
+        // Eight hex digits of the wording's hash: enough to tell a checklist's items apart, short enough for a button's ID.
+        private static string WordingKey(string name, string text)
+        {
+            var wording = Regex.Replace($"{name}: {text}", @"\s+", " ");
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(wording)));
+
+            return $"{Slug(name)}.{hash[..8].ToLowerInvariant()}";
+        }
     }
 
     public enum QaItemState
@@ -118,6 +132,9 @@ namespace Requestarr.Core.Qa
         public DateTime? At { get; set; }
         public int? BugReportId { get; set; }
         public string MessageId { get; set; }
+
+        // The build it was passed or failed on (0.7.0004-qa.4f2a9c1): a pass from an earlier build was carried over.
+        public string RecordedOn { get; set; }
     }
 
     public interface IQaChecklistItemRepository : IBasicRepository<QaChecklistItem>

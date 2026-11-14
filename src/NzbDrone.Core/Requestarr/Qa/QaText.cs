@@ -44,7 +44,7 @@ namespace Requestarr.Core.Qa
         public const string NoChannel = "The bug reports channel isn't set up yet. Try again in a minute.";
         public const string Sending = "Sending your report…";
 
-        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTime? completedAt)
+        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, int carried, string completedBy, DateTime? completedAt)
         {
             var which = versions.Count switch
             {
@@ -54,8 +54,13 @@ namespace Requestarr.Core.Qa
             };
 
             return $"{ChecklistTitle}\nWhat to test here before {which} go{(versions.Count == 1 ? "es" : string.Empty)} to staging: **{passed} of {total} passed**{(failing > 0 ? $", {failing} failing" : string.Empty)}.\n" +
+                   Carried(total, carried) +
                    ChecklistStatus(total, passed, failing, completedBy, completedAt);
         }
+
+        // After a promotion: how many items kept the pass an earlier build got, and how many are new or reworded.
+        private static string Carried(int total, int carried) =>
+            carried > 0 ? $"🔁 **{carried} carried over** with their pass from an earlier build; **{total - carried} new or changed** since.\n" : string.Empty;
 
         private static string ChecklistStatus(int total, int passed, int failing, string completedBy, DateTime? completedAt)
         {

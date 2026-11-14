@@ -17,7 +17,8 @@ namespace Requestarr.Core.Qa
     public record QaChecklistItemState(string Key, string Version, string Name, string State, string By, DateTime? At, int? BugReportId, string IssueUrl);
 
     // What Claude Code reads from the QA stack before promoting to staging, and what the portal will show.
-    public record QaChecklistState(string Environment, IReadOnlyList<string> Versions, int Total, int Passed, int Failing, bool Complete, string CompletedBy, DateTime? CompletedAt, IReadOnlyList<QaChecklistItemState> Items);
+    // Carried: the items passed on an earlier build that kept their pass (their wording didn't change).
+    public record QaChecklistState(string Environment, IReadOnlyList<string> Versions, int Total, int Passed, int Failing, int Carried, bool Complete, string CompletedBy, DateTime? CompletedAt, IReadOnlyList<QaChecklistItemState> Items);
 
     public interface IQaChecklistService
     {
@@ -96,7 +97,7 @@ namespace Requestarr.Core.Qa
                 return new QaChecklistItemState(e.Key, Changelog.Display(e.Version), e.Name, r.State.ToString(), r.ByName, r.At, r.BugReportId, report?.IssueUrl);
             }).ToList();
 
-            return new QaChecklistState(_environment.IconSet, Versions().Select(v => Changelog.Display(v.Version)).ToList(), entries.Count, passed, failing, complete, last?.ByName, last?.At, items);
+            return new QaChecklistState(_environment.IconSet, Versions().Select(v => Changelog.Display(v.Version)).ToList(), entries.Count, passed, failing, Carried(records), complete, last?.ByName, last?.At, items);
         }
 
         public async Task EnsureAsync()
@@ -172,6 +173,7 @@ namespace Requestarr.Core.Qa
             record.ByDiscordUserId = discordUserId.ToString();
             record.ByName = name;
             record.At = DateTime.UtcNow;
+            record.RecordedOn = RunningBuild();
             _items.Update(record);
             _audit.Record(Actor.Discord(discordUserId, name), "qa.checklist.pass", "qa-item", key);
 
@@ -200,6 +202,7 @@ namespace Requestarr.Core.Qa
             record.ByDiscordUserId = discordUserId.ToString();
             record.ByName = name;
             record.At = DateTime.UtcNow;
+            record.RecordedOn = RunningBuild();
             record.BugReportId = report?.Id;
             _items.Update(record);
             _audit.Record(Actor.Discord(discordUserId, name), "qa.checklist.fail", "qa-item", key, report != null ? $"bug report {report.Id}" : null);
@@ -234,7 +237,7 @@ namespace Requestarr.Core.Qa
 
             foreach (var entry in entries)
             {
-                var record = _items.FindByKey(entry.Key);
+                var record = _items.FindByKey(entry.Key) ?? MovedFromEarlierKey(entry);
 
                 if (record == null)
                 {
@@ -247,6 +250,35 @@ namespace Requestarr.Core.Qa
             return records;
         }
 
+        // A result recorded before results followed the wording (keyed by heading and name) moves to the wording's key.
+        private QaChecklistItem MovedFromEarlierKey(QaChecklistEntry entry)
+        {
+            var record = _items.FindByKey(entry.EarlierKey);
+
+            if (record == null)
+            {
+                return null;
+            }
+
+            record.ItemKey = entry.Key;
+            _items.SetFields(record, r => r.ItemKey);
+
+            // Its bug report finds the item by its key too (to show the issue link once it's filed).
+            var report = record.BugReportId.HasValue ? _reports.Find(record.BugReportId.Value) : null;
+
+            if (report != null)
+            {
+                report.ChecklistItemKey = entry.Key;
+                _reports.SetFields(report, r => r.ChecklistItemKey);
+            }
+
+            return record;
+        }
+
+        private string RunningBuild() => _environment.Shown(CurrentVersion());
+
+        private int Carried(Dictionary<string, QaChecklistItem> records) => records.Values.Count(r => r.State == QaItemState.Passed && r.RecordedOn != RunningBuild());
+
         private InteractionReply SummaryCard(IReadOnlyList<QaChecklistEntry> entries, Dictionary<string, QaChecklistItem> records)
         {
             var passed = records.Values.Count(r => r.State == QaItemState.Passed);
@@ -256,7 +288,7 @@ namespace Requestarr.Core.Qa
             return new InteractionReply
             {
                 Quiet = true,
-                Cards = { new InteractionCard { Color = SummaryColor(failing, complete: last != null), Text = QaText.Summary(Versions().Select(v => v.Version).ToList(), entries.Count, passed, failing, last?.ByName, last?.At) } }
+                Cards = { new InteractionCard { Color = SummaryColor(failing, complete: last != null), Text = QaText.Summary(Versions().Select(v => v.Version).ToList(), entries.Count, passed, failing, Carried(records), last?.ByName, last?.At) } }
             };
         }
 

@@ -90,7 +90,7 @@ namespace Requestarr.Core.Test.Qa
         [Test]
         public async Task a_failing_checklist_item_gets_the_report_linked()
         {
-            var item = new QaChecklistEntry(new Version(0, 4, 15), "0.4.15/report-limit", "Report limit", "Do it. You should see it.");
+            var item = new QaChecklistEntry(new Version(0, 4, 15), "0.4.15/report-limit", "Report limit", "Do it. You should see it.", null);
             Mocker.GetMock<IQaChecklistService>().Setup(c => c.Find(item.Key)).Returns(item);
 
             var result = await Subject.SubmitAsync(42, "Alex", "admin", "It let me through", null, item.Key);
@@ -160,7 +160,7 @@ namespace Requestarr.Core.Test.Qa
         [Test]
         public async Task a_report_kept_for_want_of_a_key_is_filed_once_the_key_is_there_and_its_checklist_item_follows()
         {
-            var item = new QaChecklistEntry(new Version(0, 4, 16), "0.4.16/one", "One", "Do it. You should see it.");
+            var item = new QaChecklistEntry(new Version(0, 4, 16), "0.4.16/one", "One", "Do it. You should see it.", null);
             Mocker.GetMock<IQaChecklistService>().Setup(c => c.Find(item.Key)).Returns(item);
             Settings(file: true, token: null);
 
