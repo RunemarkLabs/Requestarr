@@ -4,21 +4,21 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.79" />
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="11.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="10.0.13" />
     <PackageReference Include="NLog.Targets.Syslog" Version="7.0.0" />
-    <PackageReference Include="Npgsql" Version="9.0.5" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Polly" Version="8.7.0" />
-    <PackageReference Include="FluentMigrator.Runner.Core" Version="6.2.0" />
-    <PackageReference Include="FluentMigrator.Runner.Postgres" Version="6.2.0" />
-    <PackageReference Include="FluentMigrator.Runner.SQLite" Version="6.2.0" />
-    <PackageReference Include="System.Drawing.Common" Version="10.0.13" />
-    <PackageReference Include="FluentValidation" Version="9.5.4" />
+    <PackageReference Include="FluentMigrator.Runner.Core" Version="8.0.1" />
+    <PackageReference Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
+    <PackageReference Include="FluentMigrator.Runner.SQLite" Version="8.0.1" />
+    <PackageReference Include="System.Drawing.Common" Version="11.0.0" />
+    <PackageReference Include="FluentValidation" Version="12.2.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="NLog" Version="5.5.1" />
+    <PackageReference Include="NLog" Version="6.2.2" />
     <PackageReference Include="Diacritical.Net" Version="1.0.4" />
     <PackageReference Include="Discord.Net.WebSocket" Version="3.20.2" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <PackageReference Include="AngleSharp" Version="1.5.2" />
   </ItemGroup>
   <ItemGroup>
