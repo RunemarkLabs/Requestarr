@@ -9,7 +9,7 @@ import Icon from 'Components/Icon';
 import ClipboardButton from 'Components/Link/ClipboardButton';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
 import { icons, inputTypes, kinds } from 'Helpers/Props';
-import { disabledIfProvisioned, readOnlyIfProvisioned } from 'Settings/provisionedSetting';
+import { disabledIfProvisioned, isProvisioned, provisionedHelpText, readOnlyIfProvisioned } from 'Settings/provisionedSetting';
 import translate from 'Utilities/String/translate';
 
 export const authenticationMethodOptions = [
@@ -223,7 +223,7 @@ class SecuritySettings extends Component {
             type={inputTypes.TEXT}
             name="apiKey"
             readOnly={true}
-            helpText={readOnlyIfProvisioned(settings, 'apiKey').helpText}
+            helpText={provisionedHelpText(settings, 'apiKey')}
             helpTextWarning={translate('RestartRequiredHelpTextWarning')}
             buttons={[
               <ClipboardButton
@@ -235,6 +235,7 @@ class SecuritySettings extends Component {
               <FormInputButton
                 key="reset"
                 kind={kinds.DANGER}
+                isDisabled={isProvisioned(settings, 'apiKey')}
                 onPress={this.onResetApiKeyPress}
               >
                 <Icon

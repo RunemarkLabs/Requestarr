@@ -10,6 +10,7 @@ import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import { inputTypes, kinds } from 'Helpers/Props';
+import { disabledIfProvisioned } from 'Settings/provisionedSetting';
 import SettingsToolbarConnector from 'Settings/SettingsToolbarConnector';
 import themes from 'Styles/Themes';
 import titleCase from 'Utilities/String/titleCase';
@@ -147,7 +148,7 @@ class UISettings extends Component {
                     <FormInputGroup
                       type={inputTypes.SELECT}
                       name="theme"
-                      helpText={translate('ThemeHelpText', { inspiredBy: 'Theme.Park' })}
+                      {...disabledIfProvisioned(settings, 'theme', translate('ThemeHelpText', { inspiredBy: 'Theme.Park' }))}
                       values={themeOptions}
                       onChange={onInputChange}
                       {...settings.theme}

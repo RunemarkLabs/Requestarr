@@ -31,6 +31,9 @@ namespace Requestarr.Core.Test.Qa
 - **Sign-in logo:** Sign out. You should see the logo.
 ";
 
+        // The fold's 11 carried items, the two rewritten ones and the build-number item kept under Unreleased.
+        private const int ItemsFromTheFold = 14;
+
         private readonly Dictionary<string, QaChecklistItem> _records = new();
         private int _nextId = 1;
 
@@ -184,7 +187,7 @@ namespace Requestarr.Core.Test.Qa
             // The items that came out of the fold (later pull requests add their own, untested).
             var folded = state.Items.Where(i => QaChecklistFold.EarlierKeys.ContainsKey(i.Key) || i.Name is "Update cards" or "Read changes" or "Build number in the web app").ToList();
             folded.Where(i => i.State != "Passed").Select(i => i.Name).Should().Equal(toTest);
-            folded.Where(i => i.State == "Passed").Should().OnlyContain(i => i.By == "EaZyCheaZ").And.HaveCount(14 - toTest.Length);
+            folded.Where(i => i.State == "Passed").Should().OnlyContain(i => i.By == "EaZyCheaZ").And.HaveCount(ItemsFromTheFold - toTest.Length);
             QaChecklistFold.EarlierKeys.Keys.Should().BeSubsetOf(QaChecklist.Parse(QaChecklist.Embedded(), new Version(0, 7, 4)).SelectMany(v => v.Items).Select(i => i.Key),
                 "each entry names a folded item by its words; drop an entry once its item is reworded");
         }

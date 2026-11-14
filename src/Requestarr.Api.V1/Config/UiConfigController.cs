@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Localization;
 using NzbDrone.Http.REST.Attributes;
+using Requestarr.Core.Provisioning;
 using Requestarr.Http;
 
 namespace Requestarr.Api.V1.Config
@@ -13,11 +14,13 @@ namespace Requestarr.Api.V1.Config
     public class UiConfigController : ConfigController<UiConfigResource>
     {
         private readonly IConfigFileProvider _configFileProvider;
+        private readonly IProvisioningService _provisioning;
 
-        public UiConfigController(IConfigFileProvider configFileProvider, IConfigService configService, ILocalizationService localizationService)
+        public UiConfigController(IConfigFileProvider configFileProvider, IConfigService configService, ILocalizationService localizationService, IProvisioningService provisioning)
             : base(configService)
         {
             _configFileProvider = configFileProvider;
+            _provisioning = provisioning;
 
             SharedValidator.RuleFor(c => c.UILanguage)
                            .NotEmpty()
@@ -49,7 +52,10 @@ namespace Requestarr.Api.V1.Config
 
         protected override UiConfigResource ToResource(IConfigService model)
         {
-            return UiConfigResourceMapper.ToResource(_configFileProvider, model);
+            var resource = UiConfigResourceMapper.ToResource(_configFileProvider, model);
+            resource.Provisioned = _provisioning.ProvisionedSettings;
+
+            return resource;
         }
     }
 }

@@ -188,7 +188,7 @@ namespace Requestarr.Core.Provisioning
         // config.xml's keys are the settings API's names, capitalized; the login and the API key are stored elsewhere.
         private static IReadOnlyCollection<string> SettingNames(IEnumerable<string> configKeys, AuthProvisioning auth)
         {
-            var names = configKeys.Select(k => char.ToLowerInvariant(k[0]) + k.Substring(1)).ToList();
+            var names = configKeys.Select(k => k.FirstCharToLower()).ToList();
 
             if (auth?.Username.IsNotNullOrWhiteSpace() == true)
             {

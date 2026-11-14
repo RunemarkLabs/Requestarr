@@ -78,6 +78,8 @@ init() {
 # Reads secrets.env and sets what the chosen stack uses: its Compose project, ports, and its own Discord bot.
 prepare() {
     [ -f "$SECRETS" ] || die "docker/secrets.env is missing: run docker/dev.sh init (or up) first."
+    # Set in the environment, it wins over secrets.env (as in dev.ps1).
+    local auth_required="${DEV_AUTH_REQUIRED:-}"
     set -a
     # shellcheck disable=SC1090
     . "$SECRETS"
@@ -107,7 +109,7 @@ prepare() {
             STACK_DISCORD_ADMIN_ROLE_ID="${DEV_DISCORD_ADMIN_ROLE_ID:-}"
             STACK_GITHUB_ISSUES_TOKEN="${DEV_GITHUB_ISSUES_TOKEN:-}"
             # DEV_AUTH_REQUIRED=enabled tries signing in and out on dev.
-            STACK_AUTH_REQUIRED="${DEV_AUTH_REQUIRED:-disabledForLocalAddresses}"
+            STACK_AUTH_REQUIRED="${auth_required:-${DEV_AUTH_REQUIRED:-disabledForLocalAddresses}}"
             ;;
         *) die "--stack is qa or dev (got '$STACK')" ;;
     esac
