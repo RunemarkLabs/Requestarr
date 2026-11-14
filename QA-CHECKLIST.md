@@ -7,6 +7,7 @@ Every pull request adds its items under Unreleased, the way it adds its changelo
 ## Unreleased
 - **Build number on update cards:** In the admin channel, look at the newest update card. You should see its title start with Requestarr, then a number like 0.7.0004, then qa and a short code.
 - **Build number in the web app:** Open System, then Status. You should see the same number, qa and short code as the version, and the same number on the logo.
+- **Access requests paused:** With a test account that isn't a member, press Request access in the welcome channel again and again, about fifteen times, until the welcome channel disappears for that account. You should see the blocked channel's message titled Access requests paused, saying an admin can lift the pause, and in the admin channel a notice with Unblock; pressing Unblock brings the welcome channel back for that account.
 - **Passes carry over:** After the next promotion to QA, look at the QA checklist channel. You should see every item you passed before still passed, with your name and when, and the summary saying how many carried over and how many are new or changed.
 
 ## 0.6.0 (2026-11-13)

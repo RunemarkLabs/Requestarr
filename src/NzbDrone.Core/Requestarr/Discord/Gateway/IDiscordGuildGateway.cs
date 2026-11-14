@@ -68,6 +68,9 @@ namespace Requestarr.Core.Discord.Gateway
 
         // Moves a channel into a group, keeping its messages and its own permissions.
         Task MoveChannelAsync(ulong channelId, ulong categoryId);
+
+        // Sets a channel's topic (the line under its name) when it says something else.
+        Task SetChannelTopicAsync(ulong channelId, string topic);
         Task<ulong> CreateCategoryAsync(string name, IReadOnlyList<PermissionOverwrite> overwrites);
         Task<ulong> CreateTextChannelAsync(string name, ulong? categoryId, string topic, IReadOnlyList<PermissionOverwrite> overwrites);
         Task SetChannelOverwritesAsync(ulong channelId, IReadOnlyList<PermissionOverwrite> overwrites);

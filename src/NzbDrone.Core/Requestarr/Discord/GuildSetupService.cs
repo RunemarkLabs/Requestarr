@@ -296,6 +296,8 @@ namespace Requestarr.Core.Discord
                 _logger.Info("Moved {0} into the {1} group", name, ChannelLayout.UsersCategoryName);
             }
 
+            // A topic Requestarr has reworded since the channel was made.
+            await _gateway.SetChannelTopicAsync(channel.Value, topic);
             await SyncOverwrites(channel.Value, layout);
             return channel.Value;
         }

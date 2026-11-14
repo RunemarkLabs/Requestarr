@@ -82,6 +82,14 @@ namespace Requestarr.Core.Discord.Gateway
             }
         }
 
+        public async Task SetChannelTopicAsync(ulong channelId, string topic)
+        {
+            if (await Client.Rest.GetChannelAsync(channelId) is RestTextChannel channel && channel.Topic != topic)
+            {
+                await channel.ModifyAsync(p => p.Topic = topic);
+            }
+        }
+
         public async Task<ulong> CreateCategoryAsync(string name, IReadOnlyList<PermissionOverwrite> overwrites)
         {
             var category = await RequireGuild().CreateCategoryChannelAsync(name, p => p.PermissionOverwrites = Map(overwrites));

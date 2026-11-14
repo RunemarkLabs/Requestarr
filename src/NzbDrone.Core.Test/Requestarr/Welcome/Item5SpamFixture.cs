@@ -92,6 +92,16 @@ namespace Requestarr.Core.Test.Welcome
         }
 
         [Test]
+        public void the_blocked_message_says_access_requests_are_paused_and_an_admin_can_lift_it()
+        {
+            // The owner's words (November 14): a pause an admin lifts, not a verdict.
+            DiscordText.BlockedMessage.Should().Be("## Access requests paused\nThe request button was pressed too many times in a short while, so Requestarr has paused access requests from you. " +
+                                                   "An admin can lift the pause; send them a message and they'll take a look.");
+            DiscordText.WelcomeBlockedNow.Should().StartWith("The request button was pressed too many times", "the answer to the click that pauses them says the same");
+            DiscordText.WelcomeBlocked.Should().Be("Requestarr has paused access requests from you. An admin can lift the pause; send them a message and they'll take a look.");
+        }
+
+        [Test]
         public void the_blocked_see_the_blocked_channel_instead_of_the_welcome_channel()
         {
             Discord.Members[Carol] = Discord.Members[Carol] with { RoleIds = new[] { BlockedRole } };
@@ -120,7 +130,7 @@ namespace Requestarr.Core.Test.Welcome
         {
             await BlockCarol();
             var card = (await MemberCard(Carol)).LastReply;
-            card.Content.Should().Contain("Blocked from asking for access");
+            card.Content.Should().Contain("Access requests paused since");
             card.Buttons.Select(b => b.CustomId).Should().Contain($"{AccessRoutes.Unblock}:{Carol}");
 
             var run = await Harness.SendAsync(AsAdmin(FakeInteraction.Button($"{AccessRoutes.Unblock}:{Carol}")));

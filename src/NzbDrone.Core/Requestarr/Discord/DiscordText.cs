@@ -728,7 +728,7 @@ namespace Requestarr.Core.Discord
 
         public const string FeedChannelTopic = "Requestarr activity: one card per request, newest at the bottom. Admins only.";
         public const string WelcomeChannelTopic = "What Requestarr is, and how to ask for access. Only Requestarr posts here.";
-        public const string BlockedChannelTopic = "Why you can't request access through Requestarr any more.";
+        public const string BlockedChannelTopic = "Why Requestarr has paused your access requests, and how to have the pause lifted.";
         public const string AnnouncementsChannelTopic = "News from Requestarr for everyone: new things you can do, and outages that affect requests. Only admins post here.";
 
         public static string FeedState(Request request) => request.Status switch
@@ -1109,20 +1109,22 @@ namespace Requestarr.Core.Discord
             _ => Label(type).ToLowerInvariant()
         };
 
-        // The blocked channel's one message, a card; only someone holding the blocked role sees it.
-        public const string BlockedTitle = "You can't request access through Requestarr any more";
+        // The blocked channel's one message, a card; only someone holding the blocked role sees it. The owner's words:
+        // the block is a pause an admin lifts (Unblock), not a verdict.
+        public const string BlockedTitle = "Access requests paused";
 
-        public const string BlockedMessage =
-            "## " + BlockedTitle + "\n" +
-            "The buttons in the welcome channel were pressed many times in a row, so Requestarr has stopped taking requests from you.\n\n" +
-            "If you think this is a mistake, message the server admin directly.";
+        public const string BlockedExplanation = "The request button was pressed too many times in a short while, so Requestarr has paused access requests from you. " + BlockedLift;
+
+        private const string BlockedLift = "An admin can lift the pause; send them a message and they'll take a look.";
+
+        public const string BlockedMessage = "## " + BlockedTitle + "\n" + BlockedExplanation;
 
         public const uint WelcomeColor = 0x1BB3A6;
         public const uint BlockedColor = 0xD9534F;
 
         // Answers to a welcome button click, privately.
-        public const string WelcomeBlocked = "Requestarr isn't taking access requests from you any more. If you think that's a mistake, message the server admin directly.";
-        public const string WelcomeBlockedNow = "That's a lot of clicks, so Requestarr has stopped taking access requests from you. If you think that's a mistake, message the server admin directly.";
+        public const string WelcomeBlocked = "Requestarr has paused access requests from you. " + BlockedLift;
+        public const string WelcomeBlockedNow = BlockedExplanation;
         public const string WelcomeSuspended = "Your Requestarr access is paused right now. If you think that's a mistake, message the server admin.";
 
         public static string WelcomeAlreadyIn(string channelId) => $"You're already in: your request channel is <#{channelId}>.";
@@ -1223,14 +1225,14 @@ namespace Requestarr.Core.Discord
         public const string NotBlocked = "They aren't blocked.";
 
         public static string BlockedAdminNotice(ulong discordId, string name) =>
-            $"🚫 **{name ?? "A member"}** (<@{discordId}>) pressed the welcome buttons too many times, so Requestarr blocked them from asking for access. " +
-            $"They now see only #{ChannelLayout.BlockedChannelName}. **{UnblockLabel}** lifts it, as does removing their **{ChannelLayout.BlockedRoleName}** role.";
+            $"🚫 **{name ?? "A member"}** (<@{discordId}>) pressed the welcome buttons too many times in a short while, so Requestarr paused their access requests. " +
+            $"They now see only #{ChannelLayout.BlockedChannelName}, which tells them an admin can lift the pause. **{UnblockLabel}** lifts it, as does removing their **{ChannelLayout.BlockedRoleName}** role.";
 
-        public static string BlockedLine(DateTime since) => $"🚫 Blocked from asking for access since <t:{Unix(since)}:R> (repeated clicks on the welcome buttons).";
+        public static string BlockedLine(DateTime since) => $"🚫 Access requests paused since <t:{Unix(since)}:R> (repeated clicks on the welcome buttons).";
 
-        public static string Unblocked(ulong discordId) => $"<@{discordId}> is unblocked: they see the welcome channel again and can ask for access.";
+        public static string Unblocked(ulong discordId) => $"<@{discordId}>'s access requests are no longer paused: they see the welcome channel again and can ask for access.";
 
-        public static string UnblockedByHand(ulong discordId) => $"<@{discordId}> is unblocked: their {ChannelLayout.BlockedRoleName} role was removed in Discord.";
+        public static string UnblockedByHand(ulong discordId) => $"<@{discordId}>'s access requests are no longer paused: their {ChannelLayout.BlockedRoleName} role was removed in Discord.";
 
         // /admin requests: one thing waiting on the admin at a time, oldest first.
         public const string WalkDone = "Nothing left waiting on you. 🎉";

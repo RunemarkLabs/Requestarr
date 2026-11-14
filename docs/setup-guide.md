@@ -681,7 +681,7 @@ Rules for the button:
 | 10 within the hour | they wait 24 hours |
 | 5 more within 24 hours of the 10th | they're blocked |
 
-Blocking gives them the **Requestarr Blocked** role. It hides `#requestarr-welcome` from them and shows `#requestarr-access-blocked`, a read-only channel whose one message tells them they can no longer request access through the bot and to message the server admin directly if they think it's wrong. You get one notice in `#requestarr-admin`. A block lasts until you lift it: **Unblock** on that notice or on their member card, or remove the role from them in Discord. Rapid clicking costs nothing: no messages to you, and one small record per person.
+Blocking gives them the **Requestarr Blocked** role. It hides `#requestarr-welcome` from them and shows `#requestarr-access-blocked`, a read-only channel whose one message, "Access requests paused", tells them the request button was pressed too many times in a short while, that an admin can lift the pause, and to send one a message. You get one notice in `#requestarr-admin`. A pause lasts until you lift it: **Unblock** on that notice or on their member card, or remove the role from them in Discord. Rapid clicking costs nothing: no messages to you, and one small record per person.
 
 All of these are settings, with these defaults, under `accessRequests:` in `provisioning.yml` (each optional), stored so the admin web portal can change them later:
 

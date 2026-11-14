@@ -191,8 +191,8 @@ namespace Requestarr.Core.Discord.Help
                              $"One open request per person; after a denial they can ask again after {Access.AccessSettings.DefaultDenialCooldownDays} days (`accessRequests.denialCooldownDays`). Members already in are told where their channel is.\n" +
                              "One button per media server you've connected sits next to it (none yet: connecting a media server comes with Plex sharing, so for now there are no media server buttons, and Link Plex is gone from member panels).\n" +
                              $"Spam: only clicks that can't do anything count, within an hour. {Access.AccessSettings.DefaultShortCooldownClicks} make them wait {Access.AccessSettings.DefaultShortCooldownMinutes} minute, {Access.AccessSettings.DefaultLongCooldownClicks} make them wait {Access.AccessSettings.DefaultLongCooldownHours} hours, " +
-                             $"and {Access.AccessSettings.DefaultBlockClicks} more within {Access.AccessSettings.DefaultBlockWithinHours} hours block them: the **{ChannelLayout.BlockedRoleName}** role hides the welcome channel and shows #{ChannelLayout.BlockedChannelName}, which tells them to message you. " +
-                             $"You get one notice here; **{DiscordText.UnblockLabel}** on it or on their member card lifts the block, and so does removing the role in Discord. The numbers are under `accessRequests.spam` in provisioning."
+                             $"and {Access.AccessSettings.DefaultBlockClicks} more within {Access.AccessSettings.DefaultBlockWithinHours} hours pause their access requests: the **{ChannelLayout.BlockedRoleName}** role hides the welcome channel and shows #{ChannelLayout.BlockedChannelName}, which tells them an admin can lift the pause and to message you. " +
+                             $"You get one notice here; **{DiscordText.UnblockLabel}** on it or on their member card lifts the pause, and so does removing the role in Discord. The numbers are under `accessRequests.spam` in provisioning."
             },
             new HelpTopic
             {

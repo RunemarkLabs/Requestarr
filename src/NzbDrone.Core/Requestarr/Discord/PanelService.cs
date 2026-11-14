@@ -80,6 +80,9 @@ namespace Requestarr.Core.Discord
         // How many of the bot's newest messages in a channel are read to find its panel again.
         public const int PanelScan = 100;
 
+        // The blocked channel's title before November 14, 2026.
+        private const string EarlierBlockedTitle = "You can't request access through Requestarr any more";
+
         public static readonly TimeSpan MoveDelay = TimeSpan.FromSeconds(2);
 
         private readonly IDiscordGuildGateway _gateway;
@@ -223,6 +226,11 @@ namespace Requestarr.Core.Discord
                 }
             }
         };
+
+        // The blocked channel's message, also under the title it had before November 14, 2026, so a server set up again
+        // (its saved ID gone) replaces that one instead of showing both.
+        private static bool IsBlockedMessage(ChannelMessage message) =>
+            message.Content?.Contains(DiscordText.BlockedTitle) == true || message.Content?.Contains(EarlierBlockedTitle) == true;
 
         public static InteractionReply BlockedPanel() => new() { Cards = { new InteractionCard { Color = DiscordText.BlockedColor, Text = DiscordText.BlockedMessage } } };
 
@@ -423,7 +431,7 @@ namespace Requestarr.Core.Discord
 
             if (config.BlockedChannelId == id)
             {
-                return new Panel(config.BlockedMessageId, BlockedPanel, m => m.Content?.Contains(DiscordText.BlockedTitle) == true, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
+                return new Panel(config.BlockedMessageId, BlockedPanel, IsBlockedMessage, saved => Save(c => c.BlockedMessageId = saved, c => c.BlockedMessageId));
             }
 
             if (config.BugReportsChannelId == id)

@@ -13,6 +13,7 @@ what's waiting for the next build is under Unreleased.
 ## Unreleased
 
 ### For users
+- **Access requests paused:** someone who presses the request button too many times in a short while now reads that their access requests are paused and that an admin can lift the pause, instead of being told they can't request access any more.
 - **Build numbers:** each test build of Requestarr now has one number that counts up, like 0.7.0004, and it reads the same on the update cards, in the web app and on the logo.
 
 ### For admins

@@ -23,7 +23,7 @@ namespace Requestarr.Core.Test.Discord.Harness
             public string Name { get; set; }
             public bool IsCategory { get; init; }
             public ulong? CategoryId { get; set; }
-            public string Topic { get; init; }
+            public string Topic { get; set; }
             public List<PermissionOverwrite> Overwrites { get; set; } = new();
             public List<InteractionReply> Messages { get; } = new();
             public List<ulong> MessageIds { get; } = new();
@@ -109,6 +109,12 @@ namespace Requestarr.Core.Test.Discord.Harness
 
         public Task<ulong?> GetChannelCategoryAsync(ulong channelId) =>
             Task.FromResult(Channels.TryGetValue(channelId, out var channel) ? channel.CategoryId : null);
+
+        public Task SetChannelTopicAsync(ulong channelId, string topic)
+        {
+            Channels[channelId].Topic = topic;
+            return Task.CompletedTask;
+        }
 
         public Task MoveChannelAsync(ulong channelId, ulong categoryId)
         {
