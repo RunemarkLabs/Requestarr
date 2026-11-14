@@ -44,6 +44,7 @@ namespace Requestarr.Core.Test.AvailabilityFeed
             Mocker.SetConstant<IAvailabilityService>(Availability);
             Availability.Clock = () => Now;
             Service.Clock = () => Now;
+            Sonarr.Clock = () => Now;
         }
 
         protected static bool IsCardOf(InteractionReply message, int requestId) =>
