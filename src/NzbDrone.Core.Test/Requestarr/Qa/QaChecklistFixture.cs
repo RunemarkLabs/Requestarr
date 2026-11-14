@@ -167,8 +167,8 @@ namespace Requestarr.Core.Test.Qa
             "build-4/build-number-on-update-cards", "build-4/build-number-in-the-web-app"
         };
 
-        [TestCase(null, "Update cards", "Access requests paused", "Passes carry over")]
-        [TestCase("0.4.11/charcoal-arrow", "Update cards", "Web app logo", "Access requests paused", "Passes carry over")]
+        [TestCase(null, "Update cards", "Read changes", "Access requests paused", "Passes carry over")]
+        [TestCase("0.4.11/charcoal-arrow", "Update cards", "Read changes", "Web app logo", "Access requests paused", "Passes carry over")]
         public void the_fold_keeps_a_merged_items_pass_only_when_every_item_it_came_from_passed(string untested, params string[] toTest)
         {
             foreach (var key in BeforeTheFold.Where(k => k != untested))

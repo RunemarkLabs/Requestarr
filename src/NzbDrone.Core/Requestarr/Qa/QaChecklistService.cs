@@ -289,7 +289,7 @@ namespace Requestarr.Core.Qa
                 return null;
             }
 
-            var last = earlier.OrderByDescending(r => r.At).First();
+            var last = earlier.MaxBy(r => r.At);
 
             return _items.Insert(new QaChecklistItem
             {

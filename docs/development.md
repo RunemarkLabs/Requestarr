@@ -111,7 +111,7 @@ Not run in CI:
 
    **Unreleased is the rollup.** It says what changed since the last build the beta testers got, as where things ended up, because that's what they read in one update. A pull request that changes something already described under Unreleased rewrites that line to its new final state instead of adding another (the logo went through several looks before a build; testers hear only the last one). A change to something testers already have, released in a numbered build, is a new line: for them it's new. Lines for things that were taken out again before a build are removed. The checklist works the same way ([QA checklist](#qa-checklist)).
 
-   On November 14, 2026 the versions that never reached the testers, 0.4.0 to 0.6.0, were folded into Unreleased this way, with the QA checklist's items for them; 0.3.4 and older stay as they are.
+   On November 14, 2026 the versions that never reached the testers, 0.4.0 to 0.6.0, were folded into Unreleased this way, with the QA checklist's items for them; 0.3.4 and older stay as they are. Until QA has the fold, a fix into `qa` would bring the folded versions back to `dev` on its merge-back (a merge-back keeps every numbered version of both branches), so the next promotion to QA comes before any fix there.
 
 2. **Or, when nothing changes for users or admins** (tests, build and CI, refactoring, the dev and QA tools), add no lines and say so in the pull request's description, on a line of its own: `No changelog: <why>`. A dependency update from Dependabot counts as one without saying it.
 

@@ -293,7 +293,7 @@ def numbered_changes(name, base, head, tested):
     if any(old.get(v) != s for v, s in new.items()):
         return ["%s: a numbered version changed; add lines under '## Unreleased' instead" % name]
     folded = set(old) - set(new)
-    if folded and (tested is None or any(v <= max(tested, default=(0, 0, 0)) for v in folded)):
+    if folded and (tested is None or min(folded) <= max(tested, default=(0, 0, 0))):
         return ["%s: only versions testers never had can be folded into Unreleased; %s reached them" % (name, ", ".join(map(text, sorted(folded))))]
     return []
 
@@ -302,7 +302,7 @@ def repeated_leads(unreleased):
     """Unreleased says where things ended up: one line per thing in each part, rewritten when that thing changes again."""
     problems = []
     for sub, rows in (unreleased or {}).items():
-        leads = [lead.group(1).rstrip(":").lower() for lead in map(LEAD.match, rows) if lead]
+        leads = [match.group(1).rstrip(":").lower() for match in map(LEAD.match, rows) if match]
         problems += ["CHANGELOG.md: '%s' leads two lines under Unreleased%s; rewrite the one line to where it ended up" % (lead, " (%s)" % sub if sub else "")
                      for lead in sorted({lead for lead in leads if leads.count(lead) > 1})]
     return problems
