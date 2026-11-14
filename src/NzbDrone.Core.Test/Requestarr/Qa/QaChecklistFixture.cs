@@ -134,7 +134,7 @@ namespace Requestarr.Core.Test.Qa
 
             state.Items.Select(i => (i.Name, i.State, i.By)).Should().Equal(
                 ("New thing", "Pending", null), ("Passing an item", "Passed", "Alex"), ("Failing an item", "Passed", "Alex"), ("Sign-in logo", "Pending", null));
-            state.Should().BeEquivalentTo(new { Total = 4, Passed = 2, Carried = 2, Complete = false });
+            state.Should().BeEquivalentTo(new { Total = 4, Passed = 2, Carried = 2, New = 2, Complete = false });
         }
 
         [Test]
@@ -142,7 +142,9 @@ namespace Requestarr.Core.Test.Qa
         {
             Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns("0.7.0004-qa.2222222");
             var report = new BugReport { Id = 9, ChecklistItemKey = "0.4.15/failing-an-item" };
+            var earlier = new BugReport { Id = 8, ChecklistItemKey = "0.4.15/failing-an-item" };
             Mocker.GetMock<IBugReportRepository>().Setup(r => r.Find(9)).Returns(report);
+            Mocker.GetMock<IBugReportRepository>().Setup(r => r.All()).Returns(new[] { earlier, report, new BugReport { Id = 7, ChecklistItemKey = "0.4.15/other" } });
             _records["0.4.15/failing-an-item"] = new QaChecklistItem { Id = 50, ItemKey = "0.4.15/failing-an-item", State = QaItemState.Failing, ByName = "Alex", BugReportId = 9 };
             _records["0.4.13/sign-in-logo"] = new QaChecklistItem { Id = 51, ItemKey = "0.4.13/sign-in-logo", State = QaItemState.Passed, ByName = "Sam" };
 
@@ -151,14 +153,14 @@ namespace Requestarr.Core.Test.Qa
             state.Should().BeEquivalentTo(new { Passed = 1, Failing = 1, Carried = 1 });
             _records.Keys.Should().BeEquivalentTo(Keys("Passing an item", "Failing an item", "Sign-in logo"));
             _records[Key("Sign-in logo")].Id.Should().Be(51, "the same record, under its new key");
-            report.ChecklistItemKey.Should().Be(Key("Failing an item"), "the report still finds its item");
+            new[] { earlier, report }.Should().OnlyContain(r => r.ChecklistItemKey == Key("Failing an item"), "every report on the item still finds it");
         }
 
-        [TestCase(0, "⏳ **1 left to test.**")]
-        [TestCase(2, "🔁 **2 carried over** with their pass from an earlier build; **1 new or changed** since.\n⏳ **1 left to test.**")]
-        public void the_summary_says_how_many_passes_were_carried_over(int carried, string ending)
+        [TestCase(0, 0, "⏳ **1 left to test.**")]
+        [TestCase(2, 1, "🔁 **2 carried over** with their pass from an earlier build; **1 new or changed** in this one.\n⏳ **1 left to test.**")]
+        public void the_summary_says_how_many_passes_were_carried_over_and_how_many_items_are_new(int carried, int added, string ending)
         {
-            QaText.Summary(new[] { new Version(0, 7, 4) }, 3, 2, 0, carried, null, null).Should().EndWith(ending);
+            QaText.Summary(new[] { new Version(0, 7, 4) }, 3, 2, 0, new QaCarriedOver(carried, added), null, null).Should().EndWith(ending);
         }
 
         [Test]

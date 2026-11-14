@@ -135,6 +135,9 @@ namespace Requestarr.Core.Qa
 
         // The build it was passed or failed on (0.7.0004-qa.4f2a9c1): a pass from an earlier build was carried over.
         public string RecordedOn { get; set; }
+
+        // The build it first appeared on: an item added on the running build is new (or reworded) in it.
+        public string AddedOn { get; set; }
     }
 
     public interface IQaChecklistItemRepository : IBasicRepository<QaChecklistItem>

@@ -293,9 +293,8 @@ qa_gate_record() {
     if [ -n "$override" ]; then
         echo "Owner override: $override (the QA gate was not checked or not clear)"
         [ ! -f "$hold" ] || echo "Staging was held: $(cat "$hold")"
-    elif [ -f "$hold" ]; then
-        [ "$dry" = 1 ] || die "staging is held by the owner: $(cat "$hold"). Only the owner's word moves it: promote-staging \"<who>\" --owner-override \"<the owner's words>\""
-        echo "Staging hold: $(cat "$hold") (a real promotion stops here unless the owner overrides it)."
+    elif [ -f "$hold" ] && [ "$dry" != 1 ]; then
+        die "staging is held by the owner: $(cat "$hold"). Only the owner's word moves it: promote-staging \"<who>\" --owner-override \"<the owner's words>\""
     elif verdict=$("$here/docker/dev.sh" qa-gate --json); then
         printf '%s' "$verdict" | python -c 'import json,sys; v=json.load(sys.stdin); print("QA checklist: complete for %s (%d items), the last item passed by %s at %s; no bug report from QA open." % (", ".join(v["versions"]), v["total"], v["completedBy"], v["completedAt"]))'
     elif [ "$dry" = 1 ]; then
@@ -303,6 +302,9 @@ qa_gate_record() {
     else
         "$here/docker/dev.sh" qa-gate >&2 || true
         die "promotion to staging is blocked: QA's test checklist isn't complete, an item is failing, or a bug report from QA is still open. Only the owner can override it: promote-staging \"<who>\" --owner-override \"<the owner's words>\""
+    fi
+    if [ -z "$override" ] && [ -f "$hold" ]; then
+        echo "Staging hold: $(cat "$hold") (a real promotion stops here unless the owner overrides it)."
     fi
 }
 
@@ -360,11 +362,11 @@ promote_staging() {
     echo "$into_staging"
     fast_forward "$into_qa" "$release" qa
     fast_forward "$into_staging" "$release" staging
+    rm -f "$hold"
     git push -q origin --delete "$branch" || true
     rm -rf "$work"
     fetch
     merge_into qa dev
-    rm -f "$hold"
     echo "Staging is now build $number ($(git rev-parse --short origin/staging)). Next: the Image workflow publishes"
     echo "      ghcr.io/requestarr/requestarr:staging and :$number and tags the commit v$number (gh run list --workflow image.yml);"
     echo "      .\\docker\\dev.ps1 up (or docker/dev.sh up) so QA drops what staging now has;"
@@ -473,15 +475,16 @@ merge_back() {
 qa_gate() {
     local status=0
     "$here/docker/dev.sh" qa-gate "$@" || status=$?
-    if [ -f "$hold" ] && [ "$*" != "--json" ]; then
-        echo "HELD: the owner holds staging: $(cat "$hold"). Don't promote until the owner says so (\"QA passed\", or lifts the hold)."
+    if [ -f "$hold" ]; then
+        # With --json the verdict is the only thing on standard output.
+        echo "HELD: the owner holds staging: $(cat "$hold"). Don't promote until the owner says so (\"QA passed\", or lifts the hold)." >&2
         [ "$status" = 2 ] || status=1
     fi
     return "$status"
 }
 
 hold_staging() {
-    [ -n "${1:-}" ] || die 'hold-staging "<the owner'"'"'s words>"'
+    [ -n "${1:-}" ] || die "hold-staging \"<the owner's words>\""
     printf '"%s" (recorded %s by %s)\n' "$1" "$(date -u +%Y-%m-%dT%H:%MZ)" "$(git config user.name)" > "$hold"
     echo "Staging held: $(cat "$hold")"
 }

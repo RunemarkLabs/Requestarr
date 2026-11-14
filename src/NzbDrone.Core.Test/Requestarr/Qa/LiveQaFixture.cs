@@ -298,7 +298,7 @@ namespace Requestarr.Core.Test.Qa
                 var carried = checklist.State();
                 carried.Items.Select(i => i.State).Should().Equal(new[] { "Pending" }.Concat(items.Select((_, n) => n == 1 ? "Pending" : "Passed")));
                 carried.Should().BeEquivalentTo(new { Total = items.Count + 1, Passed = items.Count - 1, Carried = items.Count - 1 });
-                Text(after[0]).Should().Contain($"{items.Count - 1} carried over");
+                Text(after[0]).Should().Contain($"{items.Count - 1} carried over").And.Contain("2 new or changed");
             }
             finally
             {
