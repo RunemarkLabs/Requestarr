@@ -99,7 +99,10 @@ Requestarr reads this on every start, so the configuration lives in a file inste
 
 - `${NAME}` is replaced with the value from `secrets.env`.
 - `${NAME:-default}` supplies a default when the variable is empty.
-- Keys in the file win over changes made in the web portal; keys you leave out are not touched.
+- Keys in the file win over changes made in the web portal; keys you leave out are not touched. The settings pages show the keys the file sets as read-only, with "Set by your provisioning file", so a change there can't be undone silently on the next start.
+- **Changing the web portal password:** change `REQUESTARR_ADMIN_PASSWORD` in `secrets.env` (on the local test stacks, `docker/secrets.env`; on the beta server, `.env`) and restart Requestarr; it's applied on the next start. The same goes for the username and the API key.
+- **Allowed hosts** (`general.allowedHosts`): every name Requestarr is reached by, comma-separated. That's the address you browse, and the name Sonarr and Radarr call it by in their webhooks (in Docker, its service name, such as `requestarr`). A request for any name not on the list is turned away, so a missing name breaks those webhooks. With sign-in required for every address, you can leave it out and every name is accepted. With sign-in only for other networks, the web portal asks for it, and the local test stacks set `localhost, 127.0.0.1, requestarr`.
+- **The port** in Docker is the one inside the container. The address you browse uses the port Docker publishes (in your compose file), so change that instead; the settings page shows the port read-only there.
 
 ```yaml
 version: 1
@@ -810,6 +813,7 @@ Open `.env` and fill in every value; the comments say what each is. In particula
 - **`BETA_SONARR_API_KEY`, `BETA_RADARR_API_KEY`, `REQUESTARR_API_KEY`:** made up here, one each: `openssl rand -hex 16`.
 - **`BETA_DISCORD_BOT_TOKEN`, `BETA_DISCORD_APPLICATION_ID`, `BETA_DISCORD_GUILD_ID`:** the beta bot and the Requestarr Beta server (B.1). This file is the only place they're kept.
 - **`TMDB_API_KEY`:** optional, as in [4.6](#46-cast-from-the-movie-database-optional).
+- **`REQUESTARR_ADMIN_USERNAME`, `REQUESTARR_ADMIN_PASSWORD`:** the web portal's login. Beta requires sign-in for every address, so it needs no allowed hosts. To change the password later, change it here and run `docker compose up -d`; it's applied when Requestarr starts. If you ever add allowed hosts in the provisioning file, include `requestarr` (the name the beta Sonarr and Radarr call it by) and every address you browse.
 
 **Check:** `docker compose config --quiet` prints nothing. If it names a variable, fill that one in.
 

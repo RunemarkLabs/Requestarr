@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NzbDrone.Core.Configuration;
 using Requestarr.Http.REST;
 
@@ -18,6 +19,9 @@ namespace Requestarr.Api.V1.Config
         public bool EnableColorImpairedMode { get; set; }
         public string UILanguage { get; set; }
         public string Theme { get; set; }
+
+        // Requestarr: the settings the provisioning file sets (theme can be one), shown read-only (never saved).
+        public IReadOnlyCollection<string> Provisioned { get; set; }
     }
 
     public static class UiConfigResourceMapper

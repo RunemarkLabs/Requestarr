@@ -9,6 +9,7 @@ import Icon from 'Components/Icon';
 import ClipboardButton from 'Components/Link/ClipboardButton';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
 import { icons, inputTypes, kinds } from 'Helpers/Props';
+import { disabledIfProvisioned, isProvisioned, provisionedHelpText, readOnlyIfProvisioned } from 'Settings/provisionedSetting';
 import translate from 'Utilities/String/translate';
 
 export const authenticationMethodOptions = [
@@ -143,7 +144,7 @@ class SecuritySettings extends Component {
             type={inputTypes.SELECT}
             name="authenticationMethod"
             values={authenticationMethodOptions}
-            helpText={translate('AuthenticationMethodHelpText')}
+            {...disabledIfProvisioned(settings, 'authenticationMethod', translate('AuthenticationMethodHelpText'))}
             helpTextWarning={translate('AuthenticationRequiredWarning')}
             onChange={onInputChange}
             {...authenticationMethod}
@@ -159,7 +160,7 @@ class SecuritySettings extends Component {
                 type={inputTypes.SELECT}
                 name="authenticationRequired"
                 values={authenticationRequiredOptions}
-                helpText={translate('AuthenticationRequiredHelpText')}
+                {...disabledIfProvisioned(settings, 'authenticationRequired', translate('AuthenticationRequiredHelpText'))}
                 onChange={onInputChange}
                 {...authenticationRequired}
               />
@@ -175,6 +176,7 @@ class SecuritySettings extends Component {
               <FormInputGroup
                 type={inputTypes.TEXT}
                 name="username"
+                {...readOnlyIfProvisioned(settings, 'username')}
                 onChange={onInputChange}
                 {...username}
               />
@@ -190,6 +192,7 @@ class SecuritySettings extends Component {
               <FormInputGroup
                 type={inputTypes.PASSWORD}
                 name="password"
+                {...readOnlyIfProvisioned(settings, 'password')}
                 onChange={onInputChange}
                 {...password}
               />
@@ -205,6 +208,7 @@ class SecuritySettings extends Component {
               <FormInputGroup
                 type={inputTypes.PASSWORD}
                 name="passwordConfirmation"
+                {...readOnlyIfProvisioned(settings, 'passwordConfirmation')}
                 onChange={onInputChange}
                 {...passwordConfirmation}
               />
@@ -219,6 +223,7 @@ class SecuritySettings extends Component {
             type={inputTypes.TEXT}
             name="apiKey"
             readOnly={true}
+            helpText={provisionedHelpText(settings, 'apiKey')}
             helpTextWarning={translate('RestartRequiredHelpTextWarning')}
             buttons={[
               <ClipboardButton
@@ -230,6 +235,7 @@ class SecuritySettings extends Component {
               <FormInputButton
                 key="reset"
                 kind={kinds.DANGER}
+                isDisabled={isProvisioned(settings, 'apiKey')}
                 onPress={this.onResetApiKeyPress}
               >
                 <Icon

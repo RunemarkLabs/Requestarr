@@ -25,6 +25,7 @@ function createMapStateToProps() {
         advancedSettings,
         isResettingApiKey,
         isWindows: systemStatus.isWindows,
+        isDocker: systemStatus.isDocker,
         isWindowsService: systemStatus.isWindows && systemStatus.mode === 'service',
         mode: systemStatus.mode,
         packageUpdateMechanism: systemStatus.packageUpdateMechanism,

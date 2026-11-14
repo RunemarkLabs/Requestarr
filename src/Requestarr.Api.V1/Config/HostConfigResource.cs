@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NzbDrone.Common.Http.Proxy;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
@@ -49,6 +50,9 @@ namespace Requestarr.Api.V1.Config
         public int BackupRetention { get; set; }
         public int HistoryCleanupDays { get; set; }
         public bool TrustCgnatIpAddresses { get; set; }
+
+        // Requestarr: the settings the provisioning file sets, shown read-only (never saved).
+        public IReadOnlyCollection<string> Provisioned { get; set; }
     }
 
     public static class HostConfigResourceMapper

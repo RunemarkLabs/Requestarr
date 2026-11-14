@@ -6,6 +6,7 @@ using System.Linq;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Configuration;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -176,6 +177,12 @@ namespace Requestarr.Core.Provisioning
             if (general.UrlBase.IsNotNullOrWhiteSpace() && !general.UrlBase.StartsWith("/"))
             {
                 yield return "general.urlBase must start with '/'";
+            }
+
+            // The settings page can't fix a bad value here (the field is read-only), and its own check would refuse every save.
+            if (general.AllowedHosts.IsNotNullOrWhiteSpace() && !AllowedHostsParser.Parse(general.AllowedHosts).All(AllowedHostsParser.IsValidHost))
+            {
+                yield return "general.allowedHosts must be a comma-separated list of host names or IP addresses, without a protocol or port";
             }
         }
 

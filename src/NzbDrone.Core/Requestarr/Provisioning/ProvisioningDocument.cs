@@ -123,6 +123,10 @@ namespace Requestarr.Core.Provisioning
         public bool? AnalyticsEnabled { get; set; }
         public bool? LaunchBrowser { get; set; }
         public string Theme { get; set; }
+
+        // Every name Requestarr is reached by, comma-separated: the browser's, and the names other apps such as Sonarr
+        // call it by. Requests for any other name are turned away.
+        public string AllowedHosts { get; set; }
     }
 
     public class AuthProvisioning

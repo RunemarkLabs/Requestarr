@@ -12,8 +12,9 @@ using Requestarr.Http.Frontend.Mappers;
 
 namespace Requestarr.Http.Frontend
 {
+    // Requestarr: the web app's pages, not an API. Since .NET 10 a signed-out visit to an API endpoint answers 401 instead
+    // of going to the login page, which left a bare browser error after signing out.
     [Authorize(Policy="UI")]
-    [ApiController]
     public class StaticResourceController : Controller
     {
         private readonly IEnumerable<IMapHttpRequestsToDisk> _requestMappers;

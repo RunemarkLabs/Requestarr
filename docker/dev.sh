@@ -78,6 +78,8 @@ init() {
 # Reads secrets.env and sets what the chosen stack uses: its Compose project, ports, and its own Discord bot.
 prepare() {
     [ -f "$SECRETS" ] || die "docker/secrets.env is missing: run docker/dev.sh init (or up) first."
+    # Set in the environment, it wins over secrets.env (as in dev.ps1).
+    local auth_required="${DEV_AUTH_REQUIRED:-}"
     set -a
     # shellcheck disable=SC1090
     . "$SECRETS"
@@ -94,6 +96,7 @@ prepare() {
             STACK_DISCORD_GUILD_ID="${DISCORD_TEST_GUILD_ID:-}"
             STACK_DISCORD_ADMIN_ROLE_ID="${DISCORD_ADMIN_ROLE_ID:-}"
             STACK_GITHUB_ISSUES_TOKEN="${GITHUB_ISSUES_TOKEN:-}"
+            STACK_AUTH_REQUIRED="enabled"
             ;;
         dev)
             STACK_NAME="Dev"
@@ -105,6 +108,8 @@ prepare() {
             STACK_DISCORD_GUILD_ID="${DEV_DISCORD_GUILD_ID:-}"
             STACK_DISCORD_ADMIN_ROLE_ID="${DEV_DISCORD_ADMIN_ROLE_ID:-}"
             STACK_GITHUB_ISSUES_TOKEN="${DEV_GITHUB_ISSUES_TOKEN:-}"
+            # DEV_AUTH_REQUIRED=enabled tries signing in and out on dev.
+            STACK_AUTH_REQUIRED="${auth_required:-${DEV_AUTH_REQUIRED:-disabledForLocalAddresses}}"
             ;;
         *) die "--stack is qa or dev (got '$STACK')" ;;
     esac
@@ -115,7 +120,7 @@ prepare() {
     REQUESTARR_STAGED_VERSIONS=""
     export REQUESTARR_STACK STACK_REQUESTARR_PORT STACK_SONARR_TEST_PORT STACK_RADARR_TEST_PORT \
         STACK_DISCORD_BOT_TOKEN STACK_DISCORD_APPLICATION_ID STACK_DISCORD_GUILD_ID STACK_DISCORD_ADMIN_ROLE_ID \
-        STACK_GITHUB_ISSUES_TOKEN REQUESTARR_STAGED_VERSIONS
+        STACK_GITHUB_ISSUES_TOKEN STACK_AUTH_REQUIRED REQUESTARR_STAGED_VERSIONS
 }
 
 # QA only: the versions staging has (what was last published for it, staged-versions.py), which QA's what's-new
