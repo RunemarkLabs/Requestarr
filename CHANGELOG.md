@@ -10,6 +10,7 @@ version heading carries the day it was made, which its card in Discord shows.
 
 ### For admins
 - **New home on GitHub:** Requestarr moved to its own GitHub organization, also called Requestarr. Bug reports are filed there, the links in the web app's Status page lead there, and beta updates come from there: the beta setup guide shows the new image address to use.
+- **Bug reports after the move:** if your setup file names the old home as where bug reports go, change it to the new one and give the server a new access key made for the Requestarr organization; the old key stops working.
 
 ## 0.5.5 (2026-10-27)
 
