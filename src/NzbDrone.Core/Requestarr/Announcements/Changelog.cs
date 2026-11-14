@@ -72,7 +72,8 @@ namespace Requestarr.Core.Announcements
                 if (line.StartsWith("## "))
                 {
                     Flush();
-                    (version, date) = line.Substring(3).Trim() == UnreleasedHeading ? (unreleased, null) : ParseHeading(line.Substring(3));
+                    var heading = line.Substring(3);
+                    (version, date) = heading.Trim() == UnreleasedHeading ? (unreleased, null) : ParseHeading(heading);
                 }
                 else if (line.StartsWith("### ") && version != null)
                 {
@@ -109,8 +110,9 @@ namespace Requestarr.Core.Announcements
         public static string Display(Version version)
         {
             var release = Release(version);
+            var buildFormat = release >= FirstBuildNumbered ? "D4" : "D";
 
-            return $"{release.Major}.{release.Minor}.{release.Build.ToString(release >= FirstBuildNumbered ? "D4" : "D", CultureInfo.InvariantCulture)}";
+            return $"{release.Major}.{release.Minor}.{release.Build.ToString(buildFormat, CultureInfo.InvariantCulture)}";
         }
     }
 

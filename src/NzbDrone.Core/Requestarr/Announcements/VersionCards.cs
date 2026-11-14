@@ -40,9 +40,9 @@ namespace Requestarr.Core.Announcements
 
         private static readonly Regex BoldLead = new(@"^\*\*(?<lead>[^*]+?):?\*\*");
 
-        // shown: how the version reads in the title (the build label for the version running), its number when null. Readers see the
-        // main change in a few words, so they know whether to open it: the admin channel's card covers both sections,
-        // admins' lines first.
+        // shown: how the version reads in the title (the build label for the version running), its number when null.
+        // Readers see the main change in a few words, so they know whether to open it: the admin channel's card covers
+        // both sections, admins' lines first.
         public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience, int thisYear, string shown = null)
         {
             var title = DiscordText.VersionCardTitle(shown ?? Changelog.Display(version.Version), version.Date, thisYear);

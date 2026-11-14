@@ -112,11 +112,11 @@ def check(text):
                 continue
             close_unreleased()
             match = re.fullmatch(r"## ((\d+)\.(\d+)\.(\d+)) \((\d{4})-(\d{2})-(\d{2})\)", line)
-            if not match or not real_date(*match.groups()[4:]) or shown(tuple(int(p) for p in match.groups()[1:4])) != match.group(1):
+            version = tuple(int(part) for part in match.groups()[1:4]) if match else None
+            if not match or not real_date(*match.groups()[4:]) or shown(version) != match.group(1):
                 problems.append((number, "a version heading is '## 0.7.0004 (YYYY-MM-DD)' (up to 0.6.0 'x.y.z'), the day it was made, and nothing else"))
                 version = None
                 continue
-            version = tuple(int(part) for part in match.groups()[1:4])
             if version in seen_versions:
                 problems.append((number, "version %s appears twice" % shown(version)))
             elif seen_versions and version > seen_versions[-1]:

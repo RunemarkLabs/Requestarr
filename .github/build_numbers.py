@@ -73,6 +73,11 @@ def built(tag_names):
     return {tuple(int(x) for x in m.groups()) for m in map(TAG.match, tag_names) if m}
 
 
+def tagged_builds(tags):
+    """{number: commit} for the numbered tags of {tag name: commit}."""
+    return {v: sha for name, sha in tags.items() for v in built([name])}
+
+
 def next_number(taken, shipped, major=False):
     """The next build's number: one more than the newest, a minor up once the newest has shipped."""
     newest = max(taken) if taken else FIRST_NUMBERED + (EARLIER_BUILDS,)
@@ -100,7 +105,7 @@ def remote_tags():
 
 def shipped_builds(tags):
     """The numbered builds production (origin/main) has."""
-    return {v for name, sha in tags.items() for v in built([name])
+    return {v for v, sha in tagged_builds(tags).items()
             if git("merge-base", "--is-ancestor", sha, "origin/main").returncode == 0}
 
 
@@ -127,7 +132,7 @@ def image_plan(event, branch, sha, changelog, tags, upcoming, test_tag=""):
     {"error": why}. Staging builds the image for the number on top of its changelog (and records the tag); main never
     builds: it adds the release tags to the image staging published from the same commit."""
     top, pending = top_number(changelog)
-    tagged = {v: s for name, s in tags.items() for v in built([name])}
+    tagged = tagged_builds(tags)
     if event == "push" and branch == "staging":
         if pending or top is None:
             return {"error": "staging's changelog has Unreleased on top: a build sent to testers has a number "
@@ -193,8 +198,12 @@ def ordered(unreleased):
 
 def render_section(heading, unreleased):
     """A version's section: "## heading", then each part with its "### " subheading (the checklist has none)."""
-    parts = "".join(("\n### %s\n" % sub if sub else "") + "".join(row + "\n" for row in rows) for sub, rows in ordered(unreleased or {}))
-    return "## %s\n%s\n" % (heading, parts if parts else "")
+    section = "## %s\n" % heading
+    for sub, rows in ordered(unreleased or {}):
+        if sub:
+            section += "\n### %s\n" % sub
+        section += "".join(row + "\n" for row in rows)
+    return section + "\n"
 
 
 def render(preamble, unreleased, sections):
@@ -291,7 +300,8 @@ def check_release_body(base, head, number):
             continue
         day = re.match(r"## \S+ \((\d{4}-\d{2}-\d{2})\)", sections[number])
         day = day.group(1) if day else ""
-        if head[name].replace("\r\n", "\n") not in (release(base[name], number, day), release(base[name], number, day, SECURITY_LINE)):
+        expected = (release(base[name], number, day), release(base[name], number, day, SECURITY_LINE))
+        if head[name].replace("\r\n", "\n") not in expected:
             problems.append("%s: the new section is Unreleased as it was, renamed %s (YYYY-MM-DD)" % (name, text(number)))
     return problems
 
@@ -435,7 +445,9 @@ def main(argv):
                 upgrade = upgrade_needs_admins(handle.read())
         shipping = parse_version(args[args.index("--shipped") + 1]) if "--shipped" in args else None
         upcoming = next_from_git(shipping=shipping)
-        print(text(next_from_git(major=True) if "--major" in args or (upgrade and upcoming[0] >= 1) else upcoming))
+        if "--major" in args or (upgrade and upcoming[0] >= 1):
+            upcoming = next_from_git(major=True)
+        print(text(upcoming))
         return 0
     if len(args) in (4, 5) and args[0] == "image":
         with open("CHANGELOG.md", encoding="utf-8") as handle:
@@ -450,7 +462,7 @@ def main(argv):
         security = SECURITY_LINE if "--security" in args else None
         documents = read_dir(args[1])
         number = parse_version(args[2])
-        write_dir(args[1], {name: release(documents[name], number, args[3], security if name == FILES[0] else None)
+        write_dir(args[1], {name: release(documents[name], number, args[3], security if name == "CHANGELOG.md" else None)
                             for name in FILES})
         return 0
     if len(args) == 4 and args[0] == "merge":

@@ -136,7 +136,8 @@ below() {
 }
 
 check_changelog() {
-    local base="$1" head="$2" target="$3" pr_head="${4:-$2}" pr_branch="${5:-}" work kind="" upper="" flags=()
+    local base="$1" head="$2" target="$3" pr_head="${4:-$2}" pr_branch="${5:-}" work kind="" upper="" flags=() lower
+    lower=$(below "$target")
     work=$(mktemp -d)
     files_at "$head" "$work/head"
 
@@ -157,8 +158,8 @@ check_changelog() {
         has_ref origin/qa && git merge-base --is-ancestor "$pr_head^" origin/qa \
             || { echo "::error::A release commit sits on top of qa as it is (./release.sh promote-staging makes it)."; rm -rf "$work"; return 1; }
         files_at "$pr_head^" "$work/base"
-    elif [ -n "$(below "$target")" ] && has_ref "origin/$(below "$target")" && git merge-base --is-ancestor "$pr_head" "origin/$(below "$target")"; then
-        echo "A promotion of commits already on $(below "$target"): their changelog was checked there."
+    elif [ -n "$lower" ] && has_ref "origin/$lower" && git merge-base --is-ancestor "$pr_head" "origin/$lower"; then
+        echo "A promotion of commits already on $lower: their changelog was checked there."
         rm -rf "$work"
         return 0
     else
@@ -218,7 +219,7 @@ fast_forward() {
     echo "Pull request: $1 ($(gh pr view "$1" --json state --jq .state))"
 }
 
-# The options every promotion takes: sets dry, override and major.
+# The options every promotion takes: sets dry, override, major and commit.
 read_options() {
     dry=0 override="" major=""
     while [ $# -gt 0 ]; do
@@ -469,7 +470,7 @@ case "${1:-}" in
     qa-gate) shift; "$here/docker/dev.sh" qa-gate "$@" ;;
     merge-back) merge_back ;;
     *)
-        sed -n '2,38p' "$0"
+        sed -n '2,36p' "$0"
         exit 1
         ;;
 esac
