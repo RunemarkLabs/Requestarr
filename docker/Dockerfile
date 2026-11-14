@@ -5,14 +5,14 @@
 # (linux-x64 or linux-arm64), so a multi-platform build (.github/workflows/image.yml) only emulates the last stage.
 # Nothing secret goes in: the build context is the committed files only (secrets.env is never committed).
 
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend
+FROM --platform=$BUILDPLATFORM node:25-bookworm-slim AS frontend
 WORKDIR /src
 COPY package.json yarn.lock .yarnrc tsconfig.json ./
 RUN yarn install --frozen-lockfile --network-timeout 120000
 COPY frontend/ frontend/
 RUN yarn build --env production
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:11.0 AS backend
 ARG TARGETARCH
 # The build's number, stamped here and nowhere in the source (docs/development.md#versions): 0.7.0004 for a build sent
 # to testers, the next number for dev and QA builds. Without one the build is 0.0.0.
@@ -26,7 +26,7 @@ RUN case "$TARGETARCH" in arm64) RID=linux-arm64 ;; *) RID=linux-x64 ;; esac \
       dotnet publish "$project" -c Release -f net10.0 -r "$RID" --self-contained false -p:Platform=Posix -p:SolutionDir=/src/src/ -p:RequestarrVersion="$BUILD_NUMBER" -o /app/bin || exit 1; \
     done
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:11.0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
