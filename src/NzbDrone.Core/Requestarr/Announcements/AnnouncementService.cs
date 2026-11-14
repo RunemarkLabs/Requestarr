@@ -226,10 +226,6 @@ namespace Requestarr.Core.Announcements
                 return;
             }
 
-            var byVersion = versions.ToDictionary(v => v.Version);
-            await RefreshAsync(adminChannel, inAdmin, byVersion, VersionAudience.Admins);
-            await RefreshAsync(users, inUsers, byVersion, VersionAudience.Users);
-
             var shownAdmin = inAdmin.Select(p => p.Version).ToHashSet();
             var shownUsers = inUsers.Select(p => p.Version).ToHashSet();
 
@@ -261,6 +257,11 @@ namespace Requestarr.Core.Announcements
                 config.AnnouncedVersion = announced.With(new[] { current }).ToString();
                 _configs.Upsert(config);
             }
+
+            // After the new versions, so a card that can't be edited never holds back an announcement.
+            var byVersion = versions.DistinctBy(v => v.Version).ToDictionary(v => v.Version);
+            await RefreshAsync(adminChannel, inAdmin, byVersion, VersionAudience.Admins);
+            await RefreshAsync(users, inUsers, byVersion, VersionAudience.Users);
         }
 
         // Makes a channel's version cards exactly `wanted`, oldest first: anything else that is a version post (another
@@ -310,13 +311,17 @@ namespace Requestarr.Core.Announcements
 
             foreach (var post in found)
             {
-                if (versions.TryGetValue(post.Version, out var version) && (audience == VersionAudience.Admins ? version.HasNews : version.Users.Count > 0))
+                if (versions.TryGetValue(post.Version, out var version) && HasCard(version, audience))
                 {
                     var shown = _environment.BetaVersion(version.Version) ?? VersionCards.BetaShown(post.Card.Title, version.Version);
                     await EditIfChangedAsync(channel.Value, post, VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, shown));
                 }
             }
         }
+
+        // A version gets a card in the admin channel when it has anything, in announcements when it has lines for users.
+        private static bool HasCard(ChangelogVersion version, VersionAudience audience) =>
+            audience == VersionAudience.Admins ? version.HasNews : version.Users.Count > 0;
 
         private async Task EditIfChangedAsync(ulong channel, FoundPost post, VersionCard wanted)
         {
