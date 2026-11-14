@@ -21,7 +21,7 @@ namespace Requestarr.Core.Announcements
     }
 
     // One version's card as posted: a server finds it by its button and updates it when its title or description changed.
-    // On staging the version it runs is shown as its beta version (0.4.17-beta.1); every other version as its number.
+    // The version a server runs is shown as its build label (0.7.0004-dev.4f2a9c1 on dev); every other one as its number.
     public record VersionCard(Version Version, string Title, string Description, InteractionReply Reply);
 
     // What's new, as cards. In the channels each version is one line with a Read changes button; pressing it shows the
@@ -38,15 +38,14 @@ namespace Requestarr.Core.Announcements
         public const uint UsersColor = 0x2BB3A3;
         public const uint AdminsColor = 0xE0A030;
 
-        private static readonly Regex BetaTitle = new(@"^Requestarr (?<shown>(?<version>\d+\.\d+\.\d+)-beta\.\d+)(?: ·|$)");
         private static readonly Regex BoldLead = new(@"^\*\*(?<lead>[^*]+?):?\*\*");
 
-        // shown: how the version reads in the title (its beta version on staging), its number when null. Readers see the
-        // main change in a few words, so they know whether to open it: the admin channel's card covers both sections,
-        // admins' lines first.
+        // shown: how the version reads in the title (the build label for the version running), its number when null.
+        // Readers see the main change in a few words, so they know whether to open it: the admin channel's card covers
+        // both sections, admins' lines first.
         public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience, int thisYear, string shown = null)
         {
-            var title = DiscordText.VersionCardTitle(shown ?? version.Version.ToString(), version.Date, thisYear);
+            var title = DiscordText.VersionCardTitle(shown ?? Changelog.Display(version.Version), version.Date, thisYear);
             var lines = audience == VersionAudience.Admins ? version.Admins.Concat(version.Users).ToList() : version.Users.ToList();
             var description = DiscordText.VersionCardSummary(MainChange(lines[0]), lines.Count - 1);
 
@@ -71,14 +70,6 @@ namespace Requestarr.Core.Announcements
             return id != null && Version.TryParse(id.AsSpan(prefix.Length), out var version) ? version : null;
         }
 
-        // The beta version a posted card's title shows for its version (staging's cards keep the beta they were
-        // published as), or null.
-        public static string BetaShown(string title, Version version)
-        {
-            var match = BetaTitle.Match(title ?? string.Empty);
-            return match.Success && Version.Parse(match.Groups["version"].Value) == version ? match.Groups["shown"].Value : null;
-        }
-
         private static string ReadChangesPrefix(VersionAudience audience) =>
             $"{VersionCardRoutes.ReadChanges}:{(audience == VersionAudience.Admins ? "a" : "u")}:";
 
@@ -98,7 +89,7 @@ namespace Requestarr.Core.Announcements
                 sections.Add((Changelog.AdminsHeading, version.Admins, AdminsColor));
             }
 
-            var title = $"## {DiscordText.VersionCardFullTitle(shown ?? version.Version.ToString(), version.Date)}\n";
+            var title = $"## {DiscordText.VersionCardFullTitle(shown ?? Changelog.Display(version.Version), version.Date)}\n";
             var cards = new List<InteractionCard>();
 
             foreach (var (heading, lines, color) in sections)

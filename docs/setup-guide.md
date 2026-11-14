@@ -877,9 +877,11 @@ When a new version reaches staging, update with one command in the beta folder:
 
 It pulls the newest `staging` image. If it's newer than what runs, it stops Requestarr, backs up its data to `backups/`, and starts the new version (Sonarr and Radarr are left alone). It prints the old and new versions.
 
-**Check:** it ends with "Requestarr updated: 0.4.17-beta.1 -> 0.4.18-beta.2" (your versions), and `#requestarr-admin` gets the new version's "what's new".
+**Check:** it ends with "Requestarr updated: 0.7.0004 -> 0.7.0005" (your versions), and `#requestarr-admin` gets the new version's "what's new".
 
-Beta versions are the version being tested with "beta" and a count after it: 0.4.18-beta.2 is the second beta build of the 0.4 releases, here version 0.4.18. The release itself has the plain number. Versions from before 0.5.0 reached the beta with plain numbers (0.3.4).
+Each build sent to the beta has its own number, counting every build: 0.7.0005 is the fifth. A release is that same build, with the same number, so what production runs is exactly what the beta testers ran. Builds from before build numbers reached the beta as 0.3.1, 0.3.3 and 0.3.4.
+
+**Going back** means restoring the data from before the update, not only running the older version: a newer version may change Requestarr's database in ways an older one can't read. The update above backs the data up first every time (and doesn't update if it can't), and the rollback below puts that backup back.
 
 To go back to the version that ran before the last update, with the data as it was then:
 

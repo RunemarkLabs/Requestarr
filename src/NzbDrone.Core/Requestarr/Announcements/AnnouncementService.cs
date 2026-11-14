@@ -154,7 +154,7 @@ namespace Requestarr.Core.Announcements
             }
 
             var current = Changelog.Release(CurrentVersion());
-            var versions = Changelog.Parse(ChangelogText()).Where(v => v.Version <= current).OrderBy(v => v.Version).ToList();
+            var versions = Versions().Where(v => v.Version <= current).OrderBy(v => v.Version).ToList();
             var mode = _environment.VersionPosts;
 
             try
@@ -189,16 +189,20 @@ namespace Requestarr.Core.Announcements
 
         public IReadOnlyList<InteractionReply> FullCard(VersionAudience audience, Version version)
         {
-            var found = Changelog.Parse(ChangelogText()).FirstOrDefault(v => v.Version == version);
+            var found = Versions().FirstOrDefault(v => v.Version == version);
 
             return found == null || !found.HasNews
                 ? new[] { new InteractionReply { Content = DiscordText.VersionNotFound(version), Ephemeral = true } }
-                : VersionCards.Full(found, audience, _environment.BetaVersion(version));
+                : VersionCards.Full(found, audience, _environment.Shown(version));
         }
 
-        // On staging, the version running is shown as its beta version.
+        // Dev and QA read Unreleased as the build they run (the next number); staging and production run numbered builds.
+        private IReadOnlyList<ChangelogVersion> Versions() =>
+            Changelog.Parse(ChangelogText(), _environment.VersionPosts == VersionPostMode.Standing ? null : Changelog.Release(CurrentVersion()));
+
+        // The version running is shown as its build label (0.7.0004-dev.4f2a9c1 on dev).
         private VersionCard Card(ChangelogVersion version, VersionAudience audience) =>
-            VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, _environment.BetaVersion(version.Version));
+            VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, _environment.Shown(version.Version));
 
         // Production and staging: each version with something in it gets a card, oldest first, and keeps it. A card
         // already in the channel isn't posted again (a server set up again with its channels kept), but its words are
@@ -300,8 +304,7 @@ namespace Requestarr.Core.Announcements
             }
         }
 
-        // Each card a standing channel keeps shows its version's words as this version of Requestarr writes them, with the
-        // beta version it was published as (the version running now shows its own).
+        // Each card a standing channel keeps shows its version's words as this version of Requestarr writes them.
         private async Task RefreshAsync(ulong? channel, IEnumerable<FoundPost> found, IReadOnlyDictionary<Version, ChangelogVersion> versions, VersionAudience audience)
         {
             if (!channel.HasValue)
@@ -313,8 +316,7 @@ namespace Requestarr.Core.Announcements
             {
                 if (versions.TryGetValue(post.Version, out var version) && HasCard(version, audience))
                 {
-                    var shown = _environment.BetaVersion(version.Version) ?? VersionCards.BetaShown(post.Card.Title, version.Version);
-                    await EditIfChangedAsync(channel.Value, post, VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, shown));
+                    await EditIfChangedAsync(channel.Value, post, Card(version, audience));
                 }
             }
         }

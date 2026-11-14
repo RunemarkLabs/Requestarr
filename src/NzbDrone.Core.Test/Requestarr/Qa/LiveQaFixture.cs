@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
 using FluentAssertions;
@@ -106,9 +107,11 @@ namespace Requestarr.Core.Test.Qa
             var checklist = Mocker.Resolve<QaChecklistService>();
 
             // Dev shows only the running version's items, and the check passes one item and fails three more, so it runs
-            // as the newest version with at least that many.
+            // as the newest version with at least that many. A build of that version had no Unreleased items yet.
             const int itemsNeeded = 4;
-            var tested = QaChecklist.Parse(checklist.ChecklistText()).Where(v => v.Items.Count >= itemsNeeded).Max(v => v.Version);
+            var numbered = Regex.Replace(QaChecklist.Embedded().Replace("\r\n", "\n"), @"(?ms)^## Unreleased\n.*?(?=^## )", string.Empty);
+            checklist.ChecklistText = () => numbered;
+            var tested = QaChecklist.Parse(numbered).Where(v => v.Items.Count >= itemsNeeded).Max(v => v.Version);
             checklist.CurrentVersion = () => tested;
             Mocker.SetConstant<IQaChecklistService>(checklist);
             var reports = Mocker.Resolve<BugReportService>();

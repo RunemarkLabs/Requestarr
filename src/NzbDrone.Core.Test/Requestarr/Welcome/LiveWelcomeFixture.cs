@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
 using FluentAssertions;
@@ -126,8 +127,11 @@ namespace Requestarr.Core.Test.Welcome
             Mocker.SetConstant<IAccessRequestService>(access);
             var announcements = Mocker.Resolve<AnnouncementService>();
 
-            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news.
-            var withNews = Changelog.Parse(announcements.ChangelogText()).Where(v => v.HasNews).Max(v => v.Version);
+            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news,
+            // with the changelog a build of that version had (no Unreleased lines yet).
+            var numbered = Regex.Replace(Changelog.Embedded().Replace("\r\n", "\n"), @"(?ms)^## Unreleased\n.*?(?=^## )", string.Empty);
+            announcements.ChangelogText = () => numbered;
+            var withNews = Changelog.Parse(numbered).Where(v => v.HasNews).Max(v => v.Version);
             announcements.CurrentVersion = () => withNews;
             Mocker.SetConstant<IAnnouncementService>(announcements);
             Mocker.SetConstant<IAnimeService>(Mocker.Resolve<AnimeService>());

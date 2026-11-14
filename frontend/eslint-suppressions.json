@@ -153,11 +153,6 @@
       "count": 1
     }
   },
-  "frontend/src/System/Status/About/About.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "frontend/src/System/Status/About/StartTime.tsx": {
     "react-hooks/purity": {
       "count": 1

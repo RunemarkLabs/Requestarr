@@ -14,13 +14,16 @@ RUN yarn build --env production
 
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
 ARG TARGETARCH
+# The build's number, stamped here and nowhere in the source (docs/development.md#versions): 0.7.0004 for a build sent
+# to testers, the next number for dev and QA builds. Without one the build is 0.0.0.
+ARG BUILD_NUMBER=0.0.0
 WORKDIR /src
 COPY .editorconfig LICENSE CHANGELOG.md QA-CHECKLIST.md ./
 COPY src/ src/
 # global.json pins the local SDK patch; the image's 10.0 SDK is used as-is.
 RUN case "$TARGETARCH" in arm64) RID=linux-arm64 ;; *) RID=linux-x64 ;; esac \
  && for project in src/NzbDrone.Console/Requestarr.Console.csproj src/NzbDrone.Mono/Requestarr.Mono.csproj; do \
-      dotnet publish "$project" -c Release -f net10.0 -r "$RID" --self-contained false -p:Platform=Posix -p:SolutionDir=/src/src/ -o /app/bin || exit 1; \
+      dotnet publish "$project" -c Release -f net10.0 -r "$RID" --self-contained false -p:Platform=Posix -p:SolutionDir=/src/src/ -p:RequestarrVersion="$BUILD_NUMBER" -o /app/bin || exit 1; \
     done
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
@@ -36,8 +39,8 @@ COPY LICENSE /app/LICENSE
 # Updates come from new images, never from inside the container.
 ENV REQUESTARR__UPDATE__MECHANISM=Docker
 
-# Staging's beta version (x.y.z-beta.N, docs/development.md#versions), which it shows and posts; the Image workflow
-# sets it for staging only, so other builds show their plain version.
+# How the build shows its version: its number (0.7.0004), or for a dev or QA build the next number and its commit
+# (0.7.0004-dev.4f2a9c1). Set by the Image workflow and the local stacks' scripts.
 ARG RELEASE_VERSION=
 ENV REQUESTARR_RELEASE_VERSION=$RELEASE_VERSION
 

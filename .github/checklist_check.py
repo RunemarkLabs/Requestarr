@@ -2,10 +2,10 @@
 """Checks QA-CHECKLIST.md against CHANGELOG.md (docs/development.md#qa-checklist). CI's Changelog job runs it on every
 pull request; run it locally with `python3 .github/checklist_check.py QA-CHECKLIST.md CHANGELOG.md`.
 
-The QA checklist is what admins on the QA server test, in Discord, before a version goes to staging. Every pull request
-adds its version's items, the way it adds its changelog entry. Checked:
-  - versions: every changelog version from 0.4.3 on has a "## x.y.z (YYYY-MM-DD)" section here, with the same date, in
-    the same order, and there are no others;
+The QA checklist is what admins on the QA server test, in Discord, before a build goes to staging. Pull requests add
+their items under "## Unreleased", the way they add changelog lines; the staging promotion numbers both. Checked:
+  - versions: every numbered changelog version from 0.4.3 on has a "## 0.7.0004 (YYYY-MM-DD)" section here (up to
+    0.6.0 "x.y.z"), with the same date, in the same order, and there are no others; "## Unreleased" only on top;
   - a version with nothing anyone can test by hand has only its heading (the same escape as a heading-only changelog
     entry); otherwise only "- " item lines;
   - each item: "- **Name:** what to do. You should see what happens.", with a name unique in its version and the
@@ -19,9 +19,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from changelog_check import CODE  # noqa: E402
+from build_numbers import text as shown  # noqa: E402
 
 FIRST = (0, 4, 3)
 VERSION = re.compile(r"^## (\d+)\.(\d+)\.(\d+) \((\d{4}-\d{2}-\d{2})\)$")
+UNRELEASED = "## Unreleased"
 ITEM = re.compile(r"^- \*\*([^*:]+):\*\* (.+)$")
 
 
@@ -42,13 +44,15 @@ def check(checklist, changelog):
         missing = [v for v, _ in wanted if v not in [h[0] for h in have]]
         extra = [v for v, _, _ in have if v not in [w[0] for w in wanted]]
         problems.append((1, "versions don't match the changelog from 0.4.3 on (same versions, dates and order): missing %s, extra %s"
-                         % (", ".join("%d.%d.%d" % v for v in missing) or "none", ", ".join("%d.%d.%d" % v for v in extra) or "none")))
+                         % (", ".join(map(shown, missing)) or "none", ", ".join(map(shown, extra)) or "none")))
 
     current = None
     names = set()
     for number, line in enumerate(checklist.splitlines(), 1):
         text = line.strip()
-        if VERSION.match(text):
+        if text == UNRELEASED and current is not None:
+            problems.append((number, "'## Unreleased' goes once, on top"))
+        if VERSION.match(text) or text == UNRELEASED:
             current = text
             names = set()
             continue
@@ -83,6 +87,7 @@ BAD_CHANGELOG = """# Changelog
 BAD = """# QA checklist
 
 ## 0.4.4 (2026-10-25)
+## Unreleased
 - **Logo:** look at the logo.
 - **Logo:** open `provisioning.yml`. You should see it.
 Some loose text.
@@ -92,6 +97,9 @@ Some loose text.
 GOOD = """# QA checklist
 
 Intro text is free.
+
+## Unreleased
+- **Build number:** open System, then Status. You should see the build's number with dev and its commit.
 
 ## 0.4.4 (2026-10-25)
 - **Logo:** open the web app and look at the header. You should see the Dev logo.
@@ -103,7 +111,7 @@ Intro text is free.
 def self_test():
     found = check(BAD, BAD_CHANGELOG)
     expected = ["versions don't match", "must say 'You should see'", "appears twice", "backticks", "a file name",
-                "only '- **Name:**", "only version headings"]
+                "only '- **Name:**", "only version headings", "goes once, on top"]
     missing = [e for e in expected if not any(e in p for _, p in found)]
     good = check(GOOD, BAD_CHANGELOG)
     for _, p in found:

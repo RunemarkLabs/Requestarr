@@ -74,10 +74,10 @@ namespace Requestarr.Core.Test.Releases
             var build = Read(".github", "workflows", "build.yml");
             var drift = Read(".github", "workflows", "drift.yml");
 
-            release.Should().Contain("drift()").And.Contain("promote()").And.Contain("promote-qa) shift; promote dev qa").And.Contain("merge_back()").And.Contain("check_changelog()");
+            release.Should().Contain("drift()").And.Contain("promote_qa()").And.Contain("promote-qa) shift; promote_qa").And.Contain("merge_back()").And.Contain("check_changelog()");
             release.Should().Contain("git log --format='  %h %s' \"$lower..$upper\"", "drift is any commit on qa that dev doesn't have (and on staging that qa doesn't)");
-            release.Should().Contain("git push origin \"$target:refs/heads/$to\"", "a promotion fast-forwards qa: exactly dev's commits, nothing newer");
-            release.Should().Contain("Requested by: $who");
+            release.Should().Contain("git push origin \"$2:refs/heads/$3\"", "a promotion fast-forwards the branch: exactly the commits below, nothing newer");
+            release.Should().Contain("Requested by: %s", "every promotion pull request records who asked");
             build.Should().Contain("./release.sh check-changelog").And.Contain("name: Promotion record").And.Contain("changelog, promotion]");
             build.Should().Contain("BODY: ${{ github.event.pull_request.body }}", "the body reaches the shell as data, never as script");
             drift.Should().Contain("branches: [dev, qa, staging]").And.Contain("./release.sh drift");

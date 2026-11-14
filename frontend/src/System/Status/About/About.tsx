@@ -35,12 +35,8 @@ function About() {
     dispatch(fetchStatus());
   }, [dispatch]);
 
-  // Beta shows the beta version it was published as beside the build number.
-  const { releaseVersion } = window.Requestarr;
-  const shownVersion =
-    releaseVersion && releaseVersion.includes('-')
-      ? `${releaseVersion} (${version})`
-      : version;
+  // The build's number as people see it (0.7.0004, or 0.7.0004-dev.4f2a9c1 on dev); .NET's own reads 0.7.4.
+  const shownVersion = window.Requestarr.releaseVersion || version;
 
   return (
     <FieldSet legend={translate('About')}>

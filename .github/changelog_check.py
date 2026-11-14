@@ -2,7 +2,8 @@
 """Checks CHANGELOG.md against the changelog rule (docs/development.md#changelog). CI's Changelog job runs it on every
 pull request; run it locally with `python3 .github/changelog_check.py CHANGELOG.md`.
 
-Every "## x.y.z (YYYY-MM-DD)" version (the text above the first version is free) is checked for:
+"## Unreleased" (the lines pull requests add until the next build sent to testers, always on top) and every
+"## x.y.zzzz (YYYY-MM-DD)" build (the text above the first heading is free) is checked for:
   - sections: only "### For users" and "### For admins", each at most once; no "Internal" or any other section;
   - no empty section: a heading with no "- " line under it;
   - only headings and "- " lines: no loose text inside a version;
@@ -11,7 +12,8 @@ Every "## x.y.z (YYYY-MM-DD)" version (the text above the first version is free)
   - no placeholders: "nothing this time", "n/a", "TBD" and the like;
   - no summary without substance: a line with "minor fixes", "various improvements" or another summary phrase must say,
     on the same line, what that changes (at least five more words);
-  - versions: "## x.y.z (YYYY-MM-DD)", the day the version was made, each once, newest first.
+  - versions: "## 0.7.0004 (YYYY-MM-DD)", the day the build was made, each once, newest first; versions up to 0.6.0
+    keep their "x.y.z" numbers (docs/development.md#versions); Unreleased only on top, never empty.
 
 `--self-test` runs every rule against built-in samples and fails if one doesn't catch its sample.
 """
@@ -20,7 +22,11 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from build_numbers import text as shown  # noqa: E402
+
 SECTIONS = ("For users", "For admins")
+UNRELEASED = "Unreleased"
 
 EXTENSIONS = "cs|csproj|props|ps1|psm1|cmd|bat|sh|py|ya?ml|json|md|toml|xml|env|txt|ts|tsx|js|css|dll|exe|sln"
 CODE = [
@@ -82,9 +88,16 @@ def check(text):
     section_items = 0
     seen_sections = set()
 
+    unreleased_line = 0
+    unreleased_items = 0
+
     def close_section():
         if section is not None and section_items == 0:
             problems.append((section_line, "empty section '%s': leave the heading out when there's nothing under it" % section))
+
+    def close_unreleased():
+        if version is UNRELEASED and unreleased_items == 0:
+            problems.append((unreleased_line, "an empty '## Unreleased': leave it out until a pull request adds a line"))
 
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.rstrip()
@@ -92,16 +105,22 @@ def check(text):
             close_section()
             section = None
             seen_sections = set()
-            match = re.fullmatch(r"## (\d+)\.(\d+)\.(\d+) \((\d{4})-(\d{2})-(\d{2})\)", line)
-            if not match or not real_date(*match.groups()[3:]):
-                problems.append((number, "a version heading is '## x.y.z (YYYY-MM-DD)', the day it was made, and nothing else"))
+            if line == "## Unreleased":
+                if seen_versions or version is not None:
+                    problems.append((number, "'## Unreleased' goes once, on top"))
+                version, unreleased_line = UNRELEASED, number
+                continue
+            close_unreleased()
+            match = re.fullmatch(r"## ((\d+)\.(\d+)\.(\d+)) \((\d{4})-(\d{2})-(\d{2})\)", line)
+            version = tuple(int(part) for part in match.groups()[1:4]) if match else None
+            if not match or not real_date(*match.groups()[4:]) or shown(version) != match.group(1):
+                problems.append((number, "a version heading is '## 0.7.0004 (YYYY-MM-DD)' (up to 0.6.0 'x.y.z'), the day it was made, and nothing else"))
                 version = None
                 continue
-            version = tuple(int(part) for part in match.groups()[:3])
             if version in seen_versions:
-                problems.append((number, "version %s appears twice" % ".".join(map(str, version))))
+                problems.append((number, "version %s appears twice" % shown(version)))
             elif seen_versions and version > seen_versions[-1]:
-                problems.append((number, "versions go newest first: %s is above %s" % (".".join(map(str, seen_versions[-1])), line[3:])))
+                problems.append((number, "versions go newest first: %s is above %s" % (shown(seen_versions[-1]), line[3:])))
             seen_versions.append(version)
         elif version is None:
             continue
@@ -119,20 +138,24 @@ def check(text):
             if section is None:
                 problems.append((number, "a line outside 'For users' or 'For admins'"))
             section_items += 1
+            unreleased_items += version is UNRELEASED
             problems.extend((number, p) for p in check_line(line[2:]))
         elif line.strip():
             problems.append((number, "only headings and '- ' lines inside a version"))
     close_section()
+    close_unreleased()
     return problems
 
 
 BAD = """# Changelog
 
-## 0.9.3
+## 0.6.3
 
-## 0.9.2 (2026-02-30)
+## 0.6.2 (2026-02-30)
 
-## 0.9.0 (2026-10-02)
+## 0.7.4 (2026-10-03)
+
+## 0.6.0 (2026-10-02)
 
 ### For users
 - **Requests:** run `/request` to ask.
@@ -152,16 +175,23 @@ BAD = """# Changelog
 
 Loose text.
 
-## 0.9.1 (2026-10-01)
+## 0.6.1 (2026-10-01)
 
-## 0.9.1 (2026-10-01)
+## 0.6.1 (2026-10-01)
+
+## Unreleased
 """
 
 GOOD = """# Changelog
 
 Text before the first version is free.
 
-## 0.9.0 (2026-10-25)
+## Unreleased
+
+### For users
+- **Build numbers:** each test build now shows which build it is, the same number everywhere you look.
+
+## 0.7.0004 (2026-10-25)
 
 ### For users
 - **Minor fixes:** request messages no longer show a Cancel button after a request is approved.
@@ -171,7 +201,7 @@ Text before the first version is free.
 - **Removals:** Sonarr/Radarr titles nobody requested can be removed too, from /admin requests.
 - Fixed: approving a request sometimes left the old Cancel button working, and the queue count updates after a restart.
 
-## 0.8.0 (2026-10-21)
+## 0.6.0 (2026-10-21)
 """
 
 
@@ -187,15 +217,15 @@ def self_test():
     found = check(BAD)
     expected = ["backticks", "a file name", "a file path", "a command flag", "a settings key", "an environment variable name",
                 "placeholder", "summary without substance", "empty section", "section 'Internal'", "only headings",
-                "appears twice", "newest first", "a version heading"]
+                "appears twice", "newest first", "a version heading", "goes once, on top", "an empty '## Unreleased'"]
     missing = [e for e in expected if not any(e in p for _, p in found)]
     headings = sum("a version heading" in p for _, p in found)
     summaries = sum("summary without substance" in p for _, p in found)
     good = check(GOOD)
     for _, p in found:
         print("  caught: " + p)
-    if missing or summaries != 2 or headings != 2 or good:
-        print("SELF-TEST FAILED: missed %s; summaries caught %d of 2; headings without a real date caught %d of 2; good sample problems %s" % (missing, summaries, headings, good))
+    if missing or summaries != 2 or headings != 3 or good:
+        print("SELF-TEST FAILED: missed %s; summaries caught %d of 2; malformed headings caught %d of 3; good sample problems %s" % (missing, summaries, headings, good))
         return 1
     print("Self-test passed: every rule caught its sample, and the good sample passed.")
     return 0

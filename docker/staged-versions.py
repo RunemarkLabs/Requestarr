@@ -23,7 +23,7 @@ def git(*args):
 
 def versions(ref):
     shown = git("show", f"{ref}:CHANGELOG.md")
-    return [] if shown.returncode else re.findall(r"^## (\d+\.\d+\.\d+)\s*$", shown.stdout, re.MULTILINE)
+    return [] if shown.returncode else re.findall(r"^## (\d+\.\d+\.\d+)(?: |$)", shown.stdout, re.MULTILINE)
 
 
 def published_commit():

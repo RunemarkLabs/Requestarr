@@ -132,7 +132,7 @@ compose() {
 # Builds requestarr:<stack> from the stack's branch as it is on GitHub (origin/qa or origin/dev), or from --ref:
 # committed files only, so what runs is exactly that commit. The image is labelled with the commit and version.
 build_image() {
-    local ref="$REF" sha version
+    local ref="$REF" sha number version
     if [ -z "$ref" ]; then
         git -C "$REPO" fetch -q origin "$STACK" 2>/dev/null || echo "Couldn't fetch origin/$STACK; using the copy already here."
         ref="origin/$STACK"
@@ -142,9 +142,12 @@ build_image() {
         echo "Versions staging has (QA's what's new leaves them out): ${REQUESTARR_STAGED_VERSIONS:-none}"
     fi
     sha=$(git -C "$REPO" rev-parse --verify -q "$ref^{commit}") || die "no branch or commit '$ref' (git fetch first?)"
-    version=$(git -C "$REPO" show "$sha:src/Directory.Build.props" | sed -nE 's/.*<AssemblyVersion>([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
+    # Dev and QA builds take no number: the next one, and their commit (docs/development.md#versions).
+    number=$( (cd "$REPO" && python -I .github/build_numbers.py next) 2>/dev/null) || number=0.0.0
+    version="$number-$STACK.${sha:0:7}"
     echo "Building requestarr:$STACK from $ref @ ${sha:0:7} (version $version)"
     git -C "$REPO" archive --format=tar "$sha" | docker build --quiet -t "requestarr:$STACK" -f docker/Dockerfile \
+        --build-arg "BUILD_NUMBER=$number" --build-arg "RELEASE_VERSION=$version" \
         --label "org.opencontainers.image.revision=$sha" --label "org.opencontainers.image.ref.name=$ref" \
         --label "org.opencontainers.image.version=$version" - >/dev/null || die "the image build failed"
 }

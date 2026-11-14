@@ -53,11 +53,12 @@ namespace Requestarr.Api.V1.Test.Frontend
         }
 
         [Test]
-        public void the_text_is_the_version_to_three_parts()
+        public void the_text_is_the_version_as_people_see_it()
         {
             VersionLogo.Text(new Version(0, 4, 9, 30588)).Should().Be("v0.4.9");
-            VersionLogo.Text(new Version(1, 12, 10)).Should().Be("v1.12.10");
-            VersionLogo.Text(new Version(2, 0)).Should().Be("v2.0");
+            VersionLogo.Text(new Version(0, 7, 4, 30588)).Should().Be("v0.7.0004", "a build number shows four digits");
+            VersionLogo.Text(new Version(1, 12, 10)).Should().Be("v1.12.0010");
+            VersionLogo.Text(new Version(2, 0)).Should().Be("v2.0.0000");
         }
 
         [Test]
@@ -80,7 +81,7 @@ namespace Requestarr.Api.V1.Test.Frontend
             var svg = VersionLogo.Svg(new Version(1, 12, 10), new byte[1]);
             var m = Regex.Match(svg, @"matrix\(0 (\S+) (\S+) 0 (\S+) (\S+)\)");
             var n = Enumerable.Range(1, 4).Select(i => double.Parse(m.Groups[i].Value, CultureInfo.InvariantCulture)).ToArray();
-            var ink = VersionLogo.Ink("v1.12.10");
+            var ink = VersionLogo.Ink(VersionLogo.Text(new Version(1, 12, 10)));
 
             // The text's direction (font x) points up the bar and the letters' tops (font y) face left.
             n[0].Should().BeNegative();

@@ -1,9 +1,10 @@
 name: Image
 
 # Publishes Requestarr's container image to GitHub's container registry (docs/development.md#published-images):
-#   push to staging (a promotion, or a fix into staging): ghcr.io/requestarr/requestarr:staging and :x.y.z-beta.N,
-#     and the commit is tagged vx.y.z-beta.N: N counts the line's (x.y) publishes to staging (docs/development.md#versions)
-#   push to main (a release, only on the owner's "ship it"):  :x.y.z, :x.y and :latest
+#   push to staging (a promotion, or a fix into staging): builds the number on top of the changelog,
+#     ghcr.io/requestarr/requestarr:staging and :0.7.0004, and tags the commit v0.7.0004 (docs/development.md#versions)
+#   push to main (only on the owner's "ship it"): builds nothing; adds :0.7 and :latest to the image staging published
+#     from the same commit, so production runs the exact file the testers ran
 #   Run workflow on any branch with a tag starting "test-": that tag only, for trying the workflow (delete it after).
 # Two architectures: linux/amd64 (most home servers and NAS boxes) and linux/arm64 (Raspberry Pi 4 and 5, ARM NAS
 # boxes, Apple silicon), the same pair the other Servarr apps publish.
@@ -16,7 +17,7 @@ on:
         description: A test tag to publish this branch under, starting "test-" (nothing else is tagged)
         required: true
 
-# contents: write only to record each staging publish as a vx.y.z-beta.N tag.
+# contents: write only to record each staging publish as a v0.7.0004 tag.
 permissions:
   contents: write
   packages: write
@@ -34,50 +35,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      # Full history: which builds shipped is read from main.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Version and tags
+      - name: Number and tags
         id: tags
         env:
           EVENT: ${{ github.event_name }}
           BRANCH: ${{ github.ref_name }}
           TEST_TAG: ${{ inputs.tag }}
         run: |
-          version=$(sed -nE 's|.*<AssemblyVersion>([0-9]+\.[0-9]+\.[0-9]+).*|\1|p' src/Directory.Build.props | head -1)
-          # Version headings carry the day after the number: "## 0.5.6 (2026-11-13)".
-          top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+( |$)' CHANGELOG.md | cut -c4- | tr -d ' ')
-          if [ -z "$version" ] || [ "$version" != "$top" ]; then
-            echo "::error::The build's version ($version) and CHANGELOG.md's top version ($top) must match."
+          # .github/build_numbers.py decides: mode (build or retag), number, label, tags, source, record (the tag to add).
+          if ! plan=$(python3 .github/build_numbers.py image "$EVENT" "$BRANCH" "$GITHUB_SHA" ${TEST_TAG:+"$TEST_TAG"}); then
+            echo "::error::$(echo "$plan" | sed -n 's/^error=//p')"
             exit 1
           fi
-          release="$version"
-          case "$EVENT:$BRANCH" in
-            push:staging)
-              # The beta number this commit already has (a re-run), or one more than its line's highest.
-              release=$(git ls-remote --tags origin | python3 .github/version_rules.py beta "$version" "$GITHUB_SHA")
-              tags="$IMAGE:staging,$IMAGE:$release"
-              ;;
-            push:main) tags="$IMAGE:$version,$IMAGE:${version%.*},$IMAGE:latest" ;;
-            workflow_dispatch:*)
-              if ! [[ "$TEST_TAG" =~ ^test-[a-z0-9.-]+$ ]]; then
-                echo "::error::A test tag starts with 'test-' and has only lowercase letters, digits, dots and dashes."
-                exit 1
-              fi
-              tags="$IMAGE:$TEST_TAG"
-              ;;
-            *)
-              echo "::error::Images are published from staging and main only (or a test tag by hand)."
-              exit 1
-              ;;
-          esac
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "release=$release" >> "$GITHUB_OUTPUT"
-          echo "beta=$([ "$release" != "$version" ] && echo "$release")" >> "$GITHUB_OUTPUT"
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "$plan" | tee -a "$GITHUB_OUTPUT"
+          tags=$(echo "$plan" | sed -n 's/^tags=//p')
           echo "first=${tags%%,*}" >> "$GITHUB_OUTPUT"
-          echo "Publishing version $release as: $tags"
 
       - uses: docker/setup-qemu-action@v3
+        if: steps.tags.outputs.mode == 'build'
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -85,7 +65,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Ship it: the release tags go on the image staging published from this commit; nothing is built.
+      - name: Add the release tags to staging's image
+        if: steps.tags.outputs.mode == 'retag'
+        env:
+          SOURCE: ${{ steps.tags.outputs.source }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          revision=$(docker buildx imagetools inspect "$SOURCE" --format '{{ json .Image }}' | jq -r 'if has("config") then . else [.[]][0] end | .config.Labels["org.opencontainers.image.revision"]')
+          if [ "$revision" != "$GITHUB_SHA" ]; then
+            echo "::error::$SOURCE was built from $revision, not this commit: only the image staging published from it ships."
+            exit 1
+          fi
+          args=()
+          for tag in ${TAGS//,/ }; do args+=(--tag "$tag"); done
+          docker buildx imagetools create "${args[@]}" "$SOURCE"
+          echo "Shipped \`$SOURCE\` as \`${TAGS//,/\`, \`}\` (the same image, not rebuilt)." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build and push (linux/amd64, linux/arm64)
+        if: steps.tags.outputs.mode == 'build'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -95,35 +94,33 @@ jobs:
           provenance: false
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
-            RELEASE_VERSION=${{ steps.tags.outputs.beta }}
+            BUILD_NUMBER=${{ steps.tags.outputs.number }}
+            RELEASE_VERSION=${{ steps.tags.outputs.label }}
           labels: |
             org.opencontainers.image.title=Requestarr
             org.opencontainers.image.description=Discord requests for Sonarr and Radarr, with per-user access, approvals and removal votes.
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=GPL-3.0-only
-            org.opencontainers.image.version=${{ steps.tags.outputs.release }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.label }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
           cache-from: type=gha,scope=image
           cache-to: type=gha,scope=image,mode=max
 
-      # The record the next beta number is counted from (and what promote-staging reads): a tag on this commit.
-      - name: Record the beta publish
-        if: steps.tags.outputs.beta != ''
+      # The record every later number is counted from: a tag on the commit that was built (docs/development.md#versions).
+      - name: Record the build number
+        if: steps.tags.outputs.record != ''
         env:
-          BETA: ${{ steps.tags.outputs.beta }}
+          RECORD: ${{ steps.tags.outputs.record }}
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v$BETA" >/dev/null; then
-            echo "v$BETA is already recorded (a re-run of this publish)."
-          else
-            git tag "v$BETA" "$GITHUB_SHA"
-            git push origin "refs/tags/v$BETA"
-          fi
-          echo "Beta version: \`$BETA\` (tag \`v$BETA\`)" >> "$GITHUB_STEP_SUMMARY"
+          git tag "$RECORD" "$GITHUB_SHA"
+          git push origin "refs/tags/$RECORD"
+          echo "Build number: \`${RECORD#v}\` (tag \`$RECORD\`)" >> "$GITHUB_STEP_SUMMARY"
 
       # Each platform's image, as published: no file that could hold secrets, no secret-looking environment variable or
       # build step, and it starts and answers on its port.
       - name: Check the published image
+        if: steps.tags.outputs.mode == 'build'
         env:
           REF: ${{ steps.tags.outputs.first }}
           TAGS: ${{ steps.tags.outputs.tags }}

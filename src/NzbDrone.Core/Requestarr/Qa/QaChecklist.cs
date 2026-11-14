@@ -11,7 +11,8 @@ using Requestarr.Core.Announcements;
 namespace Requestarr.Core.Qa
 {
     // One thing to test in a version: "- **Name:** what to do. You should see what happens." Key: "0.4.15/name-in-words",
-    // stable across releases, so a pass is kept when the checklist is posted again.
+    // stable across releases, so a pass is kept when the checklist is posted again. An Unreleased item's key has the
+    // build count it will be ("build-5/name-in-words"), which stays when shipping moves the minor (0.7.0005 to 0.8.0005).
     public record QaChecklistEntry(Version Version, string Key, string Name, string Text);
 
     public record QaChecklistVersion(Version Version, IReadOnlyList<QaChecklistEntry> Items);
@@ -22,7 +23,7 @@ namespace Requestarr.Core.Qa
     {
         public const string ResourceName = "Requestarr.QA-CHECKLIST.md";
 
-        private static readonly Regex Heading = new(@"^## (?<version>\d+\.\d+\.\d+)(?: \(\d{4}-\d{2}-\d{2}\))?\s*$");
+        private static readonly Regex Heading = new(@"^## (?:(?<unreleased>Unreleased)|(?<version>\d+\.\d+\.\d+)(?: \(\d{4}-\d{2}-\d{2}\))?)\s*$");
         private static readonly Regex Item = new(@"^- \*\*(?<name>[^*:]+):\*\* (?<text>.+)$");
 
         public static string Embedded()
@@ -38,10 +39,13 @@ namespace Requestarr.Core.Qa
             return reader.ReadToEnd();
         }
 
-        public static IReadOnlyList<QaChecklistVersion> Parse(string text)
+        // unreleased: the version a dev or QA build runs as, which the "## Unreleased" items are read as (null leaves
+        // them out), the same as the changelog's.
+        public static IReadOnlyList<QaChecklistVersion> Parse(string text, Version unreleased = null)
         {
             var versions = new List<QaChecklistVersion>();
             Version current = null;
+            string keyPrefix = null;
             List<QaChecklistEntry> items = null;
 
             foreach (var raw in (text ?? string.Empty).Split('\n'))
@@ -51,9 +55,15 @@ namespace Requestarr.Core.Qa
 
                 if (heading.Success)
                 {
-                    current = Version.Parse(heading.Groups["version"].Value);
+                    current = heading.Groups["unreleased"].Success ? unreleased : Version.Parse(heading.Groups["version"].Value);
+                    keyPrefix = heading.Groups["unreleased"].Success ? $"build-{unreleased?.Build}" : current.ToString();
                     items = new List<QaChecklistEntry>();
-                    versions.Add(new QaChecklistVersion(current, items));
+
+                    if (current != null)
+                    {
+                        versions.Add(new QaChecklistVersion(current, items));
+                    }
+
                     continue;
                 }
 
@@ -62,7 +72,7 @@ namespace Requestarr.Core.Qa
                 if (current != null && item.Success)
                 {
                     var name = item.Groups["name"].Value.Trim();
-                    items.Add(new QaChecklistEntry(current, $"{current}/{Slug(name)}", name, item.Groups["text"].Value.Trim()));
+                    items.Add(new QaChecklistEntry(current, $"{keyPrefix}/{Slug(name)}", name, item.Groups["text"].Value.Trim()));
                 }
             }
 

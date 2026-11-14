@@ -1,10 +1,24 @@
 # Changelog
 
-What changed in each version, for the people who use Requestarr. Every pull request adds its entry here (see
-"Changelog" in docs/development.md). Two sections only, **For users** and **For admins**, in plain words; a section
+What changed in each version, for the people who use Requestarr. Every pull request adds its lines under Unreleased
+(see "Changelog" in docs/development.md). Two sections only, **For users** and **For admins**, in plain words; a section
 with nothing in it is left out, and a version with nothing for either has only its heading. Requestarr posts these
 in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
 version heading carries the day it was made, which its card in Discord shows.
+
+Numbering changed with build 0.7.0004. Up to 0.6.0 every change took its own number, and those stay as they are. From
+0.7.0004 on, a number is a build sent to the beta testers, counting every build, and the release is that same build;
+what's waiting for the next build is under Unreleased.
+
+## Unreleased
+
+### For users
+- **Build numbers:** each test build of Requestarr now has one number that counts up, like 0.7.0004, and it reads the same on the update cards, in the web app and on the logo.
+
+### For admins
+- **One number per build:** a number now means one build sent to the beta testers, and a release is that exact build, never rebuilt, so production runs what the testers ran.
+- **Test servers say what they run:** the dev and QA servers show the next build's number with a short code for the exact change they run, so a bug report always says what was tested.
+- **Going back:** returning to an earlier build means restoring the backup taken before the update, which the beta update makes every time, and its rollback puts back.
 
 ## 0.6.0 (2026-11-13)
 

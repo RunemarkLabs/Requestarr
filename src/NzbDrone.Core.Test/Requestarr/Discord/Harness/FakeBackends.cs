@@ -419,16 +419,21 @@ namespace Requestarr.Core.Test.Discord.Harness
             return true;
         });
 
+        // When episodes air, relative to: a test that fixes Requestarr's clock sets the same one here, or episodes
+        // "already aired" would be in its future once the real date moves past it.
+        public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
         // A season of a library series: `aired` episodes already aired (the first `withFiles` of them
         // downloaded), plus `upcoming` episodes still to air.
         public void Season(int seriesId, int season, int aired, int withFiles, int upcoming = 0)
         {
             var list = Episodes.TryGetValue(seriesId, out var existing) ? existing : Episodes[seriesId] = new List<EpisodeInfo>();
             list.RemoveAll(e => e.SeasonNumber == season);
+            var now = Clock();
 
             for (var i = 1; i <= aired + upcoming; i++)
             {
-                var airs = i <= aired ? DateTime.UtcNow.AddDays(-30 + i) : DateTime.UtcNow.AddDays(i);
+                var airs = i <= aired ? now.AddDays(-30 + i) : now.AddDays(i);
                 list.Add(new EpisodeInfo(season, i, airs, i <= withFiles && i <= aired, true));
             }
         }

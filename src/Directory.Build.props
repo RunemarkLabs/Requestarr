@@ -73,8 +73,11 @@
     <Company>Runemark Labs</Company>
     <Copyright>Copyright 2026-$([System.DateTime]::Now.ToString('yyyy')) Runemark Labs. Portions copyright 2014-2026 prowlarr.com and the Servarr team (GNU General Public v3)</Copyright>
 
-    <!-- Should be replaced by CI -->
-    <AssemblyVersion>0.6.0.*</AssemblyVersion>
+    <!-- The build's number is stamped at build time, never kept here (docs/development.md#versions): the Image workflow
+         and the local stacks pass -p:RequestarrVersion=0.7.0004. .NET's version is numeric, 0.7.4.*; people see
+         0.7.0004. A build without one (tests, a local build) is 0.0.0. -->
+    <RequestarrVersion Condition="'$(RequestarrVersion)' == ''">0.0.0</RequestarrVersion>
+    <AssemblyVersion>$([System.Version]::Parse('$(RequestarrVersion)').ToString(3)).*</AssemblyVersion>
     <AssemblyConfiguration>$(Configuration)-dev</AssemblyConfiguration>
     <NeutralLanguage>en</NeutralLanguage>
 

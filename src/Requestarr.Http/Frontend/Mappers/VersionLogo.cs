@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using Requestarr.Core.Announcements;
 
 namespace Requestarr.Http.Frontend.Mappers
 {
@@ -20,7 +21,7 @@ namespace Requestarr.Http.Frontend.Mappers
         public const int Width = LogoX + LogoWidth;
         public const string Green = "#2EA043";
 
-        public static string Text(Version version) => "v" + version.ToString(version.Build >= 0 ? 3 : 2);
+        public static string Text(Version version) => "v" + Changelog.Display(version);
 
         // The font size in pixels: the branch labels' size, smaller only when the text would be too long.
         public static double FontSize(string text)

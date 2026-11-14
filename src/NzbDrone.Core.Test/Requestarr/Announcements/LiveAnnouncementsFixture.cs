@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Discord;
 using FluentAssertions;
@@ -131,13 +132,22 @@ namespace Requestarr.Core.Test.Announcements
                 Mocker.Resolve<DownInstanceSource>()
             }));
 
-            // The dev server keeps only the version running now (task 4d), as the dev stack does.
-            Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? "dev" : null });
+            // The dev server keeps only the build running now (task 4d), as the dev stack does: the next build number and
+            // this commit, the label the dev image is built with (.github/build_numbers.py label dev <commit>).
+            var label = Environment.GetEnvironmentVariable(ReleaseEnvironment.ReleaseVersionVariable);
+            label.Should().MatchRegex(@"^\d+\.\d+\.\d{4,}-dev\.[0-9a-f]{7}$", "the live check runs as a dev build: set it to what ./release.sh next-version says dev builds show");
+            Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment
+            {
+                Variable = v => v switch
+                {
+                    ReleaseEnvironment.EnvironmentVariable => "dev",
+                    ReleaseEnvironment.ReleaseVersionVariable => label,
+                    _ => null
+                }
+            });
             var announcements = Mocker.Resolve<AnnouncementService>();
-
-            // A version with nothing for users or admins posts no card, so the check runs as the newest version with news.
-            var withNews = Changelog.Parse(announcements.ChangelogText()).Where(v => v.HasNews).Max(v => v.Version);
-            announcements.CurrentVersion = () => withNews;
+            var build = Version.Parse(label.Split('-')[0]);
+            announcements.CurrentVersion = () => build;
             Mocker.SetConstant<IAnnouncementService>(announcements);
             var monitor = Mocker.Resolve<ConnectionMonitor>();
             monitor.AlertAfter = ShortAlert;
@@ -218,17 +228,19 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] start on {current}: {adminNotes.Count} admin card(s), {userNotes.Count} user card(s)");
                 adminNotes.ForEach(t => Log($"[upgrade]   admin, read back: \"{t}\""));
                 userNotes.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
-                var running = Changelog.Parse(announcements.ChangelogText()).SingleOrDefault(v => v.Version == current);
-                adminNotes.Should().HaveCount(running?.HasNews == true ? 1 : 0, "only the version running now, and a version with nothing for anyone posts nothing");
-                adminNotes.Should().OnlyContain(t => t.StartsWith($"Requestarr {current}"));
+
+                // The build running is the changelog's Unreleased lines, shown under its label.
+                var running = Changelog.Parse(announcements.ChangelogText(), current).SingleOrDefault(v => v.Version == current);
+                adminNotes.Should().HaveCount(running?.HasNews == true ? 1 : 0, "only the build running now, and one with nothing for anyone posts nothing");
+                adminNotes.Should().OnlyContain(t => t.StartsWith($"Requestarr {label} | "), "Unreleased has no day yet");
 
                 // A card an earlier Requestarr posted ("· 2 changes for admins") is brought up to date in place on the
                 // next start: the same message, the new title (version 0.6.0).
                 if (running?.HasNews == true)
                 {
                     var posted = (await CardMessages(adminRest, VersionAudience.Admins)).Single();
-                    var fresh = VersionCards.Collapsed(running, VersionAudience.Admins, DateTime.UtcNow.Year);
-                    var stale = new InteractionReply { Embeds = new List<InteractionEmbed> { new() { Title = $"Requestarr {current} · {running.Admins.Count + running.Users.Count} changes for admins", Color = VersionCards.AdminsColor } }, Buttons = fresh.Reply.Buttons };
+                    var fresh = VersionCards.Collapsed(running, VersionAudience.Admins, DateTime.UtcNow.Year, label);
+                    var stale = new InteractionReply { Embeds = new List<InteractionEmbed> { new() { Title = $"Requestarr {Changelog.Display(current)} · {running.Admins.Count + running.Users.Count} changes for admins", Color = VersionCards.AdminsColor } }, Buttons = fresh.Reply.Buttons };
                     await gateway.EditMessageAsync(adminChannel, posted.Id, stale);
                     Log($"[titles] set the posted card back to an old title: \"{(await adminRest.GetMessageAsync(posted.Id)).Embeds.First().Title}\"");
                     await announcements.PostVersionNotesAsync();
@@ -241,13 +253,12 @@ namespace Requestarr.Core.Test.Announcements
                 var hasUserLines = running?.Users.Count > 0;
                 userNotes.Should().HaveCount(hasUserLines ? 1 : 0, "users only hear about versions with changes for them");
 
-                // The simulated upgrade is to a version above every shipped one, so it can't collide with a real one.
-                var shipped = announcements.ChangelogText();
-                var newest = Changelog.Parse(shipped).Max(v => v.Version);
-                var next = new Version(newest.Major, newest.Minor, newest.Build + 1);
+                // The simulated upgrade is to the next build sent to testers, numbered, above every shipped version.
+                var shipped = Regex.Replace(announcements.ChangelogText().Replace("\r\n", "\n"), @"(?ms)^## Unreleased\n.*?(?=^## )", string.Empty);
+                var next = new Version(current.Major, current.Minor, current.Build + 1);
                 announcements.CurrentVersion = () => new Version(next.Major, next.Minor, next.Build, 0);
                 var today = DateTime.UtcNow.Date;
-                announcements.ChangelogText = () => $"## {next} ({today:yyyy-MM-dd})\n\n### For users\n- **Live check:** this is how something new is announced to you.\n- **Several changes:** a card names the main one and says how many more.\n\n### For admins\n- **Full list:** admins get every line.\n\n" + shipped;
+                announcements.ChangelogText = () => $"## {Changelog.Display(next)} ({today:yyyy-MM-dd})\n\n### For users\n- **Live check:** this is how something new is announced to you.\n- **Several changes:** a card names the main one and says how many more.\n\n### For admins\n- **Full list:** admins get every line.\n\n" + shipped;
                 await announcements.PostVersionNotesAsync();
                 await announcements.PostVersionNotesAsync();
                 var adminAfter = await Cards(adminRest, VersionAudience.Admins);
@@ -255,7 +266,7 @@ namespace Requestarr.Core.Test.Announcements
                 Log($"[upgrade] simulated upgrade to {next}, started twice: admin cards {adminAfter.Count}, user cards {usersAfter.Count}; stored version {guildSetup.GetConfig().AnnouncedVersion}");
                 adminAfter.ForEach(t => Log($"[upgrade]   admin, read back: \"{t}\""));
                 usersAfter.ForEach(t => Log($"[upgrade]   users, read back: \"{t}\""));
-                var dated = $"Requestarr {next} · {today.ToString("MMMM d", System.Globalization.CultureInfo.InvariantCulture)}";
+                var dated = $"Requestarr {Changelog.Display(next)} · {today.ToString("MMMM d", System.Globalization.CultureInfo.InvariantCulture)}";
                 adminAfter.Should().ContainSingle("the new version replaces the old card, once, even across restarts")
                     .Which.Should().Be($"{dated} | Full list, and 2 more");
                 usersAfter.Should().ContainSingle().Which.Should().Be($"{dated} | Live check, and 1 more");
