@@ -136,12 +136,18 @@ namespace Requestarr.Core.Test.Announcements
             // this commit, the label the dev image is built with (.github/build_numbers.py label dev <commit>).
             var label = Environment.GetEnvironmentVariable(ReleaseEnvironment.ReleaseVersionVariable);
             label.Should().MatchRegex(@"^\d+\.\d+\.\d{4,}-dev\.[0-9a-f]{7}$", "the live check runs as a dev build: set it to what ./release.sh next-version says dev builds show");
+
+            // Step 3b runs as the QA server would, on the dev server: the same code, QA's way of keeping cards.
+            var stack = "dev";
+            var shownAs = label;
+            string staged = null;
             Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment
             {
                 Variable = v => v switch
                 {
-                    ReleaseEnvironment.EnvironmentVariable => "dev",
-                    ReleaseEnvironment.ReleaseVersionVariable => label,
+                    ReleaseEnvironment.EnvironmentVariable => stack,
+                    ReleaseEnvironment.ReleaseVersionVariable => shownAs,
+                    ReleaseEnvironment.StagedVersionsVariable => staged,
                     _ => null
                 }
             });
@@ -270,6 +276,38 @@ namespace Requestarr.Core.Test.Announcements
                 adminAfter.Should().ContainSingle("the new version replaces the old card, once, even across restarts")
                     .Which.Should().Be($"{dated} | Full list, and 2 more");
                 usersAfter.Should().ContainSingle().Which.Should().Be($"{dated} | Live check, and 1 more");
+
+                // 3b. QA's cards: one "since the last beta" card for Unreleased, the rollup testers get next. A version
+                // folded into it loses its card on the next start; nothing else in the channel goes.
+                var embedded = Changelog.Embedded().Replace("\r\n", "\n");
+                stack = "qa";
+                shownAs = label.Replace("-dev.", "-qa.");
+                staged = string.Join(",", Changelog.Parse(embedded).Select(v => v.Version));
+                announcements.CurrentVersion = () => build;
+                var firstNumbered = embedded.IndexOf("\n## 0.", StringComparison.Ordinal) + 1;
+                announcements.ChangelogText = () => embedded.Insert(firstNumbered, "## 0.6.0 (2026-11-13)\n\n### For admins\n- **Folded version:** this card goes once it's folded into Unreleased.\n\n");
+                await announcements.PostVersionNotesAsync();
+                var otherBefore = (await Recent(adminRest)).Where(m => VersionCards.Parse(ButtonIds(m), VersionAudience.Admins) == null).Select(m => m.Id).ToList();
+                var qaBefore = await Cards(adminRest, VersionAudience.Admins);
+                qaBefore.ForEach(t => Log($"[qa] before the fold, admin card: \"{t}\""));
+                announcements.ChangelogText = () => embedded;
+                await announcements.PostVersionNotesAsync();
+                var qaAdmin = await Cards(adminRest, VersionAudience.Admins);
+                var qaUsers = await Cards(channel, VersionAudience.Users);
+                var otherAfter = (await Recent(adminRest)).Select(m => m.Id).ToHashSet();
+                qaAdmin.ForEach(t => Log($"[qa] after the fold, admin card: \"{t}\""));
+                qaUsers.ForEach(t => Log($"[qa] after the fold, announcements card: \"{t}\""));
+                Log($"[qa] the admin channel's other messages: {otherBefore.Count} before the fold, {otherBefore.Count(otherAfter.Contains)} of them still there after");
+                qaBefore.Should().HaveCount(2);
+                qaAdmin.Should().ContainSingle().Which.Should().StartWith($"Requestarr {shownAs} · {DiscordText.SinceLastBeta} | ");
+                qaUsers.Should().ContainSingle().Which.Should().StartWith($"Requestarr {shownAs} · {DiscordText.SinceLastBeta} | ");
+                otherBefore.Should().OnlyContain(id => otherAfter.Contains(id), "only version cards go");
+
+                // Back to the dev server's own way for the rest.
+                stack = "dev";
+                shownAs = label;
+                staged = null;
+                await announcements.PostVersionNotesAsync();
 
                 // 4. Stop the test Sonarr past the shortened thresholds; press Announce to users.
                 Docker("stop");

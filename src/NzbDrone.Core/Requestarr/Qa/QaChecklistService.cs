@@ -238,7 +238,7 @@ namespace Requestarr.Core.Qa
 
             foreach (var entry in entries)
             {
-                var record = _items.FindByKey(entry.Key) ?? MovedFromEarlierKey(entry);
+                var record = _items.FindByKey(entry.Key) ?? MovedFromEarlierKey(entry) ?? CarriedThroughFold(entry);
 
                 if (record == null)
                 {
@@ -272,6 +272,36 @@ namespace Requestarr.Core.Qa
             }
 
             return record;
+        }
+
+        // A folded item is passed when every item it came from passed (QaChecklistFold), with the last pass's who and when.
+        private QaChecklistItem CarriedThroughFold(QaChecklistEntry entry)
+        {
+            if (!QaChecklistFold.EarlierKeys.TryGetValue(entry.Key, out var earlierKeys))
+            {
+                return null;
+            }
+
+            var earlier = earlierKeys.Select(_items.FindByKey).ToList();
+
+            if (earlier.Any(r => r?.State != QaItemState.Passed))
+            {
+                return null;
+            }
+
+            var last = earlier.MaxBy(r => r.At);
+
+            return _items.Insert(new QaChecklistItem
+            {
+                ItemKey = entry.Key,
+                Version = Changelog.Display(entry.Version),
+                Name = entry.Name,
+                State = QaItemState.Passed,
+                ByDiscordUserId = last.ByDiscordUserId,
+                ByName = last.ByName,
+                At = last.At,
+                RecordedOn = last.RecordedOn
+            });
         }
 
         private string RunningBuild() => _environment.Shown(CurrentVersion());
