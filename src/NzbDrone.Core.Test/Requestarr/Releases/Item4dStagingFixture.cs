@@ -109,6 +109,7 @@ namespace Requestarr.Core.Test.Releases
             release.Should().Contain("ship-it) shift; ship_it").And.Contain("numbers release \"$work/release\" \"$number\"");
             release.Should().Contain("drift_pair \"$qa\" \"$staging\"").And.Contain("numbers check \"$kind\"");
             release.Should().Contain("numbers merge \"$work/ours\" \"$work/theirs\"").And.Contain("--dry-run) dry=1");
+            release.Should().Contain("hold-staging) shift; hold_staging").And.Contain("staging is held by the owner").And.Contain("rm -f \"$hold\"", "the owner's hold blocks the gate until a promotion on their word lifts it");
             build.Should().Contain("python3 .github/build_numbers.py --self-test").And.Contain("pull_request:main) below=staging ;;");
             build.Should().Contain("pull_request:staging) below=qa ;;").And.Contain("HEAD_REF: ${{ github.event.pull_request.head.ref }}");
             Read(".github", "workflows", "drift.yml").Should().Contain("staging_ref");

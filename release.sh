@@ -25,7 +25,12 @@
 #         the number the next build sent to testers takes, and how dev and QA builds are labelled meanwhile
 #   ./release.sh qa-gate [--json]
 #         is QA's test checklist complete, with no item failing and no bug report from QA still open? Read from the QA
-#         stack on this machine (docker/qa-gate.py); exit 0 when clear
+#         stack on this machine (docker/qa-gate.py); exit 0 when clear. A staging hold (below) makes it blocked.
+#   ./release.sh hold-staging "<the owner's words>"
+#         the owner holds staging: the QA gate stays blocked and promote-staging refuses without --owner-override (which
+#         lifts the hold once the promotion is done). Kept in .staging-hold on this machine, not in git.
+#   ./release.sh lift-staging-hold
+#         lifts it again
 #   ./release.sh merge-back
 #         after a fix merged into staging or qa (or a promotion to staging): pull requests that merge staging into qa
 #         and qa into dev, each merged once the build check passes. CHANGELOG.md and QA-CHECKLIST.md keep every
@@ -38,6 +43,8 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 files=(CHANGELOG.md QA-CHECKLIST.md)
+# The owner's staging hold: their words, who recorded them and when (hold-staging).
+hold="$here/.staging-hold"
 
 die() {
     echo "release.sh: $*" >&2
@@ -264,7 +271,8 @@ promote_qa() {
     echo "$url"
     fast_forward "$url" "$target" qa
     git push -q origin --delete "$branch" || true
-    echo "QA is now at $short. Next: .\\docker\\dev.ps1 reset-qa (or docker/dev.sh reset-qa) so the QA stack runs qa."
+    # up keeps QA's data: its checklist results carry over (a reworded item starts untested) and its bug reports stay.
+    echo "QA is now at $short. Next: .\\docker\\dev.ps1 up (or docker/dev.sh up) so the QA stack runs qa, keeping its checklist results."
 }
 
 # A security fix in something Requestarr ships, merged since staging's last build: the build's For admins says so.
@@ -284,6 +292,9 @@ qa_gate_record() {
     local verdict
     if [ -n "$override" ]; then
         echo "Owner override: $override (the QA gate was not checked or not clear)"
+        [ ! -f "$hold" ] || echo "Staging was held: $(cat "$hold")"
+    elif [ -f "$hold" ] && [ "$dry" != 1 ]; then
+        die "staging is held by the owner: $(cat "$hold"). Only the owner's word moves it: promote-staging \"<who>\" --owner-override \"<the owner's words>\""
     elif verdict=$("$here/docker/dev.sh" qa-gate --json); then
         printf '%s' "$verdict" | python -c 'import json,sys; v=json.load(sys.stdin); print("QA checklist: complete for %s (%d items), the last item passed by %s at %s; no bug report from QA open." % (", ".join(v["versions"]), v["total"], v["completedBy"], v["completedAt"]))'
     elif [ "$dry" = 1 ]; then
@@ -291,6 +302,9 @@ qa_gate_record() {
     else
         "$here/docker/dev.sh" qa-gate >&2 || true
         die "promotion to staging is blocked: QA's test checklist isn't complete, an item is failing, or a bug report from QA is still open. Only the owner can override it: promote-staging \"<who>\" --owner-override \"<the owner's words>\""
+    fi
+    if [ -z "$override" ] && [ -f "$hold" ]; then
+        echo "Staging hold: $(cat "$hold") (a real promotion stops here unless the owner overrides it)."
     fi
 }
 
@@ -348,6 +362,7 @@ promote_staging() {
     echo "$into_staging"
     fast_forward "$into_qa" "$release" qa
     fast_forward "$into_staging" "$release" staging
+    rm -f "$hold"
     git push -q origin --delete "$branch" || true
     rm -rf "$work"
     fetch
@@ -456,6 +471,30 @@ merge_back() {
     drift
 }
 
+# The gate as the stack reads it, then the owner's hold, which blocks it whatever the checklist says.
+qa_gate() {
+    local status=0
+    "$here/docker/dev.sh" qa-gate "$@" || status=$?
+    if [ -f "$hold" ]; then
+        # With --json the verdict is the only thing on standard output.
+        echo "HELD: the owner holds staging: $(cat "$hold"). Don't promote until the owner says so (\"QA passed\", or lifts the hold)." >&2
+        [ "$status" = 2 ] || status=1
+    fi
+    return "$status"
+}
+
+hold_staging() {
+    [ -n "${1:-}" ] || die "hold-staging \"<the owner's words>\""
+    printf '"%s" (recorded %s by %s)\n' "$1" "$(date -u +%Y-%m-%dT%H:%MZ)" "$(git config user.name)" > "$hold"
+    echo "Staging held: $(cat "$hold")"
+}
+
+lift_staging_hold() {
+    [ -f "$hold" ] || { echo "Staging isn't held."; return 0; }
+    echo "Lifted the staging hold: $(cat "$hold")"
+    rm -f "$hold"
+}
+
 next_version() {
     fetch
     local number
@@ -471,10 +510,12 @@ case "${1:-}" in
     promote-staging) shift; promote_staging "$@" ;;
     ship-it) shift; ship_it "$@" ;;
     next-version) next_version ;;
-    qa-gate) shift; "$here/docker/dev.sh" qa-gate "$@" ;;
+    qa-gate) shift; qa_gate "$@" ;;
+    hold-staging) shift; hold_staging "$@" ;;
+    lift-staging-hold) lift_staging_hold ;;
     merge-back) merge_back ;;
     *)
-        sed -n '2,36p' "$0"
+        sed -n '2,41p' "$0"
         exit 1
         ;;
 esac

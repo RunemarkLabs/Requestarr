@@ -210,3 +210,4 @@ __pycache__/
 
 # Claude Code agent worktrees (local only)
 .claude/worktrees/
+.staging-hold

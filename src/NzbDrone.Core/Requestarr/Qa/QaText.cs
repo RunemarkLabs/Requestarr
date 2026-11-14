@@ -18,6 +18,9 @@ namespace Requestarr.Core.Qa
         public const string ExpectedField = "expected";
     }
 
+    // After a promotion: the items that kept the pass an earlier build got, and the items new (or reworded) in this one.
+    public record QaCarriedOver(int Carried, int New);
+
     public static class QaText
     {
         public const uint ChecklistColor = 0xE0A030;
@@ -44,7 +47,7 @@ namespace Requestarr.Core.Qa
         public const string NoChannel = "The bug reports channel isn't set up yet. Try again in a minute.";
         public const string Sending = "Sending your report…";
 
-        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, string completedBy, DateTime? completedAt)
+        public static string Summary(IReadOnlyList<Version> versions, int total, int passed, int failing, QaCarriedOver carriedOver, string completedBy, DateTime? completedAt)
         {
             var which = versions.Count switch
             {
@@ -54,8 +57,12 @@ namespace Requestarr.Core.Qa
             };
 
             return $"{ChecklistTitle}\nWhat to test here before {which} go{(versions.Count == 1 ? "es" : string.Empty)} to staging: **{passed} of {total} passed**{(failing > 0 ? $", {failing} failing" : string.Empty)}.\n" +
+                   Carried(carriedOver) +
                    ChecklistStatus(total, passed, failing, completedBy, completedAt);
         }
+
+        private static string Carried(QaCarriedOver carriedOver) =>
+            carriedOver.Carried > 0 ? $"🔁 **{carriedOver.Carried} carried over** with their pass from an earlier build; **{carriedOver.New} new or changed** in this one.\n" : string.Empty;
 
         private static string ChecklistStatus(int total, int passed, int failing, string completedBy, DateTime? completedAt)
         {

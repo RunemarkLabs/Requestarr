@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Moq;
@@ -46,6 +47,16 @@ namespace Requestarr.Core.Test.Qa
                 return r;
             });
             items.Setup(r => r.Update(It.IsAny<QaChecklistItem>())).Returns<QaChecklistItem>(r => _records[r.ItemKey] = r);
+            items.Setup(r => r.SetFields(It.IsAny<QaChecklistItem>(), It.IsAny<Expression<Func<QaChecklistItem, object>>[]>())).Callback<QaChecklistItem, Expression<Func<QaChecklistItem, object>>[]>((r, _) =>
+            {
+                // A changed key moves the record, as the database would find it.
+                foreach (var stale in _records.Where(e => e.Value == r && e.Key != r.ItemKey).Select(e => e.Key).ToList())
+                {
+                    _records.Remove(stale);
+                }
+
+                _records[r.ItemKey] = r;
+            });
 
             Subject.ChecklistText = () => Text;
             Subject.CurrentVersion = () => new Version(0, 4, 15, 123);
@@ -67,18 +78,34 @@ namespace Requestarr.Core.Test.Qa
         }
 
         [Test]
-        public void items_get_stable_keys_and_a_version_with_nothing_to_test_has_none()
+        public void items_are_keyed_by_their_wording_and_a_version_with_nothing_to_test_has_none()
         {
             var versions = QaChecklist.Parse(Text);
 
             versions.Select(v => v.Version.ToString()).Should().Equal("0.4.15", "0.4.14", "0.4.13");
-            versions[0].Items.Select(i => i.Key).Should().Equal("0.4.15/passing-an-item", "0.4.15/failing-an-item");
+            versions[0].Items.Select(i => i.Key).Should().OnlyContain(k => k.Length < 60).And.SatisfyRespectively(
+                k => k.Should().MatchRegex(@"^passing-an-item\.[0-9a-f]{8}$"),
+                k => k.Should().MatchRegex(@"^failing-an-item\.[0-9a-f]{8}$"));
+            versions[0].Items.Select(i => i.EarlierKey).Should().Equal("0.4.15/passing-an-item", "0.4.15/failing-an-item");
             versions[1].Items.Should().BeEmpty();
             versions[2].Items.Single().Name.Should().Be("Sign-in logo");
         }
 
         [Test]
-        public void unreleased_items_are_the_build_qa_runs_keyed_by_its_build_count()
+        public void the_same_words_under_another_heading_are_the_same_item_and_new_words_are_a_new_one()
+        {
+            var moved = QaChecklist.Parse(Text.Replace("## 0.4.15 (2026-10-25)", "## Unreleased"), new Version(0, 7, 4));
+            var reworded = QaChecklist.Parse(Text.Replace("You should see it passed.", "You should see a green tick."));
+
+            moved[0].Items.Select(i => i.Key).Should().Equal(Keys("Passing an item", "Failing an item"), "a fold into Unreleased or a build number keeps the result");
+            moved[0].Items[0].EarlierKey.Should().Be("build-4/passing-an-item");
+            reworded[0].Items[0].Key.Should().NotBe(Key("Passing an item"), "changed words are a changed test");
+            reworded[0].Items[1].Key.Should().Be(Key("Failing an item"));
+            QaChecklist.Parse(Text.Replace("Press Passes.", "Press   Passes.")).SelectMany(v => v.Items).Select(i => i.Key).Should().Equal(Keys("Passing an item", "Failing an item", "Sign-in logo"), "spacing isn't wording");
+        }
+
+        [Test]
+        public void unreleased_items_are_the_build_qa_runs()
         {
             const string Pending = "# QA checklist\n\n## Unreleased\n- **Build number:** open System, then Status. You should see the build's number.\n\n## 0.6.0 (2026-11-13)\n";
             var running = new Version(0, 7, 5);
@@ -86,10 +113,54 @@ namespace Requestarr.Core.Test.Qa
             var unreleased = QaChecklist.Parse(Pending, running);
 
             unreleased.Select(v => v.Version).Should().Equal(running, new Version(0, 6, 0));
-            unreleased[0].Items.Single().Key.Should().Be("build-5/build-number");
-            QaChecklist.Parse(Pending, new Version(0, 8, 5))[0].Items.Single().Key.Should().Be("build-5/build-number", "shipping 0.7.0004 moves QA's minor, and a pass recorded in QA is kept");
-            QaChecklist.Parse(Pending, new Version(0, 7, 6))[0].Items.Single().Key.Should().NotBe("build-5/build-number", "the next build's items start untested");
+            QaChecklist.Parse(Pending, new Version(0, 8, 5))[0].Items.Single().Key.Should().Be(unreleased[0].Items.Single().Key, "shipping 0.7.0004 moves QA's minor, and a pass recorded in QA is kept");
             QaChecklist.Parse(Pending).Select(v => v.Version).Should().Equal(new[] { new Version(0, 6, 0) }, "without a running build Unreleased is left out");
+        }
+
+        [Test]
+        public async Task a_promotion_keeps_unchanged_passes_and_a_reworded_or_new_item_comes_back_untested()
+        {
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns("0.7.0004-qa.1111111");
+            await Subject.MarkPassedAsync(Key("Passing an item"), 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Failing an item"), 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Sign-in logo"), 1, "Alex");
+
+            // The next promotion: one item reworded, one new, all of it folded under Unreleased.
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns("0.7.0004-qa.2222222");
+            Subject.ChecklistText = () => Text.Replace("## 0.4.15 (2026-10-25)", "## Unreleased\n- **New thing:** Do it. You should see it.")
+                .Replace("You should see the logo.", "You should see the new logo.");
+            Subject.CurrentVersion = () => new Version(0, 7, 4, 1);
+            var state = Subject.State();
+
+            state.Items.Select(i => (i.Name, i.State, i.By)).Should().Equal(
+                ("New thing", "Pending", null), ("Passing an item", "Passed", "Alex"), ("Failing an item", "Passed", "Alex"), ("Sign-in logo", "Pending", null));
+            state.Should().BeEquivalentTo(new { Total = 4, Passed = 2, Carried = 2, New = 2, Complete = false });
+        }
+
+        [Test]
+        public void a_result_recorded_by_version_and_name_moves_to_its_wording_with_its_bug_report()
+        {
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns("0.7.0004-qa.2222222");
+            var report = new BugReport { Id = 9, ChecklistItemKey = "0.4.15/failing-an-item" };
+            var earlier = new BugReport { Id = 8, ChecklistItemKey = "0.4.15/failing-an-item" };
+            Mocker.GetMock<IBugReportRepository>().Setup(r => r.Find(9)).Returns(report);
+            Mocker.GetMock<IBugReportRepository>().Setup(r => r.All()).Returns(new[] { earlier, report, new BugReport { Id = 7, ChecklistItemKey = "0.4.15/other" } });
+            _records["0.4.15/failing-an-item"] = new QaChecklistItem { Id = 50, ItemKey = "0.4.15/failing-an-item", State = QaItemState.Failing, ByName = "Alex", BugReportId = 9 };
+            _records["0.4.13/sign-in-logo"] = new QaChecklistItem { Id = 51, ItemKey = "0.4.13/sign-in-logo", State = QaItemState.Passed, ByName = "Sam" };
+
+            var state = Subject.State();
+
+            state.Should().BeEquivalentTo(new { Passed = 1, Failing = 1, Carried = 1 });
+            _records.Keys.Should().BeEquivalentTo(Keys("Passing an item", "Failing an item", "Sign-in logo"));
+            _records[Key("Sign-in logo")].Id.Should().Be(51, "the same record, under its new key");
+            new[] { earlier, report }.Should().OnlyContain(r => r.ChecklistItemKey == Key("Failing an item"), "every report on the item still finds it");
+        }
+
+        [TestCase(0, 0, "⏳ **1 left to test.**")]
+        [TestCase(2, 1, "🔁 **2 carried over** with their pass from an earlier build; **1 new or changed** in this one.\n⏳ **1 left to test.**")]
+        public void the_summary_says_how_many_passes_were_carried_over_and_how_many_items_are_new(int carried, int added, string ending)
+        {
+            QaText.Summary(new[] { new Version(0, 7, 4) }, 3, 2, 0, new QaCarriedOver(carried, added), null, null).Should().EndWith(ending);
         }
 
         [Test]
@@ -111,17 +182,17 @@ namespace Requestarr.Core.Test.Qa
         {
             Subject.State().Should().BeEquivalentTo(new { Total = 3, Passed = 0, Failing = 0, Complete = false });
 
-            await Subject.MarkPassedAsync("0.4.15/passing-an-item", 1, "Alex");
-            await Subject.MarkPassedAsync("0.4.15/failing-an-item", 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Passing an item"), 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Failing an item"), 1, "Alex");
             Subject.State().Complete.Should().BeFalse();
 
-            await Subject.MarkPassedAsync("0.4.13/sign-in-logo", 2, "Sam");
+            await Subject.MarkPassedAsync(Key("Sign-in logo"), 2, "Sam");
             var state = Subject.State();
 
             state.Should().BeEquivalentTo(new { Total = 3, Passed = 3, Failing = 0, Complete = true, CompletedBy = "Sam" });
             state.Versions.Should().Equal("0.4.15", "0.4.14", "0.4.13");
-            _records["0.4.13/sign-in-logo"].ByDiscordUserId.Should().Be("2");
-            _records["0.4.13/sign-in-logo"].At.Should().NotBeNull();
+            _records[Key("Sign-in logo")].ByDiscordUserId.Should().Be("2");
+            _records[Key("Sign-in logo")].At.Should().NotBeNull();
         }
 
         [Test]
@@ -129,26 +200,26 @@ namespace Requestarr.Core.Test.Qa
         {
             Mocker.GetMock<IBugReportRepository>().Setup(r => r.Find(9)).Returns(new BugReport { Id = 9, IssueUrl = "https://github.com/x/y/issues/1" });
 
-            foreach (var key in new[] { "0.4.15/passing-an-item", "0.4.13/sign-in-logo" })
+            foreach (var key in Keys("Passing an item", "Sign-in logo"))
             {
                 await Subject.MarkPassedAsync(key, 1, "Alex");
             }
 
-            await Subject.MarkFailingAsync("0.4.15/failing-an-item", 1, "Alex", new BugReport { Id = 9 });
+            await Subject.MarkFailingAsync(Key("Failing an item"), 1, "Alex", new BugReport { Id = 9 });
             var state = Subject.State();
 
             state.Should().BeEquivalentTo(new { Passed = 2, Failing = 1, Complete = false });
-            state.Items.Single(i => i.Key == "0.4.15/failing-an-item").Should().BeEquivalentTo(new { State = "Failing", BugReportId = 9, IssueUrl = "https://github.com/x/y/issues/1" });
+            state.Items.Single(i => i.Key == Key("Failing an item")).Should().BeEquivalentTo(new { State = "Failing", BugReportId = 9, IssueUrl = "https://github.com/x/y/issues/1" });
 
-            await Subject.MarkPassedAsync("0.4.15/failing-an-item", 2, "Sam");
+            await Subject.MarkPassedAsync(Key("Failing an item"), 2, "Sam");
             Subject.State().Should().BeEquivalentTo(new { Passed = 3, Failing = 0, Complete = true });
         }
 
         [Test]
         public async Task a_new_promotion_keeps_what_was_recorded_adds_new_items_and_drops_what_staging_has()
         {
-            await Subject.MarkPassedAsync("0.4.13/sign-in-logo", 1, "Alex");
-            await Subject.MarkPassedAsync("0.4.15/passing-an-item", 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Sign-in logo"), 1, "Alex");
+            await Subject.MarkPassedAsync(Key("Passing an item"), 1, "Alex");
 
             // Staging got 0.4.13, and QA got 0.4.16 with one new item.
             OnQa("0.4.13");
@@ -157,7 +228,7 @@ namespace Requestarr.Core.Test.Qa
             var state = Subject.State();
 
             state.Versions.Should().Equal("0.4.16", "0.4.15", "0.4.14");
-            state.Items.Select(i => (i.Key, i.State)).Should().Equal(("0.4.16/new-thing", "Pending"), ("0.4.15/passing-an-item", "Passed"), ("0.4.15/failing-an-item", "Pending"));
+            state.Items.Select(i => (i.Name, i.State)).Should().Equal(("New thing", "Pending"), ("Passing an item", "Passed"), ("Failing an item", "Pending"));
         }
 
         [Test]
@@ -167,6 +238,11 @@ namespace Requestarr.Core.Test.Qa
 
             _records.Should().NotContainKey("0.3.0/old");
         }
+
+        // An item's key in the fixture's checklist, found by its name.
+        private static string Key(string name) => QaChecklist.Parse(Text).SelectMany(v => v.Items).Single(i => i.Name == name).Key;
+
+        private static string[] Keys(params string[] names) => names.Select(Key).ToArray();
 
         private void OnQa(string staged = "")
         {

@@ -37,6 +37,8 @@ namespace Requestarr.Core.Test.Qa
     // With DEV_GITHUB_ISSUES_TOKEN set, reports are filed as real issues (labelled "test") and closed at the end. Clicks
     // go through the real handlers; the effects are read back from Discord. The checklist's state is saved after each
     // step in the API's format (LIVE_QA_STATE_DIR) for docker/qa-gate.py. Its own report cards are removed at the end.
+    // Last, a promotion rehearsal: the next build moves the items under another heading, rewords one and adds one; the
+    // cards are read back to show which kept their pass.
     [TestFixture]
     [ManualTest]
     public class LiveQaFixture : DbTest
@@ -70,7 +72,16 @@ namespace Requestarr.Core.Test.Qa
             Mocker.SetConstant<IMediaServerConnections>(new MediaServerConnections());
             Mocker.SetConstant<IAccessRequestRepository>(Mocker.Resolve<AccessRequestRepository>());
             Mocker.SetConstant<IWelcomeGuardRepository>(Mocker.Resolve<WelcomeGuardRepository>());
-            Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment { Variable = v => v == ReleaseEnvironment.EnvironmentVariable ? "dev" : null });
+            string build = null;
+            Mocker.SetConstant<IReleaseEnvironment>(new ReleaseEnvironment
+            {
+                Variable = v => v switch
+                {
+                    ReleaseEnvironment.EnvironmentVariable => "dev",
+                    ReleaseEnvironment.ReleaseVersionVariable => build,
+                    _ => null
+                }
+            });
             Mocker.SetConstant<IQaChecklistItemRepository>(Mocker.Resolve<QaChecklistItemRepository>());
             Mocker.SetConstant<IBugReportRepository>(Mocker.Resolve<BugReportRepository>());
             Mocker.SetConstant<IBugReportGuardRepository>(Mocker.Resolve<BugReportGuardRepository>());
@@ -113,6 +124,7 @@ namespace Requestarr.Core.Test.Qa
             checklist.ChecklistText = () => numbered;
             var tested = QaChecklist.Parse(numbered).Where(v => v.Items.Count >= itemsNeeded).Max(v => v.Version);
             checklist.CurrentVersion = () => tested;
+            build = $"{Changelog.Display(tested)}-dev.1111111";
             Mocker.SetConstant<IQaChecklistService>(checklist);
             var reports = Mocker.Resolve<BugReportService>();
             Mocker.SetConstant<IBugReportService>(reports);
@@ -266,6 +278,27 @@ namespace Requestarr.Core.Test.Qa
                 }
 
                 Log($"[state] saved in {stateDir}: 1-posted.json, 2-failing.json, 3-complete.json");
+
+                // 8. A promotion rehearsal: the next build has the same items under Unreleased, one reworded, one new.
+                var items = QaChecklist.Parse(numbered).Single(v => v.Version == tested).Items;
+                var promoted = Regex.Replace(numbered, $@"(?m)^## {Regex.Escape(tested.ToString())}\b.*$", "## Unreleased\n- **Live check new item:** Press Passes. You should see it passed.")
+                    .Replace($"- **{items[1].Name}:** {items[1].Text}", $"- **{items[1].Name}:** {items[1].Text} Then look again.");
+                build = $"{Changelog.Display(tested)}-dev.2222222";
+                checklist.ChecklistText = () => promoted;
+                await checklist.EnsureAsync();
+
+                var after = await Cards();
+                Log($"[promotion] the next build ({build}) has {after.Count - 1} item(s); the summary: {Text(after[0])}");
+
+                foreach (var cardAfter in after.Skip(1))
+                {
+                    Log($"[promotion]   {Text(cardAfter)}");
+                }
+
+                var carried = checklist.State();
+                carried.Items.Select(i => i.State).Should().Equal(new[] { "Pending" }.Concat(items.Select((_, n) => n == 1 ? "Pending" : "Passed")));
+                carried.Should().BeEquivalentTo(new { Total = items.Count + 1, Passed = items.Count - 1, Carried = items.Count - 1 });
+                Text(after[0]).Should().Contain($"{items.Count - 1} carried over").And.Contain("2 new or changed");
             }
             finally
             {

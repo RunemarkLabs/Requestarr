@@ -7,6 +7,7 @@ Every pull request adds its items under Unreleased, the way it adds its changelo
 ## Unreleased
 - **Build number on update cards:** In the admin channel, look at the newest update card. You should see its title start with Requestarr, then a number like 0.7.0004, then qa and a short code.
 - **Build number in the web app:** Open System, then Status. You should see the same number, qa and short code as the version, and the same number on the logo.
+- **Passes carry over:** After the next promotion to QA, look at the QA checklist channel. You should see every item you passed before still passed, with your name and when, and the summary saying how many carried over and how many are new or changed.
 
 ## 0.6.0 (2026-11-13)
 - **Update card titles:** In the announcements channel, look at the update cards. You should see each one titled Requestarr, its version and a day such as November 13, with the main change underneath, and "and 2 more" after it when that version has several changes.

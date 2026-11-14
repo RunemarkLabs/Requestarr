@@ -19,6 +19,7 @@ what's waiting for the next build is under Unreleased.
 - **One number per build:** a number now means one build sent to the beta testers, and a release is that exact build, never rebuilt, so production runs what the testers ran.
 - **Test servers say what they run:** the dev and QA servers show the next build's number with a short code for the exact change they run, so a bug report always says what was tested.
 - **Going back:** returning to an earlier build means restoring the backup taken before the update, which the beta update makes every time, and its rollback puts back.
+- **QA test results carry over:** a new build on the QA server keeps every checklist item already passed, with who passed it and when, as long as its wording didn't change; only new or reworded items come back to test, and the checklist says how many carried over.
 
 ## 0.6.0 (2026-11-13)
 

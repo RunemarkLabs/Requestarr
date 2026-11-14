@@ -48,6 +48,9 @@ def check(checklist, changelog):
 
     current = None
     names = set()
+    # A result is recorded against an item's name and words, so the same item word for word in two versions would be
+    # one result for two cards.
+    wordings = set()
     for number, line in enumerate(checklist.splitlines(), 1):
         text = line.strip()
         if text == UNRELEASED and current is not None:
@@ -69,6 +72,10 @@ def check(checklist, changelog):
         if name.lower() in names:
             problems.append((number, "item '%s' appears twice in this version" % name))
         names.add(name.lower())
+        wording = " ".join(text.split())
+        if wording in wordings:
+            problems.append((number, "item '%s' is already on the checklist word for word: reword it or drop the copy" % name))
+        wordings.add(wording)
         if "you should see" not in body.lower():
             problems.append((number, "item '%s' must say 'You should see' what a pass looks like" % name))
         for pattern, what in CODE:
@@ -89,6 +96,8 @@ BAD = """# QA checklist
 ## 0.4.4 (2026-10-25)
 ## Unreleased
 - **Logo:** look at the logo.
+- **Logo:** open `provisioning.yml`. You should see it.
+## 0.4.2 (2026-10-24)
 - **Logo:** open `provisioning.yml`. You should see it.
 Some loose text.
 ### Section
@@ -111,7 +120,7 @@ Intro text is free.
 def self_test():
     found = check(BAD, BAD_CHANGELOG)
     expected = ["versions don't match", "must say 'You should see'", "appears twice", "backticks", "a file name",
-                "only '- **Name:**", "only version headings", "goes once, on top"]
+                "only '- **Name:**", "only version headings", "goes once, on top", "word for word"]
     missing = [e for e in expected if not any(e in p for _, p in found)]
     good = check(GOOD, BAD_CHANGELOG)
     for _, p in found:

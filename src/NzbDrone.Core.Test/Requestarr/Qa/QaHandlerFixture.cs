@@ -20,7 +20,7 @@ namespace Requestarr.Core.Test.Qa
     public class QaHandlerFixture : CoreTest<QaHandler>
     {
         private const ulong Channel = 700;
-        private readonly QaChecklistEntry _item = new(new Version(0, 4, 16), "0.4.16/one", "One", "Do it. You should see it.");
+        private readonly QaChecklistEntry _item = new(new Version(0, 4, 16), "0.4.16/one", "One", "Do it. You should see it.", null);
         private FakeDiscordGuild _guild;
         private ulong _card;
         private bool _admin;
@@ -34,7 +34,7 @@ namespace Requestarr.Core.Test.Qa
             _admin = true;
 
             Mocker.GetMock<ICallerResolver>().Setup(c => c.Resolve(It.IsAny<DiscordInteraction>())).Returns(() => new CallerContext { RightServer = true, IsAdmin = _admin });
-            Mocker.GetMock<IQaChecklistService>().Setup(c => c.Find(It.IsAny<string>())).Returns<string>(k => k.StartsWith("0.4.16/") ? new QaChecklistEntry(_item.Version, k, "Item " + k, _item.Text) : null);
+            Mocker.GetMock<IQaChecklistService>().Setup(c => c.Find(It.IsAny<string>())).Returns<string>(k => k.StartsWith("0.4.16/") ? new QaChecklistEntry(_item.Version, k, "Item " + k, _item.Text, null) : null);
 
             // The member limit is reached: only an admin's checklist work goes through.
             Mocker.GetMock<IBugReportService>().Setup(r => r.WaitLeft(It.IsAny<ulong>())).Returns(TimeSpan.FromMinutes(1));
