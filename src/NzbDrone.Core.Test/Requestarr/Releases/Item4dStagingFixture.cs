@@ -116,6 +116,19 @@ namespace Requestarr.Core.Test.Releases
         }
 
         [Test]
+        public void qa_requires_sign_in_dev_does_not_and_both_accept_every_name_requestarr_is_reached_by()
+        {
+            var provisioning = Read("docker", "provisioning.yml");
+
+            provisioning.Should().Contain("required: ${REQUESTARR_AUTH_REQUIRED:-disabledForLocalAddresses}").And.Contain("allowedHosts: localhost, 127.0.0.1, requestarr");
+            Read("docker", "compose.yaml").Should().Contain("REQUESTARR_AUTH_REQUIRED: ${STACK_AUTH_REQUIRED:-disabledForLocalAddresses}");
+            Read("docker", "dev.ps1").Should().Contain("STACK_AUTH_REQUIRED = 'enabled'").And.Contain("'DEV_AUTH_REQUIRED' 'disabledForLocalAddresses'");
+            Read("docker", "dev.sh").Should().Contain("STACK_AUTH_REQUIRED=\"enabled\"").And.Contain("STACK_AUTH_REQUIRED=\"${DEV_AUTH_REQUIRED:-disabledForLocalAddresses}\"");
+            Read("deploy", "staging", "provisioning.yml").Should().Contain("required: enabled", "beta requires sign-in for every address, so it needs no allowed hosts");
+            Read("docs", "setup-guide.md").Should().Contain("Changing the web portal password").And.Contain("REQUESTARR_ADMIN_PASSWORD");
+        }
+
+        [Test]
         public void the_local_stacks_tell_requestarr_their_environment()
         {
             Read("docker", "compose.yaml").Should().Contain($"{ReleaseEnvironment.EnvironmentVariable}: ${{REQUESTARR_STACK}}").And.Contain(ReleaseEnvironment.StagedVersionsVariable);

@@ -83,6 +83,22 @@ namespace Requestarr.Core.Test.Provisioning
         }
 
         [Test]
+        public void should_list_the_settings_it_set_for_the_settings_pages_and_provision_allowed_hosts()
+        {
+            GivenDocument(new ProvisioningDocument
+            {
+                General = new GeneralProvisioning { InstanceName = "Requestarr", AllowedHosts = "localhost, requestarr" },
+                Auth = new AuthProvisioning { Required = "enabled", Username = "admin", Password = "secret" }
+            });
+
+            Subject.ProvisionedSettings.Should().BeEmpty("nothing is provisioned before the file is read");
+            Subject.Apply();
+
+            Subject.ProvisionedSettings.Should().BeEquivalentTo("instanceName", "allowedHosts", "authenticationRequired", "username", "password", "passwordConfirmation");
+            Mocker.GetMock<IConfigFileProvider>().Verify(c => c.SaveConfigDictionary(It.Is<Dictionary<string, object>>(d => (string)d["AllowedHosts"] == "localhost, requestarr")), Times.Once());
+        }
+
+        [Test]
         public void should_report_unbuilt_sections_as_deferred()
         {
             GivenDocument(new ProvisioningDocument
