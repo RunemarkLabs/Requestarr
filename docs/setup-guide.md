@@ -603,7 +603,7 @@ What Requestarr posts there:
 |---|---|---|
 | A Sonarr or Radarr is still down after 30 minutes and you press **Announce to users** on its alert | A plain notice, for example "TV requests are paused" and that the admin knows, pinned while the outage lasts. The button then goes away. | The alert says who announced it. |
 | That outage ends | The notice is unpinned and removed, and "TV requests work again" is posted, automatically, only if it was announced. An outage you never announced is never mentioned to users. | The usual "is back" message. |
-| Requestarr starts on a new version | A one-line card, for example "Requestarr 0.4.0 · 4 new things for you", with the main change in a few words. Nothing if a version has nothing for users. | A one-line card, for example "Requestarr 0.4.0 · 6 changes for admins, 4 for users". A version with nothing for either isn't posted. |
+| Requestarr starts on a new version | A one-line card with the version and its date, for example "Requestarr 0.4.0 · October 25", and the main change in a few words, for example "Softer logo, and 3 more". Nothing if a version has nothing for users. | The same kind of card, its line counting both sections, for example "Member cards, and 9 more". A version with nothing for either isn't posted. |
 
 Every version card has **Read changes**: it shows the full card only to whoever pressed it, with the version and the day it was made as the title, then **For users** and **For admins** (only those with something in them), one line per change. Members see only their section. A long version is split into several cards between lines, never in the middle of one.
 

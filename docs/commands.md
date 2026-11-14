@@ -214,7 +214,7 @@ Deleting removes the files and the title from Sonarr or Radarr without excluding
 
 - **Announce to users** appears on a Sonarr or Radarr down alert once it has been down for 30 minutes. It posts a plain notice ("TV requests are paused…") and the recovery is then announced automatically. Never pressed: users never hear about it.
 - While an outage lasts, its alert in `#requestarr-admin` (and the notice, if announced) is pinned; when it's over both are removed and the "back" messages posted.
-- On a new version, a one-line card goes to `#requestarr-admin` ("6 changes for admins, 4 for users") and one to `#requestarr-announcements` ("4 new things for you", with the main one), once per version. **Read changes** on either shows the full card, only to whoever pressed it.
+- On a new version, a one-line card goes to `#requestarr-admin` and one to `#requestarr-announcements`, once per version: the version and its date ("Requestarr 0.4.11 · October 25"), then its main change and how many more ("Softer logo, and 2 more"; the admin card counts both sections). **Read changes** on either shows the full card, only to whoever pressed it.
 
 ### The welcome channel
 
