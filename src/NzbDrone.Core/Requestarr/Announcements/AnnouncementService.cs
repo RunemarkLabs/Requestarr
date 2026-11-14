@@ -198,11 +198,11 @@ namespace Requestarr.Core.Announcements
 
         // On staging, the version running is shown as its beta version.
         private VersionCard Card(ChangelogVersion version, VersionAudience audience) =>
-            VersionCards.Collapsed(version, audience, _environment.BetaVersion(version.Version));
+            VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, _environment.BetaVersion(version.Version));
 
         // Production and staging: each version with something in it gets a card, oldest first, and keeps it. A card
-        // already in the channel isn't posted again (a server set up again with its channels kept). Posts from before
-        // version cards are replaced once by cards for the whole history.
+        // already in the channel isn't posted again (a server set up again with its channels kept), but its words are
+        // brought up to date in place. Posts from before version cards are replaced once by cards for the whole history.
         private async Task PostStandingAsync(DiscordGuildConfig config, ulong adminChannel, List<ChangelogVersion> versions, Version current)
         {
             var announced = Announced.Parse(config.AnnouncedVersion);
@@ -257,6 +257,11 @@ namespace Requestarr.Core.Announcements
                 config.AnnouncedVersion = announced.With(new[] { current }).ToString();
                 _configs.Upsert(config);
             }
+
+            // After the new versions, so a card that can't be edited never holds back an announcement.
+            var byVersion = versions.DistinctBy(v => v.Version).ToDictionary(v => v.Version);
+            await RefreshAsync(adminChannel, inAdmin, byVersion, VersionAudience.Admins);
+            await RefreshAsync(users, inUsers, byVersion, VersionAudience.Users);
         }
 
         // Makes a channel's version cards exactly `wanted`, oldest first: anything else that is a version post (another
@@ -286,10 +291,7 @@ namespace Requestarr.Core.Announcements
 
             for (var i = 0; i < inOrder; i++)
             {
-                if (kept[i].Card.Title != wanted[i].Title || kept[i].Card.Description != wanted[i].Description)
-                {
-                    await _gateway.EditMessageAsync(channel, kept[i].Messages[0].Id, wanted[i].Reply);
-                }
+                await EditIfChangedAsync(channel, kept[i], wanted[i]);
             }
 
             foreach (var card in wanted.Skip(inOrder))
@@ -298,7 +300,38 @@ namespace Requestarr.Core.Announcements
             }
         }
 
-        // This server's version posts in a channel, oldest first: cards (found by their title), and posts from before
+        // Each card a standing channel keeps shows its version's words as this version of Requestarr writes them, with the
+        // beta version it was published as (the version running now shows its own).
+        private async Task RefreshAsync(ulong? channel, IEnumerable<FoundPost> found, IReadOnlyDictionary<Version, ChangelogVersion> versions, VersionAudience audience)
+        {
+            if (!channel.HasValue)
+            {
+                return;
+            }
+
+            foreach (var post in found)
+            {
+                if (versions.TryGetValue(post.Version, out var version) && HasCard(version, audience))
+                {
+                    var shown = _environment.BetaVersion(version.Version) ?? VersionCards.BetaShown(post.Card.Title, version.Version);
+                    await EditIfChangedAsync(channel.Value, post, VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, shown));
+                }
+            }
+        }
+
+        // A version gets a card in the admin channel when it has anything, in announcements when it has lines for users.
+        private static bool HasCard(ChangelogVersion version, VersionAudience audience) =>
+            audience == VersionAudience.Admins ? version.HasNews : version.Users.Count > 0;
+
+        private async Task EditIfChangedAsync(ulong channel, FoundPost post, VersionCard wanted)
+        {
+            if (post.Card.Title != wanted.Title || post.Card.Description != wanted.Description)
+            {
+                await _gateway.EditMessageAsync(channel, post.Messages[0].Id, wanted.Reply);
+            }
+        }
+
+        // This server's version posts in a channel, oldest first: cards (found by their button), and posts from before
         // cards (found by their header line; one split over several messages continues in "(continued)" messages).
         private async Task<List<FoundPost>> FindPostsAsync(ulong channel, VersionAudience audience)
         {
@@ -307,7 +340,7 @@ namespace Requestarr.Core.Announcements
 
             foreach (var message in await _gateway.GetOwnMessagesAsync(channel, ScanLimit))
             {
-                if (VersionCards.Parse(message.EmbedTitle, audience) is { } version)
+                if (VersionCards.Parse(message.CustomIds, audience) is { } version)
                 {
                     posts.Add(new FoundPost(version, new List<ChannelMessage> { message }, new VersionCard(version, message.EmbedTitle, message.EmbedDescription, null)));
                     continue;

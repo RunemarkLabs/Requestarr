@@ -20,8 +20,8 @@ namespace Requestarr.Core.Announcements
         public const string ReadChanges = "whatsnew";   // whatsnew:{a|u}:{version}
     }
 
-    // One version's card as posted: its title and description are what a server compares to find and update it. On
-    // staging the version it runs is shown as its beta version (0.4.17-beta.1); every other version as its number.
+    // One version's card as posted: a server finds it by its button and updates it when its title or description changed.
+    // On staging the version it runs is shown as its beta version (0.4.17-beta.1); every other version as its number.
     public record VersionCard(Version Version, string Title, string Description, InteractionReply Reply);
 
     // What's new, as cards. In the channels each version is one line with a Read changes button; pressing it shows the
@@ -38,39 +38,49 @@ namespace Requestarr.Core.Announcements
         public const uint UsersColor = 0x2BB3A3;
         public const uint AdminsColor = 0xE0A030;
 
-        private static readonly Regex AdminTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+)(?:-beta\.\d+)? · \d+ changes? for (admins|users)");
-        private static readonly Regex UsersTitle = new(@"^Requestarr (?<version>\d+\.\d+\.\d+)(?:-beta\.\d+)? · \d+ new things? for you");
+        private static readonly Regex BetaTitle = new(@"^Requestarr (?<shown>(?<version>\d+\.\d+\.\d+)-beta\.\d+)(?: ·|$)");
         private static readonly Regex BoldLead = new(@"^\*\*(?<lead>[^*]+?):?\*\*");
 
-        // shown: how the version reads in the title (its beta version on staging), its number when null.
-        public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience, string shown = null)
+        // shown: how the version reads in the title (its beta version on staging), its number when null. Readers see the
+        // main change in a few words, so they know whether to open it: the admin channel's card covers both sections,
+        // admins' lines first.
+        public static VersionCard Collapsed(ChangelogVersion version, VersionAudience audience, int thisYear, string shown = null)
         {
-            shown ??= version.Version.ToString();
-            var title = audience == VersionAudience.Admins
-                ? DiscordText.VersionCardAdminTitle(shown, version.Admins.Count, version.Users.Count)
-                : DiscordText.VersionCardUsersTitle(shown, version.Users.Count);
-
-            // Members see the main change in a few words, so they know whether to open it.
-            var description = audience == VersionAudience.Users ? MainChange(version.Users[0]) : null;
+            var title = DiscordText.VersionCardTitle(shown ?? version.Version.ToString(), version.Date, thisYear);
+            var lines = audience == VersionAudience.Admins ? version.Admins.Concat(version.Users).ToList() : version.Users.ToList();
+            var description = DiscordText.VersionCardSummary(MainChange(lines[0]), lines.Count - 1);
 
             var reply = new InteractionReply
             {
                 Embeds = new List<InteractionEmbed> { new() { Title = title, Description = description, Color = audience == VersionAudience.Admins ? AdminsColor : UsersColor } },
                 Buttons = new List<InteractionButton>
                 {
-                    new() { CustomId = $"{VersionCardRoutes.ReadChanges}:{(audience == VersionAudience.Admins ? "a" : "u")}:{version.Version}", Label = DiscordText.ReadChangesLabel, Style = ButtonStyle.Secondary }
+                    new() { CustomId = ReadChangesPrefix(audience) + version.Version, Label = DiscordText.ReadChangesLabel, Style = ButtonStyle.Secondary }
                 }
             };
 
             return new VersionCard(version.Version, title, description, reply);
         }
 
-        // The version a card's title is for, or null when the title isn't one of this audience's cards.
-        public static Version Parse(string title, VersionAudience audience)
+        // The version a posted card is for, read from its Read changes button, or null when the message isn't one of this
+        // audience's cards. The button, unlike the title, has never changed since the first cards.
+        public static Version Parse(IEnumerable<string> customIds, VersionAudience audience)
         {
-            var match = (audience == VersionAudience.Admins ? AdminTitle : UsersTitle).Match(title ?? string.Empty);
-            return match.Success ? Version.Parse(match.Groups["version"].Value) : null;
+            var prefix = ReadChangesPrefix(audience);
+            var id = customIds?.FirstOrDefault(i => i.StartsWith(prefix, StringComparison.Ordinal));
+            return id != null && Version.TryParse(id.AsSpan(prefix.Length), out var version) ? version : null;
         }
+
+        // The beta version a posted card's title shows for its version (staging's cards keep the beta they were
+        // published as), or null.
+        public static string BetaShown(string title, Version version)
+        {
+            var match = BetaTitle.Match(title ?? string.Empty);
+            return match.Success && Version.Parse(match.Groups["version"].Value) == version ? match.Groups["shown"].Value : null;
+        }
+
+        private static string ReadChangesPrefix(VersionAudience audience) =>
+            $"{VersionCardRoutes.ReadChanges}:{(audience == VersionAudience.Admins ? "a" : "u")}:";
 
         // The full card, private: one coloured card per section (a long section carries on in more cards, split between
         // lines), in as many messages as Discord's limits need. Cards show text at a message's size, with headings.

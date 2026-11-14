@@ -160,7 +160,7 @@ namespace Requestarr.Core.Discord.Help
                 Title = "Announcements",
                 Summary = "News for everyone",
                 Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is where Requestarr and the admin post news for everyone: new things you can do after an update, and outages that pause requests (and when they're over). You can read it but not post there.\n" +
-                             $"Each update is one line with how many new things it has and the main one; **{DiscordText.ReadChangesLabel}** shows you the full list, just for you. An outage notice stays pinned at the top while it lasts and goes when it's over.\n" +
+                             $"Each update is one line with its version and the day it came out, then the main change and how many more; **{DiscordText.ReadChangesLabel}** shows you the full list, just for you. An outage notice stays pinned at the top while it lasts and goes when it's over.\n" +
                              $"Your own channel and #{ChannelLayout.AnnouncementsChannelName} are in the **{ChannelLayout.UsersCategoryName}** group. Your panel is always the newest message in your channel, so it's where you look."
             },
             Credits
@@ -233,7 +233,7 @@ namespace Requestarr.Core.Discord.Help
                 Intro = _ => $"#{ChannelLayout.AnnouncementsChannelName} is for every member: they can read it but not post; admins can post there directly. Members get it through one shared role, **{ChannelLayout.MembersRoleName}**, given when they're added or unsuspended and taken when they're suspended or removed. " +
                              $"Outages: a Sonarr or Radarr that can't be reached gets an alert here after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAlertAfter)}; still down after {DiscordText.Duration(Backends.ConnectionMonitor.DefaultAnnounceAfter)}, the alert offers **{DiscordText.AnnounceLabel}**, which posts a plain notice for users. If you announced it, the recovery is announced too; if not, users never hear about it. " +
                              "While it lasts, the alert (and the notice, if you announced it) is pinned; when the instance is back both are removed and the \"back\" messages are posted. Every outage is also kept in Requestarr's own record: when it started and ended, and whether and by whom it was announced.\n" +
-                             $"Upgrades: when Requestarr starts on a new version, a one-line card here counts its changes for admins and users, and a card in the announcements channel counts the users' and names the main one. **{DiscordText.ReadChangesLabel}** shows the full list privately."
+                             $"Upgrades: when Requestarr starts on a new version, a one-line card here shows its version and date, then the main change and how many more (admins' and users' lines together), and a card in the announcements channel does the same with the users' lines. **{DiscordText.ReadChangesLabel}** shows the full list privately."
             },
             new HelpTopic
             {

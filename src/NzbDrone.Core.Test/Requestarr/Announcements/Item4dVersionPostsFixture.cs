@@ -6,6 +6,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using Requestarr.Core.Announcements;
+using Requestarr.Core.Discord;
 using Requestarr.Core.Discord.Interactions;
 using Requestarr.Core.Test.Discord.Harness;
 
@@ -50,7 +51,7 @@ namespace Requestarr.Core.Test.Announcements
         private List<string> UserHeaders => Cards(UsersChannel, VersionAudience.Users);
 
         private List<string> Cards(ulong channel, VersionAudience audience) =>
-            Discord.Channels[channel].Messages.Where(m => m.Embeds.Any()).Select(m => VersionCards.Parse(m.Embeds[0].Title, audience)?.ToString()).Where(v => v != null).ToList();
+            Discord.Channels[channel].Messages.Where(m => m.Embeds.Any()).Select(m => VersionCards.Parse(m.Buttons.Select(b => b.CustomId), audience)?.ToString()).Where(v => v != null).ToList();
 
         private void Environment(string name, string staged = null)
         {
@@ -228,7 +229,7 @@ namespace Requestarr.Core.Test.Announcements
         public async Task staging_never_removes_a_card()
         {
             Environment("staging");
-            await Discord.SendMessageAsync(AdminChannel, new InteractionReply { Embeds = new List<InteractionEmbed> { new() { Title = "Requestarr 0.0.9 · 1 change for admins" } } });
+            await Discord.SendMessageAsync(AdminChannel, OldCard("0.0.9", "a", "Requestarr 0.0.9 · 1 change for admins"));
 
             await StartOn("0.2.0");
             await StartOn("0.3.0");
@@ -262,7 +263,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             var titles = Discord.Channels[AdminChannel].Messages.Where(m => m.Embeds.Any()).Select(m => m.Embeds[0].Title).ToList();
-            titles.Should().Equal("Requestarr 0.1.0 · 1 change for users", "Requestarr 0.2.0 · 1 change for admins, 1 for users", "Requestarr 0.3.0-beta.2 · 1 change for admins");
+            titles.Should().Equal(new[] { "Requestarr 0.1.0", "Requestarr 0.2.0", "Requestarr 0.3.0-beta.2" }, "this changelog's headings have no date");
             AdminHeaders.Should().Equal(new[] { Admin("0.1.0"), Admin("0.2.0"), Admin("0.3.0") }, "a beta title is still found as its version's card");
             Service.FullCard(VersionAudience.Admins, new Version(0, 3, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.3.0-beta.2\n");
             Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.2.0\n");
@@ -270,14 +271,86 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             Discord.Channels[AdminChannel].Messages.Count(m => m.Embeds.Any()).Should().Be(3, "a restart posts nothing again");
+            Discord.Channels[AdminChannel].Messages.Select(m => m.Embeds[0].Title).Should().Equal(titles, "a restart changes no title");
         }
 
         [Test]
-        public void a_beta_title_reads_as_its_version()
+        public async Task staging_keeps_the_beta_version_an_older_card_was_posted_with()
         {
-            VersionCards.Parse("Requestarr 0.4.17-beta.3 · 2 changes for admins", VersionAudience.Admins).Should().Be(new Version(0, 4, 17));
-            VersionCards.Parse("Requestarr 0.4.17-beta.3 · 1 new thing for you", VersionAudience.Users).Should().Be(new Version(0, 4, 17));
-            VersionCards.Parse("Requestarr 0.4.17-rc.3 · 1 new thing for you", VersionAudience.Users).Should().BeNull();
+            Environment("staging");
+            await StartOn("0.2.0");
+            var admin = Discord.Channels[AdminChannel];
+            await Discord.EditMessageAsync(AdminChannel, admin.MessageIds[1], OldCard("0.2.0", "a", "Requestarr 0.2.0-beta.3 · 1 change for admins, 1 for users"));
+
+            await StartOn("0.3.0");
+
+            admin.Messages.Select(m => m.Embeds[0].Title).Should().Equal("Requestarr 0.1.0", "Requestarr 0.2.0-beta.3", "Requestarr 0.3.0");
+        }
+
+        [Test]
+        public void a_card_is_found_by_its_read_changes_button_whatever_its_title()
+        {
+            VersionCards.Parse(new[] { "whatsnew:a:0.4.17" }, VersionAudience.Admins).Should().Be(new Version(0, 4, 17));
+            VersionCards.Parse(new[] { "whatsnew:u:0.4.17" }, VersionAudience.Users).Should().Be(new Version(0, 4, 17));
+            VersionCards.Parse(new[] { "whatsnew:u:0.4.17" }, VersionAudience.Admins).Should().BeNull("the other channel's card");
+            VersionCards.Parse(new[] { "whatsnew:a:soon" }, VersionAudience.Admins).Should().BeNull();
+            VersionCards.Parse(new[] { "admin:panel" }, VersionAudience.Admins).Should().BeNull();
+            VersionCards.Parse(null, VersionAudience.Admins).Should().BeNull("a message without buttons");
+        }
+
+        [Test]
+        public void a_cards_beta_version_is_read_from_its_title_in_any_wording()
+        {
+            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · 2 changes for admins", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
+            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · November 14", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
+            VersionCards.BetaShown("Requestarr 0.4.17-beta.3", new Version(0, 4, 17)).Should().Be("0.4.17-beta.3");
+            VersionCards.BetaShown("Requestarr 0.4.17-beta.3 · November 14", new Version(0, 4, 16)).Should().BeNull("another version's beta");
+            VersionCards.BetaShown("Requestarr 0.4.17 · November 14", new Version(0, 4, 17)).Should().BeNull();
+            VersionCards.BetaShown("Requestarr 0.4.17-rc.1 · November 14", new Version(0, 4, 17)).Should().BeNull();
+        }
+
+        // A card as an earlier version of Requestarr posted it: the same button, an older title.
+        private static InteractionReply OldCard(string version, string audience, string title) => new()
+        {
+            Embeds = new List<InteractionEmbed> { new() { Title = title } },
+            Buttons = new List<InteractionButton> { new() { CustomId = $"{VersionCardRoutes.ReadChanges}:{audience}:{version}", Label = DiscordText.ReadChangesLabel } }
+        };
+
+        [TestCase("staging")]
+        [TestCase("production")]
+        [TestCase("qa")]
+        [TestCase("dev")]
+        public async Task cards_with_the_old_titles_are_updated_in_place_on_the_next_start(string environment)
+        {
+            Environment(environment);
+            await StartOn("0.2.0");
+            var admin = Discord.Channels[AdminChannel];
+            var users = Discord.Channels[UsersChannel];
+            var adminIds = admin.MessageIds.ToList();
+            var userIds = users.MessageIds.ToList();
+            var wanted = admin.Messages.Select(m => (m.Embeds[0].Title, m.Embeds[0].Description)).ToList();
+            var wantedUsers = users.Messages.Select(m => (m.Embeds[0].Title, m.Embeds[0].Description)).ToList();
+
+            // What the server shows after its last start on an earlier version of Requestarr.
+            foreach (var (id, message) in admin.MessageIds.Zip(admin.Messages).ToList())
+            {
+                var version = VersionCards.Parse(message.Buttons.Select(b => b.CustomId), VersionAudience.Admins);
+                await Discord.EditMessageAsync(AdminChannel, id, OldCard(version.ToString(), "a", $"Requestarr {version} · 1 change for admins"));
+            }
+
+            foreach (var (id, message) in users.MessageIds.Zip(users.Messages).ToList())
+            {
+                var version = VersionCards.Parse(message.Buttons.Select(b => b.CustomId), VersionAudience.Users);
+                await Discord.EditMessageAsync(UsersChannel, id, OldCard(version.ToString(), "u", $"Requestarr {version} · 1 new thing for you"));
+            }
+
+            await StartOn("0.2.0");
+
+            admin.MessageIds.Should().Equal(adminIds, "the cards are edited, not posted again, so the record and order stay");
+            users.MessageIds.Should().Equal(userIds);
+            admin.Messages.Select(m => (m.Embeds[0].Title, m.Embeds[0].Description)).Should().Equal(wanted);
+            users.Messages.Select(m => (m.Embeds[0].Title, m.Embeds[0].Description)).Should().Equal(wantedUsers);
+            admin.Messages.Should().OnlyContain(m => !m.Embeds[0].Title.Contains("change"));
         }
 
         [Test]

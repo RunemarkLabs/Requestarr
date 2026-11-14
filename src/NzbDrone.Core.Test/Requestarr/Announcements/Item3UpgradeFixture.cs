@@ -53,9 +53,8 @@ namespace Requestarr.Core.Test.Announcements
         private System.Collections.Generic.List<string> Titles(ulong channel) =>
             Discord.Channels[channel].Messages.Where(m => m.Embeds.Any()).Select(m => m.Embeds[0].Title).Where(t => t != null && t.StartsWith("Requestarr ")).ToList();
 
-        private static string Admin(string version, string counts) => $"Requestarr {version} · {counts}";
-
-        private static string UserCard(string version, int count) => $"Requestarr {version} · {count} new thing{(count == 1 ? string.Empty : "s")} for you";
+        // A card's title is its version and the day it was made; this changelog's headings have no date.
+        private static string Card(string version) => $"Requestarr {version}";
 
         private async Task StartOn(string version)
         {
@@ -81,8 +80,8 @@ namespace Requestarr.Core.Test.Announcements
         {
             await StartOn("0.2.0");
 
-            AdminPosts.Last().Should().Be(Admin("0.2.0", "1 change for admins, 2 for users"));
-            UserPosts.Last().Should().Be(UserCard("0.2.0", 2));
+            AdminPosts.Last().Should().Be(Card("0.2.0"));
+            UserPosts.Last().Should().Be(Card("0.2.0"));
 
             var full = Service.FullCard(VersionAudience.Admins, new Version(0, 2, 0)).Single();
             full.Ephemeral.Should().BeTrue();
@@ -112,7 +111,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.3.0");
 
             AdminPosts.Should().HaveCount(3);
-            AdminPosts.Last().Should().Be(Admin("0.3.0", "1 change for admins"));
+            AdminPosts.Last().Should().Be(Card("0.3.0"));
             UserPosts.Should().HaveCount(2, "0.3.0 has nothing for users");
             Config.AnnouncedVersion.Should().Be("0.1.0,0.2.0,0.2.5,0.3.0");
         }
@@ -138,7 +137,7 @@ namespace Requestarr.Core.Test.Announcements
             await StartOn("0.1.0");
             await StartOn("0.3.0");
 
-            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
+            AdminPosts.Should().Equal(Card("0.1.0"), Card("0.2.0"), Card("0.3.0"));
             UserPosts.Should().HaveCount(2);
         }
 
@@ -149,8 +148,8 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
-            UserPosts.Should().Equal(UserCard("0.1.0", 1), UserCard("0.2.0", 2));
+            AdminPosts.Should().Equal(Card("0.1.0"), Card("0.2.0"), Card("0.3.0"));
+            UserPosts.Should().Equal(Card("0.1.0"), Card("0.2.0"));
         }
 
         [Test]
@@ -163,7 +162,7 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Should().Equal(Admin("0.1.0", "1 change for users"), Admin("0.2.0", "1 change for admins, 2 for users"), Admin("0.3.0", "1 change for admins"));
+            AdminPosts.Should().Equal(Card("0.1.0"), Card("0.2.0"), Card("0.3.0"));
             UserPosts.Should().HaveCount(2);
         }
 
@@ -228,7 +227,7 @@ namespace Requestarr.Core.Test.Announcements
             await Service.PostVersionNotesAsync();
 
             AdminPosts.Select(t => t.Split(' ')[1]).Should().Equal("0.2.3", "0.2.6", "0.2.4", "0.2.5", "0.2.7");
-            UserPosts.Should().Equal(UserCard("0.2.6", 1), UserCard("0.2.5", 1));
+            UserPosts.Should().Equal(Card("0.2.6"), Card("0.2.5"));
             Config.AnnouncedVersion.Should().Be("0.2.3,0.2.4,0.2.5,0.2.6,0.2.7");
         }
 
@@ -241,7 +240,7 @@ namespace Requestarr.Core.Test.Announcements
 
             await StartOn("0.3.0");
 
-            AdminPosts.Should().ContainSingle().Which.Should().StartWith("Requestarr 0.3.0 · ");
+            AdminPosts.Should().ContainSingle().Which.Should().Be(Card("0.3.0"));
             Config.AnnouncedVersion.Should().Be("0.2.0,0.2.5,0.3.0");
         }
 
@@ -277,7 +276,7 @@ namespace Requestarr.Core.Test.Announcements
 
             await Service.PostVersionNotesAsync();
 
-            AdminPosts.Should().Equal(Admin("0.9.0", "200 changes for admins, 200 for users"));
+            AdminPosts.Should().Equal("Requestarr 0.9.0 · October 25" + (DateTime.UtcNow.Year == 2026 ? string.Empty : ", 2026"));
             var full = Service.FullCard(VersionAudience.Admins, new Version(0, 9, 0));
             full.Should().HaveCountGreaterThan(1, "more than 4,000 characters takes more than one message");
             full[0].Cards[0].Text.Should().StartWith("## Requestarr 0.9.0 · 25 October 2026\n### For users\n");
