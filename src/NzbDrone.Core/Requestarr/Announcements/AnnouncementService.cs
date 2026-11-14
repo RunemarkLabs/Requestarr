@@ -193,16 +193,25 @@ namespace Requestarr.Core.Announcements
 
             return found == null || !found.HasNews
                 ? new[] { new InteractionReply { Content = DiscordText.VersionNotFound(version), Ephemeral = true } }
-                : VersionCards.Full(found, audience, _environment.Shown(version));
+                : VersionCards.Full(found, audience, Shown(found));
         }
 
         // Dev and QA read Unreleased as the build they run (the next number); staging and production run numbered builds.
         private IReadOnlyList<ChangelogVersion> Versions() =>
             Changelog.Parse(ChangelogText(), _environment.VersionPosts == VersionPostMode.Standing ? null : Changelog.Release(CurrentVersion()));
 
-        // The version running is shown as its build label (0.7.0004-dev.4f2a9c1 on dev).
         private VersionCard Card(ChangelogVersion version, VersionAudience audience) =>
-            VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, _environment.Shown(version.Version));
+            VersionCards.Collapsed(version, audience, DateTime.UtcNow.Year, Shown(version));
+
+        // The version running is shown as its build label (0.7.0004-dev.4f2a9c1 on dev). On QA that's Unreleased: what the
+        // testers will read in the next build, everything since the last one they got, which its title says.
+        private string Shown(ChangelogVersion version)
+        {
+            var shown = _environment.Shown(version.Version);
+            var unreleased = version.Date == null && version.Version == Changelog.Release(CurrentVersion());
+
+            return _environment.VersionPosts == VersionPostMode.NotYetStaged && unreleased ? $"{shown} · {DiscordText.SinceLastBeta}" : shown;
+        }
 
         // Production and staging: each version with something in it gets a card, oldest first, and keeps it. A card
         // already in the channel isn't posted again (a server set up again with its channels kept), but its words are

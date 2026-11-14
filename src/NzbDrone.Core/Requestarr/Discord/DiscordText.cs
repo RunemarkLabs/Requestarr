@@ -1078,6 +1078,9 @@ namespace Requestarr.Core.Discord
         public static string VersionCardFullTitle(string version, DateTime? date) =>
             $"Requestarr {version}{(date.HasValue ? $" · {date.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty)}";
 
+        // QA's card for Unreleased: everything since the last build the beta testers got.
+        public const string SinceLastBeta = "since the last beta";
+
         public static string VersionNotFound(Version version) => $"Requestarr {version}'s changes aren't in this version of Requestarr.";
 
         // The welcome channel: what Requestarr is, and buttons to ask for access. Everyone in the server reads it.

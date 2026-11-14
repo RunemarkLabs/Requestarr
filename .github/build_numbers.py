@@ -50,6 +50,7 @@ FIRST_NUMBERED = (0, 7)
 
 SECTION_ORDER = ("", "For users", "For admins")
 ADMINS = "For admins"
+LEAD = re.compile(r"- \*\*([^*]+)\*\*")
 UPGRADE_LEAD = "- **Before you upgrade:**"
 SECURITY_LINE = ("- **Security update:** parts Requestarr is built from were updated to fix known security problems, "
                  "so update when you can.")
@@ -278,13 +279,42 @@ def upgrade_needs_admins(document):
 
 # ---- a pull request's rules ---------------------------------------------------------------------------------------
 
-def check_change(base, head, no_changelog):
-    """Into dev, or a fix into qa: numbered sections untouched; the changelog gains Unreleased lines, or the pull request
-    says it has none."""
+def tested_versions():
+    """The versions testers have (staging's changelog), or None when staging can't be read."""
+    git("fetch", "-q", "origin", "staging")
+    shown = git("show", "origin/staging:CHANGELOG.md")
+    return set(parse(shown.stdout)[2]) if shown.returncode == 0 else None
+
+
+def numbered_changes(name, base, head, tested):
+    """A numbered section never changes, except that one newer than every version testers have may be folded into
+    Unreleased (removed): it never reached them, and Unreleased says what changed since the last build they got."""
+    old, new = parse(base)[2], parse(head)[2]
+    if any(old.get(v) != s for v, s in new.items()):
+        return ["%s: a numbered version changed; add lines under '## Unreleased' instead" % name]
+    folded = set(old) - set(new)
+    if folded and (tested is None or any(v <= max(tested, default=(0, 0, 0)) for v in folded)):
+        return ["%s: only versions testers never had can be folded into Unreleased; %s reached them" % (name, ", ".join(map(text, sorted(folded))))]
+    return []
+
+
+def repeated_leads(unreleased):
+    """Unreleased says where things ended up: one line per thing in each part, rewritten when that thing changes again."""
+    problems = []
+    for sub, rows in (unreleased or {}).items():
+        leads = [lead.group(1).rstrip(":").lower() for lead in map(LEAD.match, rows) if lead]
+        problems += ["CHANGELOG.md: '%s' leads two lines under Unreleased%s; rewrite the one line to where it ended up" % (lead, " (%s)" % sub if sub else "")
+                     for lead in sorted({lead for lead in leads if leads.count(lead) > 1})]
+    return problems
+
+
+def check_change(base, head, no_changelog, tested=None):
+    """Into dev, or a fix into qa: numbered sections untouched (a version testers never had may be folded into
+    Unreleased); the changelog gains Unreleased lines, one per thing, or the pull request says it has none."""
     problems = []
     for name in FILES:
-        if parse(base[name])[2] != parse(head[name])[2]:
-            problems.append("%s: a numbered version changed; add lines under '## Unreleased' instead" % name)
+        problems += numbered_changes(name, base[name], head[name], tested)
+    problems += repeated_leads(parse(head["CHANGELOG.md"])[1])
     added = lines_of(parse(head["CHANGELOG.md"])[1]) - lines_of(parse(base["CHANGELOG.md"])[1])
     if no_changelog and added:
         problems.append("the description says 'No changelog:', but CHANGELOG.md adds lines under Unreleased")
@@ -342,9 +372,9 @@ def check_merge_back(base, upper, head):
     return sorted(set(problems))
 
 
-def check(kind, base, head, upper=None, number=None, no_changelog=False):
+def check(kind, base, head, upper=None, number=None, no_changelog=False, tested=None):
     if kind == "change":
-        return check_change(base, head, no_changelog)
+        return check_change(base, head, no_changelog, tested)
     if kind in ("release", "staging-fix"):
         return check_numbered(base, head, number, no_changelog, kind == "release")
     if kind == "merge-back":
@@ -366,6 +396,8 @@ def self_test():
     released = {name: release(change[name], first, "2026-11-20") for name in FILES}
     staged_fix = {"CHANGELOG.md": released["CHANGELOG.md"].replace("## 0.7.0004", "## 0.7.0005 (2026-11-21)\n\n### For admins\n- **Fix:** it works.\n\n## 0.7.0004"),
                   "QA-CHECKLIST.md": released["QA-CHECKLIST.md"].replace("## 0.7.0004", "## 0.7.0005 (2026-11-21)\n\n## 0.7.0004")}
+    folded = {"CHANGELOG.md": log("## Unreleased\n\n### For users\n- **Cards:** clearer, and numbered.\n\n## 0.5.6 (2026-11-13)\n"),
+              "QA-CHECKLIST.md": ticks("## Unreleased\n- **Cards:** look. You should see them numbered.\n\n## 0.5.6 (2026-11-13)\n")}
     newer_dev = log("## Unreleased\n\n### For users\n- **Numbers:** builds have one.\n- **Later:** after QA.\n\n" + old)
     back = merge(newer_dev, released["CHANGELOG.md"])
     tags = ["v0.3.1", "v0.7.0004", "v0.7.0005", "test-org-move"]
@@ -385,6 +417,11 @@ def self_test():
         (bool(check("change", base, {**change, "CHANGELOG.md": change["CHANGELOG.md"].replace("clearer", "better")})),
          "changing a numbered version fails"),
         (check("change", change, {**change, "CHANGELOG.md": newer_dev}) == [], "a fix into QA adds to QA's Unreleased"),
+        (check("change", base, folded, tested={(0, 5, 6)}) == [], "a version testers never had folds into Unreleased"),
+        (bool(check("change", base, folded, tested={(0, 6, 0)})), "a version testers have can't be folded"),
+        (bool(check("change", base, folded)), "nor any version when staging can't be read"),
+        (bool(check("change", base, {**change, "CHANGELOG.md": log(pending + "- **Numbers:** again.\n\n" + old)})),
+         "two lines with the same lead under Unreleased fail: the one line is rewritten"),
         ("## 0.7.0004 (2026-11-20)\n\n### For users\n- **Numbers:** builds have one.\n\n## 0.6.0" in released["CHANGELOG.md"]
          and "## Unreleased" not in released["CHANGELOG.md"], "the staging promotion turns Unreleased into the number"),
         ("## 0.7.0004 (2026-11-20)\n- **Numbers:**" in released["QA-CHECKLIST.md"], "the checklist's Unreleased too"),
@@ -503,7 +540,8 @@ def main(argv):
         flags = args[4:]
         upper = read_dir(flags.pop(0)) if flags and not flags[0].startswith("--") else None
         number = parse_version(flags[flags.index("--number") + 1]) if "--number" in flags else None
-        problems = check(args[1], read_dir(args[2]), read_dir(args[3]), upper, number, "--no-changelog" in flags)
+        tested = tested_versions() if args[1] == "change" else None
+        problems = check(args[1], read_dir(args[2]), read_dir(args[3]), upper, number, "--no-changelog" in flags, tested)
         for problem in problems:
             print(("::error::" if os.environ.get("GITHUB_ACTIONS") else "") + problem)
         return 1 if problems else 0
