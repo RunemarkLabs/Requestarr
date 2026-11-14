@@ -20,7 +20,7 @@ import sys
 import urllib.error
 import urllib.request
 
-REPOSITORY = os.environ.get("BUG_REPORTS_REPOSITORY", "RunemarkLabs/Requestarr")
+REPOSITORY = os.environ.get("BUG_REPORTS_REPOSITORY", "Requestarr/Requestarr")
 WHY = {"Off": "filing is turned off on the server", "NoToken": "the server has no GitHub access key",
        "Pending": "it was being filed when the server stopped", "Failed": "GitHub refused it or couldn't be reached"}
 

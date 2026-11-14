@@ -102,7 +102,7 @@ namespace NzbDrone.Host
                     License = new OpenApiLicense
                     {
                         Name = "GPL-3.0",
-                        Url = new Uri("https://github.com/RunemarkLabs/Requestarr/blob/main/LICENSE")
+                        Url = new Uri("https://github.com/Requestarr/Requestarr/blob/main/LICENSE")
                     }
                 });
 

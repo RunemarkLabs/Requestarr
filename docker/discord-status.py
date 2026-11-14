@@ -27,7 +27,7 @@ def line(name, value):
 def call(path):
     request = urllib.request.Request(API + path, headers={
         "Authorization": "Bot " + os.environ["STACK_DISCORD_BOT_TOKEN"],
-        "User-Agent": "DiscordBot (https://github.com/RunemarkLabs/Requestarr, 1.0)",
+        "User-Agent": "DiscordBot (https://github.com/Requestarr/Requestarr, 1.0)",
     })
     try:
         with urllib.request.urlopen(request, timeout=15) as response:

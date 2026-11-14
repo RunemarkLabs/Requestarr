@@ -40,7 +40,7 @@ namespace Requestarr.Api.V1
 
                 //requestarr/supported#{0} is a disambiguation page. the # should be a header on the page with appropriate details/link
                 // note: indexers get a different link
-                InfoLink = string.Format("https://github.com/RunemarkLabs/Requestarr/wiki/Supported#{0}",
+                InfoLink = string.Format("https://github.com/Requestarr/Requestarr/wiki/Supported#{0}",
                     definition.Implementation.ToLower().Replace(' ', '-'))
             };
         }

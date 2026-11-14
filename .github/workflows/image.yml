@@ -1,7 +1,7 @@
 name: Image
 
 # Publishes Requestarr's container image to GitHub's container registry (docs/development.md#published-images):
-#   push to staging (a promotion, or a fix into staging): ghcr.io/runemarklabs/requestarr:staging and :x.y.z-beta.N,
+#   push to staging (a promotion, or a fix into staging): ghcr.io/requestarr/requestarr:staging and :x.y.z-beta.N,
 #     and the commit is tagged vx.y.z-beta.N: N counts the line's (x.y) publishes to staging (docs/development.md#versions)
 #   push to main (a release, only on the owner's "ship it"):  :x.y.z, :x.y and :latest
 #   Run workflow on any branch with a tag starting "test-": that tag only, for trying the workflow (delete it after).
@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/runemarklabs/requestarr
+  IMAGE: ghcr.io/requestarr/requestarr
 
 jobs:
   publish:
@@ -44,7 +44,8 @@ jobs:
           TEST_TAG: ${{ inputs.tag }}
         run: |
           version=$(sed -nE 's|.*<AssemblyVersion>([0-9]+\.[0-9]+\.[0-9]+).*|\1|p' src/Directory.Build.props | head -1)
-          top=$(grep -m1 -E '^## [0-9]+\.[0-9]+\.[0-9]+$' CHANGELOG.md | cut -c4-)
+          # Version headings carry the day after the number: "## 0.5.6 (2026-11-13)".
+          top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+( |$)' CHANGELOG.md | cut -c4- | tr -d ' ')
           if [ -z "$version" ] || [ "$version" != "$top" ]; then
             echo "::error::The build's version ($version) and CHANGELOG.md's top version ($top) must match."
             exit 1

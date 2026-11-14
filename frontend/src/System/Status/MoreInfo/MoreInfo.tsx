@@ -14,8 +14,8 @@ function MoreInfo() {
           {translate('Source')}
         </DescriptionListItemTitle>
         <DescriptionListItemDescription>
-          <Link to="https://github.com/RunemarkLabs/Requestarr">
-            github.com/RunemarkLabs/Requestarr
+          <Link to="https://github.com/Requestarr/Requestarr">
+            github.com/Requestarr/Requestarr
           </Link>
         </DescriptionListItemDescription>
 
@@ -23,8 +23,8 @@ function MoreInfo() {
           {translate('FeatureRequests')}
         </DescriptionListItemTitle>
         <DescriptionListItemDescription>
-          <Link to="https://github.com/RunemarkLabs/Requestarr/issues">
-            github.com/RunemarkLabs/Requestarr/issues
+          <Link to="https://github.com/Requestarr/Requestarr/issues">
+            github.com/Requestarr/Requestarr/issues
           </Link>
         </DescriptionListItemDescription>
       </DescriptionList>

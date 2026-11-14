@@ -152,7 +152,7 @@ namespace Requestarr.Core.Qa
 
     public class BugReportSettings : IBugReportSettings
     {
-        public const string DefaultRepository = "RunemarkLabs/Requestarr";
+        public const string DefaultRepository = "Requestarr/Requestarr";
         public const int DefaultReportsPerDay = 5;
         public const int DefaultMinutesBetween = 2;
         public const string TokenVariable = "REQUESTARR_GITHUB_ISSUES_TOKEN";

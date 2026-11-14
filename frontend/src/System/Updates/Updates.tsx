@@ -284,8 +284,8 @@ function Updates() {
               <div>
                 <InlineMarkdown
                   data={translate('InstallMajorVersionUpdateMessageLink', {
-                    domain: 'github.com/RunemarkLabs/Requestarr',
-                    url: 'https://github.com/RunemarkLabs/Requestarr/releases',
+                    domain: 'github.com/Requestarr/Requestarr',
+                    url: 'https://github.com/Requestarr/Requestarr/releases',
                   })}
                 />
               </div>

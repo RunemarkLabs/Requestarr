@@ -22,7 +22,7 @@ namespace Requestarr.Core.Test.Releases
             var compose = Read("deploy", "staging", "compose.yaml");
 
             compose.Should().Contain("name: requestarr-beta").And.Contain("name: requestarr-beta\n\nvolumes:".Replace("\n\nvolumes:", string.Empty));
-            compose.Should().Contain("image: ghcr.io/runemarklabs/requestarr:${REQUESTARR_TAG:-staging}");
+            compose.Should().Contain("image: ghcr.io/requestarr/requestarr:${REQUESTARR_TAG:-staging}");
             compose.Should().Contain("REQUESTARR_ENVIRONMENT: staging", "beta keeps every what's new post, like production");
             compose.Should().NotContain("env_file", "the container gets only the values it names");
             compose.Should().Contain("networks:\n  default:\n    name: requestarr-beta");

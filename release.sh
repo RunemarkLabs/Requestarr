@@ -337,7 +337,7 @@ EOF
     if [ "$to" = qa ]; then
         echo "Next: .\\docker\\dev.ps1 reset-qa (or docker/dev.sh reset-qa) so the QA stack runs qa."
     else
-        echo "Next: the Image workflow publishes ghcr.io/runemarklabs/requestarr:staging and :$published and tags the commit v$published (gh run list --workflow image.yml);"
+        echo "Next: the Image workflow publishes ghcr.io/requestarr/requestarr:staging and :$published and tags the commit v$published (gh run list --workflow image.yml);"
         echo "      .\\docker\\dev.ps1 up (or docker/dev.sh up) so QA drops the versions staging now has;"
         echo "      on the server: ./update.sh in the staging folder (docs/setup-guide.md, the beta environment)."
     fi

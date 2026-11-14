@@ -13,7 +13,7 @@ import sys
 import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RUNS = ("https://api.github.com/repos/RunemarkLabs/Requestarr/actions/workflows/image.yml/runs"
+RUNS = ("https://api.github.com/repos/Requestarr/Requestarr/actions/workflows/image.yml/runs"
         "?branch=staging&event=push&status=success&per_page=1")
 
 

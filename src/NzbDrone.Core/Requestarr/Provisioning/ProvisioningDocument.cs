@@ -43,7 +43,7 @@ namespace Requestarr.Core.Provisioning
         // A GitHub access key that can only read and write issues on the repository; use a ${VAR} reference.
         public string GithubToken { get; set; }
 
-        // owner/name (default RunemarkLabs/Requestarr).
+        // owner/name (default Requestarr/Requestarr).
         public string Repository { get; set; }
 
         // At most this many reports per person in a day (default 5), and this many minutes between two (default 2).
