@@ -291,6 +291,24 @@ namespace Requestarr.Core.Test.Announcements
         }
 
         [Test]
+        public async Task qa_shows_unreleased_as_everything_since_the_last_beta_and_a_folded_version_loses_its_card()
+        {
+            Environment("qa", "0.5.6");
+            Mocker.GetMock<IReleaseEnvironment>().Setup(e => e.Shown(It.IsAny<Version>())).Returns<Version>(v => v == new Version(0, 7, 4) ? "0.7.0004-qa.4f2a9c1" : Changelog.Display(v));
+            await Discord.SendMessageAsync(AdminChannel, new InteractionReply { Content = "something else in the channel" });
+            await StartOn("0.7.4", Pending + "\n## 0.5.6 (2026-11-13)\n\n### For admins\n- **Testers have it:** yes.\n");
+            AdminHeaders.Should().Equal("0.6.0", "0.7.4");
+
+            // 0.6.0 never reached the testers: it's folded into Unreleased.
+            await StartOn("0.7.4", Pending.Replace("## 0.6.0 (2026-11-13)", "## 0.5.6 (2026-11-13)"));
+
+            AdminHeaders.Should().Equal("0.7.4");
+            Discord.Channels[AdminChannel].Messages.Single(m => m.Embeds.Any()).Embeds[0].Title.Should().Be("Requestarr 0.7.0004-qa.4f2a9c1 · since the last beta");
+            Service.FullCard(VersionAudience.Admins, new Version(0, 7, 4))[0].Cards[0].Text.Should().StartWith("## Requestarr 0.7.0004-qa.4f2a9c1 · since the last beta\n");
+            Discord.Channels[AdminChannel].Messages.Should().Contain(m => m.Content == "something else in the channel", "only version cards go");
+        }
+
+        [Test]
         public async Task staging_shows_a_build_by_its_four_digit_number_and_never_unreleased()
         {
             Environment("staging");
