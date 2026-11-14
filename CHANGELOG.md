@@ -1,167 +1,50 @@
 # Changelog
 
-What changed in each version, for the people who use Requestarr. Every pull request adds its lines under Unreleased
-(see "Changelog" in docs/development.md). Two sections only, **For users** and **For admins**, in plain words; a section
-with nothing in it is left out, and a version with nothing for either has only its heading. Requestarr posts these
-in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word. Each
-version heading carries the day it was made, which its card in Discord shows.
+What changed, for the people who use Requestarr. Two sections only, **For users** and **For admins**, in plain words;
+a section with nothing in it is left out, and a version with nothing for either has only its heading. Requestarr posts
+these in Discord: both sections in the admin channel, and **For users** in the announcements channel, word for word.
+Each version heading carries the day it was made, which its card in Discord shows.
 
-Numbering changed with build 0.7.0004. Up to 0.6.0 every change took its own number, and those stay as they are. From
-0.7.0004 on, a number is a build sent to the beta testers, counting every build, and the release is that same build;
-what's waiting for the next build is under Unreleased.
+Unreleased is what changed since the last build the beta testers got, written as where things ended up: a change to
+something already under Unreleased rewrites that line, and a change to something the testers already have is a new
+line (see "Changelog" in docs/development.md). The staging promotion gives it the build's number.
+
+Numbering changed with build 0.7.0004. Up to 0.3.4 every change took its own number, and those stay as they are; the
+versions after it, 0.4.0 to 0.6.0, never reached the testers and are folded into Unreleased. From 0.7.0004 on, a number
+is a build sent to the beta testers, counting every build, and the release is that same build.
 
 ## Unreleased
 
 ### For users
-- **Access requests paused:** someone who presses the request button too many times in a short while now reads that their access requests are paused and that an admin can lift the pause, instead of being told they can't request access any more.
-- **Build numbers:** each test build of Requestarr now has one number that counts up, like 0.7.0004, and it reads the same on the update cards, in the web app and on the logo.
-
-### For admins
-- **One number per build:** a number now means one build sent to the beta testers, and a release is that exact build, never rebuilt, so production runs what the testers ran.
-- **Test servers say what they run:** the dev and QA servers show the next build's number with a short code for the exact change they run, so a bug report always says what was tested.
-- **Going back:** returning to an earlier build means restoring the backup taken before the update, which the beta update makes every time, and its rollback puts back.
-- **QA test results carry over:** a new build on the QA server keeps every checklist item already passed, with who passed it and when, as long as its wording didn't change; only new or reworded items come back to test, and the checklist says how many carried over.
-
-## 0.6.0 (2026-11-13)
-
-### For users
-- **Update cards:** each update in the announcements channel now shows its version and the day it came out, with the main change underneath and how many more there are, instead of counting "new things for you".
-
-### For admins
-- **Update cards in the admin channel:** they read the same way, with the main change counting both sections. Cards already posted on your server change to the new wording when Requestarr next starts, in place, so the history and its order stay as they are.
-
-## 0.5.6 (2026-11-13)
-
-### For admins
-- **Security fix:** a web component Requestarr is built with is updated to close a known high-severity security issue.
-- **New home on GitHub:** Requestarr moved to its own GitHub organization, also called Requestarr. Bug reports are filed there, the links in the web app's Status page lead there, and beta updates come from there: the beta setup guide shows the new image address to use.
-- **Bug reports after the move:** if your setup file names the old home as where bug reports go, change it to the new one and give the server a new access key made for the Requestarr organization; the old key stops working.
-
-## 0.5.5 (2026-10-27)
-
-## 0.5.4 (2026-10-27)
-
-## 0.5.3 (2026-10-27)
-
-## 0.5.2 (2026-10-27)
-
-## 0.5.1 (2026-10-27)
-
-## 0.5.0 (2026-10-26)
-
-### For admins
-- **Reading a version number:** the last number goes up with every change, the middle one each time a new round of testing on the QA server begins, and the first one only for an upgrade you'll have to do something for, which its notes then say.
-- **Beta versions:** the beta server shows and announces its version with "beta" and a count after it, such as 0.5.0-beta.2, and the count goes up with each new beta build of that release; the release itself has the plain number.
-- **Version on the logo:** point at the logo at the top of the web app to see which version you're running.
-
-## 0.4.17 (2026-10-26)
-
-## 0.4.16 (2026-10-26)
-
-### For users
-- **A tidier bug reports channel:** reports now stay in the order they were sent with the Report a problem button below them, and sending one no longer leaves a private reply pointing at a deleted message. Your report's card in the channel is the confirmation.
-
-### For admins
-- **Fixed: Passes on the QA checklist:** pressing Passes no longer answers "Something went wrong"; the card shows who passed it, as before.
-- **Failing several checklist items in a row:** admins working through the checklist are no longer told to wait between reports. Members still are.
-- **Every test server report reaches GitHub:** on the dev, QA and beta servers each bug report is filed on GitHub. A report that couldn't be filed says exactly why on its card, and is filed on its own once it can be, with the card updated to show the link.
-- **The QA checklist has its own group:** its channel now sits in an admin-only Requestarr QA group, moved there with its cards, so testing stays apart from running the server.
-- **No more "edited" on panels:** the admin panel, the welcome message and the Report a problem message are no longer marked edited each time they move below a new post or Requestarr restarts.
-
-## 0.4.15 (2026-10-25)
-
-### For users
-- **Report a problem:** a new bug reports channel has a Report a problem button. Pick the part of Requestarr, say what happened and what you expected, and it reaches the people who build Requestarr. Reports are public, so the form tells you that before you send.
-
-### For admins
-- **Test checklist on the QA server:** every version on its way to staging comes with a list of things to test, posted in Discord. Admins mark each one as passing or failing, and a failing one opens a bug report linked to it.
-- **Bug reports become issues:** reports can be filed on GitHub automatically, with the version, the part of Requestarr and who reported it. It's off unless you turn it on with your own access key, and each person can only send a few reports in a row.
-
-## 0.4.14 (2026-10-25)
-
-## 0.4.13 (2026-10-25)
-
-### For admins
-- **Readable sign-in logo:** the logo on the web app's sign-in page now uses its light arrow in both themes, so it stands out against the dark gray box behind it.
-- **Real logo while loading:** while the web app starts, it now shows your environment's logo, the same one as the header, instead of the old purple square with an R.
-
-## 0.4.12 (2026-10-25)
-
-### For admins
-- **The bot keeps its own picture and banner:** Requestarr now gives its bot the Requestarr picture and your environment's banner, and updates them when a new release changes them, so you no longer upload them by hand in Discord. A picture you chose yourself is kept, and you can turn this off in the provisioning file.
-
-## 0.4.11 (2026-10-25)
-
-### For users
-- **Softer logo:** the arrow in Requestarr's logo is now a soft charcoal instead of solid black, so it sits more gently next to the teal.
-
-### For admins
-- **Logo without a box:** in the web app the header and sign-in logo, and the icon in your browser tab, no longer sit on a square of their own color; the page shows through around them in both themes.
-- **Made for the purple header:** the light theme's purple header has its own logo, and on Beta the label bar there is white so it doesn't disappear into the purple.
-- **Charcoal arrow everywhere:** the light theme's icons, home screen icons and tiles use the softer charcoal arrow too.
-
-## 0.4.10 (2026-10-25)
-
-### For admins
-- **Dark theme icons:** in the dark theme, Requestarr's icons now sit on the same charcoal gray as the app's header instead of black, so they no longer look like a hole in the page.
-- **Bigger logo in the web app:** the logo in the header and on the sign-in page is now full height, with the R beside a colored bar naming the environment (Dev, QA or Beta), so it's easier to see at a glance.
-- **Version on the logo:** on your live install, the header and sign-in logo shows the version you're running on a green bar, and it updates by itself when you upgrade.
-
-## 0.4.9 (2026-10-25)
-
-## 0.4.8 (2026-10-25)
-
-## 0.4.7 (2026-10-25)
-
-## 0.4.6 (2026-10-25)
-
-## 0.4.5 (2026-10-25)
-
-## 0.4.4 (2026-10-25)
-
-## 0.4.3 (2026-10-25)
-
-### For admins
-- **Kept up to date:** the parts Requestarr is built from are now updated every week, and a version that fixes a security problem in something Requestarr ships says so here, so you know to update.
-- **Safer logs:** a web address or user name with a line break in it can no longer add fake lines to Requestarr's log.
-
-## 0.4.2 (2026-10-25)
-
-### For users
-- **No more stacked copies:** pressing a button that answers only you, like Help, My requests or Read changes, again now replaces your earlier answer instead of adding another copy under it.
-
-### For admins
-- **Tidier admin channel:** pressing Pending queue, Users, Help or Read changes again replaces your earlier private answer instead of stacking copies.
-
-## 0.4.1 (2026-10-25)
-
-### For users
-- **Easier to read:** the welcome message, the blocked notice and Read changes are now coloured cards with large headings and text at normal message size, instead of small print.
-
-### For admins
-- **Your own request channel:** admins now ask for access from the welcome channel like everyone and get their own request channel straight away, with what they picked on automatic approval and nothing else.
-- **The admin channel is for admin actions:** requesting there now points you to your own request channel instead of making the request.
-
-## 0.4.0 (2026-10-24)
-
-### For users
-- **Asking for access:** friends who aren't members yet can now ask for access themselves from the new welcome channel, and they hear back privately.
-- **Panels stay at the bottom:** your panel is always the newest message in your channel, so it's right where you look after a request message arrives.
-- **What's new, short and tidy:** each update is now one line in the announcements channel with how many new things it brings and the main one; Read changes shows you the full list, just for you.
+- **Asking for access:** friends who aren't members yet can ask for access themselves from the welcome channel, and they hear back privately.
+- **Access requests paused:** pressing the request button too many times in a short while pauses access requests from that person; an admin can lift the pause, and the message they see says so.
+- **Your channel:** your request channel and the announcements channel sit together in the Requestarr Users group, and your panel is always the newest message in your channel, right where you look after a request message arrives.
+- **Update cards:** each update in the announcements channel shows its build number, like 0.7.0004, and the day it came out, with the main change underneath and how many more; Read changes shows you the full list, just for you.
+- **Easier to read:** the welcome message, the paused notice and Read changes are coloured cards with large headings and text at normal message size.
+- **No stacked copies:** pressing a button that answers only you, like Help, My requests or Read changes, again replaces your earlier answer instead of adding another copy under it.
 - **Outage notices:** while requests are paused, the notice stays pinned at the top of the announcements channel, and it goes away once things work again.
-- **Where your channel lives:** your request channel and the announcements channel now sit together in the Requestarr Users group.
+- **Report a problem:** the bug reports channel has a Report a problem button: pick the part of Requestarr, say what happened and what you expected, and it reaches the people who build Requestarr. Reports are public, and the form says so before you send. Reports stay in the order they were sent with the button below them, and your report's card is the confirmation.
+- **Softer logo:** the arrow in Requestarr's logo is a soft charcoal instead of solid black, so it sits more gently next to the teal.
 - **Link Plex is hidden for now:** the button comes back once the admin connects a Plex server.
 
 ### For admins
-- **Two channel groups:** Requestarr keeps its channels in Requestarr Admin (the admin channel and the feed, admins only) and Requestarr Users (welcome, announcements and every member's channel); existing channels move over on the next start with their messages kept.
+- **Build numbers:** every build sent to the beta testers has one number that counts up, like 0.7.0004, shown the same on the update cards, in the web app and on the logo, and a release is that exact build, never rebuilt, so production runs what the testers ran. Going back to an earlier build means restoring the backup the beta update takes every time, which its rollback puts back.
+- **Two channel groups:** Requestarr keeps its channels in Requestarr Admin (the admin channel and the feed, admins only) and Requestarr Users (welcome, announcements, bug reports and every member's channel); existing channels move over on the next start with their messages kept.
 - **No second copies after setting up again:** Requestarr finds its own groups, channels and panels, and each member's channel, even when its saved data is gone, so a reinstall or a reset never doubles them, and a member who comes back gets their one channel back.
-- **Welcome channel and access requests:** everyone in the server sees a welcome message explaining Requestarr with a Request access button; requests arrive as cards in the admin channel and the pending queue, where you approve with the access you choose or deny with a reason, and the person hears back privately.
-- **Spam protection:** repeated clicks on the welcome buttons make people wait, and if they keep going a role blocks them and hides the welcome channel; you get one notice and can unblock from it or from the member card.
-- **Panels stay at the bottom and aren't pinned:** every panel moves below anything new Requestarr posts in its channel, with no pings and no "pinned a message" notices.
-- **Version cards:** each update is a one-line card counting the changes for admins and users, Read changes shows the full list privately, and the history so far is redone as cards once.
-- **Outages:** the down alert (and the notice to users, if you announced it) is pinned while the outage lasts and removed when it's over, and every outage is kept in Requestarr's own history.
+- **Access requests:** everyone in the server sees a welcome message with a Request access button; requests arrive as cards in the admin channel and the pending queue, where you approve with the access you choose or deny with a reason, and the person hears back privately. Admins ask from the welcome channel too and get their own request channel straight away; the admin channel is for admin actions only.
+- **Spam protection:** repeated clicks on the welcome buttons make people wait, and if they keep going their access requests are paused: a role hides the welcome channel and shows them a message that an admin can lift the pause. You get one notice; Unblock on it or on their member card lifts it, and so does removing the role.
+- **Panels stay at the bottom:** every panel moves below anything new Requestarr posts in its channel, with no pings, no "pinned a message" notices, and no "edited" mark each time it moves or Requestarr restarts.
+- **Update cards in the admin channel:** each update is a card with its build number and day, the main change counting both sections and how many more; Read changes shows the full list privately, and pressing it again replaces your earlier copy. Cards already posted change to this wording in place on the next start.
+- **Outages:** the down alert, and the notice to users if you announced it, is pinned while the outage lasts and removed when it's over, and every outage is kept in Requestarr's own history.
 - **Media server buttons only when connected:** Link Plex and the welcome channel's media server buttons show only for a media server you've connected; none can be connected yet, so they're hidden for now.
-- **Web app icons:** the web app shows Requestarr's logo instead of the old purple square, marked DEV, QA or BETA on the test servers, in light or dark to match the theme.
+- **The web app's logo:** Requestarr's logo replaces the old purple square everywhere, including while the app loads. It's full height with a colored bar naming the environment (Dev, QA or Beta), sits straight on the header with no box around it in both themes, uses the light arrow on the sign-in page, and shows your version when you point at it.
+- **Icons:** the browser tab, home screen icons and tiles use the charcoal arrow, on charcoal gray in the dark theme instead of black.
+- **The bot keeps its own picture and banner:** Requestarr gives its bot the Requestarr picture and your environment's banner and updates them when a release changes them, so you no longer upload them by hand. A picture you chose yourself is kept, and you can turn this off in the provisioning file.
+- **Bug reports become issues:** reports can be filed on GitHub with the version, the part of Requestarr and who reported it, in the Requestarr organization; it's off unless you turn it on with your own access key, and each person can only send a few in a row. The dev, QA and beta servers always file; a report that couldn't be filed says exactly why on its card and is filed on its own once it can be. If your setup file names the old home, Runemark Labs, change it and give the server a new access key made for the Requestarr organization.
+- **New home on GitHub:** Requestarr has its own GitHub organization, also called Requestarr: the links in the web app's Status page lead there and beta updates come from there, at the image address the beta setup guide shows.
+- **Kept up to date:** the parts Requestarr is built from are updated every week, and a build that fixes a security problem in something Requestarr ships says so here. This one does: a web component is updated to close a known high-severity issue.
+- **Safer logs:** a web address or user name with a line break in it can no longer add fake lines to Requestarr's log.
+- **The QA checklist (test servers):** on the QA server each build comes with a list of things to test in Discord, in an admin-only Requestarr QA group. Admins mark each as passing or failing (several in a row if needed); a failing one opens a linked bug report, and passes carry over to the next build as long as an item's wording doesn't change.
 
 ## 0.3.4 (2026-10-24)
 

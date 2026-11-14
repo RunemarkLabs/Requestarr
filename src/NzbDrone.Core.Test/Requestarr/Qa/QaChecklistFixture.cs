@@ -72,7 +72,7 @@ namespace Requestarr.Core.Test.Qa
             var versions = QaChecklist.Parse(file, running);
 
             QaChecklist.Embedded().Replace("\r\n", "\n").Should().Be(file.Replace("\r\n", "\n"));
-            QaChecklist.Parse(file)[0].Version.Should().Be(Changelog.Parse(changelog)[0].Version, "the staging promotion numbers both files together");
+            QaChecklist.Parse(file).Select(v => v.Version).Should().Equal(Changelog.Parse(changelog).Select(v => v.Version).Where(v => v >= new Version(0, 4, 3)), "the staging promotion numbers both files together");
             versions.SelectMany(v => v.Items).Select(i => i.Key).Should().OnlyHaveUniqueItems();
             versions.SelectMany(v => v.Items).Should().OnlyContain(i => i.Text.Contains("You should see"));
         }
@@ -154,6 +154,37 @@ namespace Requestarr.Core.Test.Qa
             _records.Keys.Should().BeEquivalentTo(Keys("Passing an item", "Failing an item", "Sign-in logo"));
             _records[Key("Sign-in logo")].Id.Should().Be(51, "the same record, under its new key");
             new[] { earlier, report }.Should().OnlyContain(r => r.ChecklistItemKey == Key("Failing an item"), "every report on the item still finds it");
+        }
+
+        // What the QA server recorded before the fold: all 27 items passed (November 14, 2026).
+        private static readonly string[] BeforeTheFold =
+        {
+            "0.4.10/dark-theme-icons", "0.4.10/full-height-logo", "0.4.11/logo-on-the-purple-header", "0.4.11/charcoal-arrow", "0.4.12/bot-picture-and-banner",
+            "0.4.13/sign-in-logo", "0.4.13/loading-screen", "0.4.15/test-checklist", "0.4.15/passing-an-item", "0.4.15/failing-an-item", "0.4.15/report-a-problem",
+            "0.4.15/report-limit", "0.4.16/passes-without-errors", "0.4.16/failing-in-a-row", "0.4.16/member-limit-still-holds", "0.4.16/bug-reports-channel-order",
+            "0.4.16/why-a-report-isn-t-on-github", "0.4.16/qa-group", "0.5.0/version-on-the-logo", "0.5.0/version-in-status", "0.5.6/project-links",
+            "0.5.6/bug-report-at-the-new-home", "0.6.0/update-card-titles", "0.6.0/admin-channel-update-cards", "0.6.0/read-changes-unchanged",
+            "build-4/build-number-on-update-cards", "build-4/build-number-in-the-web-app"
+        };
+
+        [TestCase(null, "Update cards", "Access requests paused", "Passes carry over")]
+        [TestCase("0.4.11/charcoal-arrow", "Update cards", "Web app logo", "Access requests paused", "Passes carry over")]
+        public void the_fold_keeps_a_merged_items_pass_only_when_every_item_it_came_from_passed(string untested, params string[] toTest)
+        {
+            foreach (var key in BeforeTheFold.Where(k => k != untested))
+            {
+                _records[key] = new QaChecklistItem { Id = _nextId++, ItemKey = key, State = QaItemState.Passed, ByName = "EaZyCheaZ", At = new DateTime(2026, 11, 14, 18, 57, 5) };
+            }
+
+            Subject.ChecklistText = QaChecklist.Embedded;
+            Subject.CurrentVersion = () => new Version(0, 7, 4, 1);
+            OnQa("0.3.1,0.3.2,0.3.3,0.3.4");
+            var state = Subject.State();
+
+            state.Items.Where(i => i.State != "Passed").Select(i => i.Name).Should().Equal(toTest);
+            state.Items.Where(i => i.State == "Passed").Should().OnlyContain(i => i.By == "EaZyCheaZ");
+            QaChecklistFold.EarlierKeys.Keys.Should().BeSubsetOf(QaChecklist.Parse(QaChecklist.Embedded(), new Version(0, 7, 4)).SelectMany(v => v.Items).Select(i => i.Key),
+                "each entry names a folded item by its words; drop an entry once its item is reworded");
         }
 
         [TestCase(0, 0, "⏳ **1 left to test.**")]

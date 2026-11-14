@@ -2,81 +2,22 @@
 
 What admins on the QA server test, in Discord, before a build goes to staging. Requestarr posts these items in the QA checklist channel for the build QA runs and every version staging doesn't have yet; admins press Passes or Failing on each. When every item has passed and no bug report from QA is still open, the build can go to staging.
 
-Every pull request adds its items under Unreleased, the way it adds its changelog lines: each one says what to do and what you should see, in plain words. The promotion to staging gives them the build's number. Numbering changed with build 0.7.0004: versions up to 0.6.0 keep their own numbers. See docs/development.md#qa-checklist.
+Every pull request adds its items under Unreleased, the way it adds its changelog lines: each one says what to do and what you should see, in plain words. Unreleased is what to test since the last build the beta testers got: a change to something an Unreleased item already tests rewrites that item instead of adding another. The promotion to staging gives them the build's number. The items for 0.4.3 to 0.6.0, which never reached the testers, are folded into it. See docs/development.md#qa-checklist.
 
 ## Unreleased
-- **Build number on update cards:** In the admin channel, look at the newest update card. You should see its title start with Requestarr, then a number like 0.7.0004, then qa and a short code.
+- **Update cards:** In the admin channel and in the announcements channel, look at the update cards. You should see one card in each, titled Requestarr, the build number with qa and a short code, then since the last beta, with the main change underneath and how many more, and no cards for the versions 0.4.0 to 0.6.0.
+- **Read changes:** Press Read changes on the update card. You should see the full list of what changed since the last beta, only to you.
 - **Build number in the web app:** Open System, then Status. You should see the same number, qa and short code as the version, and the same number on the logo.
-- **Access requests paused:** With a test account that isn't a member, press Request access in the welcome channel again and again, about fifteen times, until the welcome channel disappears for that account. You should see the blocked channel's message titled Access requests paused, saying an admin can lift the pause, and in the admin channel a notice with Unblock; pressing Unblock brings the welcome channel back for that account.
-- **Passes carry over:** After the next promotion to QA, look at the QA checklist channel. You should see every item you passed before still passed, with your name and when, and the summary saying how many carried over and how many are new or changed.
-
-## 0.6.0 (2026-11-13)
-- **Update card titles:** In the announcements channel, look at the update cards. You should see each one titled Requestarr, its version and a day such as November 13, with the main change underneath, and "and 2 more" after it when that version has several changes.
-- **Admin channel update cards:** In the admin channel, look at the update cards. You should see the same kind of title, and under it the main change and how many more, counting both users' and admins' changes.
-- **Read changes unchanged:** Press Read changes on any update card. You should see the full list for that version, as before, only to you.
-
-## 0.5.6 (2026-11-13)
-- **Project links:** In the web app, open System, then Status, and look at More Info. You should see the home page and issue links open the Requestarr project in the Requestarr organization on GitHub.
-- **Bug report at the new home:** In the bug reports channel, press Report a problem and send a short test report. You should see its card link to an issue in the Requestarr organization on GitHub, not Runemark Labs.
-
-## 0.5.5 (2026-10-27)
-
-## 0.5.4 (2026-10-27)
-
-## 0.5.3 (2026-10-27)
-
-## 0.5.2 (2026-10-27)
-
-## 0.5.1 (2026-10-27)
-
-## 0.5.0 (2026-10-26)
-- **Version on the logo:** In the web app, point at the logo at the top left and wait a moment. You should see "Requestarr 0.5.0".
-- **Version in Status:** In the web app, open System, then Status. You should see version 0.5.0 followed by its build number, with no "beta" in it.
-
-## 0.4.17 (2026-10-26)
-
-## 0.4.16 (2026-10-26)
-- **Passes without errors:** Press Passes on a checklist item, then press it again. You should see the card show who passed it and when, and no "Something went wrong" message.
-- **Failing in a row:** Press Failing on three items one after another and send a short report for each. You should see a form open every time, each card marked failing with its own report, and never "You've sent a report just now".
-- **Member limit still holds:** In the bug reports channel, press Report a problem and send a report, then press it again straight away. You should see Requestarr ask you to wait.
-- **Bug reports channel order:** Open the bug reports channel after sending a report, on your phone and on your computer. You should see the reports in the order they were sent, the Report a problem message last, and no reply pointing at a deleted message.
-- **Why a report isn't on GitHub:** Look at the card of a report you sent. You should see either the link to its GitHub issue, or the exact reason it isn't there yet, such as the server having no GitHub access key.
-- **QA group:** Look at the server's channel list. You should see the QA checklist channel in its own Requestarr QA group with all its cards, and a member who isn't an admin shouldn't see that group.
-
-## 0.4.15 (2026-10-25)
-- **Test checklist:** Open the QA checklist channel in the Requestarr QA group. You should see a card for each thing to test in the versions QA has that staging doesn't, each with Passes and Failing buttons, and a summary card at the top.
-- **Passing an item:** Press Passes on one card. You should see the card say who passed it and when, and the summary count go up by one.
-- **Failing an item:** Press Failing on another card, pick the part of Requestarr, describe what went wrong and send it. You should see the card marked failing with a link to its bug report, and the summary say the checklist can't complete while it fails.
-- **Report a problem:** In the bug reports channel in the Requestarr Users group, press Report a problem, pick a part, read the note that reports are public, and send a short test report. You should see a card for your report in the channel, and the link to its issue on GitHub once it's filed.
-- **Report limit:** Send several reports one after another. You should see Requestarr ask you to wait once you reach the limit, and no more cards posted until then.
-
-## 0.4.14 (2026-10-25)
-
-## 0.4.13 (2026-10-25)
+- **Web app logo:** Look at the web app's header in the light theme, then in the dark theme, and at the icon in the browser tab. You should see a full-height R beside the yellow QA bar, straight on the header with no box around it, the arrow in a soft charcoal, and the logo and the tab icon on charcoal gray in the dark theme, never on black.
 - **Sign-in logo:** Sign out of the web app and look at the sign-in page in the light theme, then in the dark theme. You should see the logo with a light arrow, easy to read on the gray box, in both.
 - **Loading screen:** Reload the web app and watch it while it starts. You should see the QA logo, the same one as the header's, with no purple square.
-
-## 0.4.12 (2026-10-25)
 - **Bot picture and banner:** In the Requestarr QA server, click the bot's name to open its profile. You should see the plain Requestarr picture and the yellow QA banner.
-
-## 0.4.11 (2026-10-25)
-- **Logo on the purple header:** Switch the web app to the light theme and look at the header. You should see the QA bar and the R straight on the purple, with no white box around them.
-- **Charcoal arrow:** In the light theme, look at the header logo and the icon in the browser tab. You should see the arrow in a soft charcoal instead of solid black.
-
-## 0.4.10 (2026-10-25)
-- **Dark theme icons:** Switch the web app to the dark theme and look at the header and the browser tab. You should see the logo and the icon on charcoal gray, never on black.
-- **Full-height logo:** Look at the logo at the top left of the header. You should see the yellow QA bar beside a full-height R, not a small square.
-
-## 0.4.9 (2026-10-25)
-
-## 0.4.8 (2026-10-25)
-
-## 0.4.7 (2026-10-25)
-
-## 0.4.6 (2026-10-25)
-
-## 0.4.5 (2026-10-25)
-
-## 0.4.4 (2026-10-25)
-
-## 0.4.3 (2026-10-25)
+- **Project links:** In the web app, open System, then Status, and look at More Info. You should see the home page and issue links open the Requestarr project in the Requestarr organization on GitHub.
+- **Access requests paused:** With a test account that isn't a member, press Request access in the welcome channel again and again, about fifteen times, until the welcome channel disappears for that account. You should see the blocked channel's message titled Access requests paused, saying an admin can lift the pause, and in the admin channel a notice with Unblock; pressing Unblock brings the welcome channel back for that account.
+- **The QA checklist:** Open the QA checklist channel in the Requestarr QA group. You should see a summary card at the top, then a card for each thing to test with Passes and Failing buttons, and a member who isn't an admin shouldn't see that group.
+- **Passing an item:** Press Passes on a card, then press it again. You should see the card say who passed it and when, the summary count go up by one, and no "Something went wrong" message.
+- **Failing an item:** Press Failing on three cards one after another, and each time pick the part of Requestarr and describe what went wrong. You should see a form open every time, each card marked failing with a link to its own bug report, never "You've sent a report just now", and the summary say the checklist can't complete while one fails.
+- **Passes carry over:** After the next promotion to QA, look at the QA checklist channel. You should see every item you passed before still passed, with your name and when, and the summary saying how many carried over and how many are new or changed.
+- **Report a problem:** In the bug reports channel in the Requestarr Users group, press Report a problem, pick a part, read the note that reports are public, and send a short test report. You should see your report's card, in the order the reports were sent with the Report a problem message below them and no reply pointing at a deleted message, linking to its issue in the Requestarr organization on GitHub once it's filed.
+- **Report limit:** As a member who isn't an admin, send a report, then press Report a problem again straight away. You should see Requestarr ask you to wait, and no second card posted.
+- **Why a report isn't on GitHub:** Look at the card of a report you sent. You should see either the link to its GitHub issue, or the exact reason it isn't there yet, such as the server having no GitHub access key.
